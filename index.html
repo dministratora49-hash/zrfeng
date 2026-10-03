@@ -101,7 +101,6 @@ footer{text-align:center;color:var(--muted);font-size:12px;margin-top:40px;lette
   <footer>&copy; 2026 zrfeng.top &mdash; All Rights Reserved</footer>
 </div>
 
-<script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
 <script>
 (function(){
   var c=document.getElementById("p"),ctx=c.getContext("2d"),pts=[];
@@ -122,12 +121,16 @@ footer{text-align:center;color:var(--muted);font-size:12px;margin-top:40px;lette
 
 (function(){
   var el=document.getElementById("vc");
-  function tryGet(){
-    var v=document.getElementById("busuanzi_value_site_pv");
-    if(v&&v.textContent){el.textContent=v.textContent;return}
-    setTimeout(tryGet,300);
-  }
-  tryGet();
+  var url="https://api.countapi.xyz/hit/zrfeng.top/visits";
+  fetch(url).then(function(r){return r.json()}).then(function(d){
+    if(d&&d.value!==undefined){
+      var cur=0,target=d.value;
+      (function count(){
+        if(cur<target){cur+=Math.max(1,Math.ceil((target-cur)/12));if(cur>target)cur=target;el.textContent=cur.toLocaleString();requestAnimationFrame(count)}
+        else{el.textContent=target.toLocaleString()}
+      })();
+    }else{el.textContent="--"}
+  }).catch(function(){el.textContent="--"});
   setTimeout(function(){if(el.textContent==="...")el.textContent="--"},8000);
 })();
 
