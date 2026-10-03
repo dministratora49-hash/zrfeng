@@ -52,7 +52,14 @@
     margin-bottom: 40px;
   }
 
-  /* 正方形小框（居中，加大版） */
+  /* 小框排列 */
+  .boxes {
+    display: flex;
+    gap: 24px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
   .box {
     display: inline-flex;
     flex-direction: column;
@@ -106,10 +113,18 @@
   <div class="top">
     <h1>这里是导航页</h1>
     <p class="sub">欢迎访问，从这里开始你的旅程</p>
-    <a class="box" href="https://www.zrfeng.top/aboutme">
-      <span class="label">关于开发者</span>
-      <span class="status"><span class="dot"></span>在线</span>
-    </a>
+
+    <div class="boxes">
+      <a class="box" href="https://www.zrfeng.top/aboutme">
+        <span class="label">关于开发者</span>
+        <span class="status"><span class="dot"></span>在线</span>
+      </a>
+
+      <a class="box" href="https://www.zrfeng.top/time">
+        <span class="label">北京时间</span>
+        <span class="status"><span class="dot"></span>点击查看</span>
+      </a>
+    </div>
   </div>
 
   <div class="bottom">
