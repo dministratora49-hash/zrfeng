@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>导航页</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    min-height: 100vh;
+    background: #050807;
+    background-image:
+      radial-gradient(circle at 20% 20%, rgba(0, 255, 140, 0.06) 0%, transparent 50%),
+      radial-gradient(circle at 80% 80%, rgba(0, 255, 140, 0.05) 0%, transparent 50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    color: #e8f5ee;
+  }
+
+  /* 网格背景 */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,255,140,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,255,140,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+  }
+
+  .card {
+    position: relative;
+    width: 90%;
+    max-width: 420px;
+    background: rgba(10, 18, 14, 0.85);
+    border: 1px solid rgba(0, 255, 140, 0.25);
+    border-radius: 16px;
+    padding: 40px 32px;
+    text-align: center;
+    box-shadow: 0 0 40px rgba(0, 255, 140, 0.08);
+    backdrop-filter: blur(6px);
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #00ff8c;
+    border: 1px solid rgba(0,255,140,0.35);
+    border-radius: 999px;
+    padding: 4px 14px;
+    margin-bottom: 24px;
+    letter-spacing: 2px;
+  }
+
+  .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: #00ff8c;
+    box-shadow: 0 0 8px #00ff8c;
+    animation: blink 1.5s infinite;
+  }
+  @keyframes blink { 50% { opacity: 0.3; } }
+
+  h1 {
+    font-size: 32px;
+    margin-bottom: 12px;
+    background: linear-gradient(90deg, #ffffff, #00ff8c);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  p.sub {
+    color: #7fa893;
+    font-size: 14px;
+    margin-bottom: 36px;
+  }
+
+  .btn {
+    display: inline-block;
+    padding: 14px 40px;
+    font-size: 16px;
+    color: #04140b;
+    background: linear-gradient(135deg, #00ff8c, #00c86a);
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    text-decoration: none;
+    font-weight: bold;
+    letter-spacing: 2px;
+    box-shadow: 0 0 20px rgba(0, 255, 140, 0.35);
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0 32px rgba(0, 255, 140, 0.6);
+  }
+  .btn:active { transform: translateY(0); }
+
+  footer {
+    margin-top: 32px;
+    font-size: 12px;
+    color: #4a6a58;
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="badge"><span class="dot"></span>导航页</div>
+    <h1>这里是导航页</h1>
+    <p class="sub">欢迎访问，从这里开始你的旅程</p>
+    <a class="btn" href="https://www.zrfeng.top/aboutme">关于开发者</a>
+    <footer>© 2026 zrfeng.top — All Rights Reserved</footer>
+  </div>
+</body>
+</html>
