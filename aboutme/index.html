@@ -13,26 +13,37 @@
 
         body {
             font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: #ffffff;
+            background: #0a0f0d;
+            color: #e0e0e0;
+            min-height: 100vh;
             padding: 60px 40px;
         }
 
         h1 {
-            font-size: 32px;
+            font-size: 34px;
             margin-bottom: 24px;
+            background: linear-gradient(90deg, #00ff88, #00ccff);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
 
         p {
             font-size: 18px;
             line-height: 2;
+            color: #c8d0cc;
+        }
+
+        .highlight {
+            color: #00ff88;
+            font-weight: bold;
         }
     </style>
 </head>
 <body>
     <h1>关于开发者</h1>
     <p>
-        我叫王培泽，是一位13岁的开发者，现就读于武进区人民路初级中学七年级21班。
+        我叫<span class="highlight">王培泽</span>，是一位<span class="highlight">13岁</span>的开发者，现就读于<span class="highlight">武进区人民路初级中学七年级21班</span>。
     </p>
 </body>
 </html>
