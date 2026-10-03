@@ -34,54 +34,11 @@
     pointer-events: none;
   }
 
-  /* 左上角正方形小框 */
-  .box {
-    position: fixed;
-    top: 24px;
-    left: 24px;
-    width: 90px;
-    height: 90px;
-    border: 1px solid rgba(0, 255, 140, 0.35);
-    border-radius: 12px;
-    background: rgba(10, 18, 14, 0.85);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    text-decoration: none;
-    color: #e8f5ee;
-    box-shadow: 0 0 16px rgba(0, 255, 140, 0.1);
-    transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
-  }
-  .box:hover {
-    transform: translateY(-2px);
-    border-color: #00ff8c;
-    box-shadow: 0 0 24px rgba(0, 255, 140, 0.35);
-  }
-  .box .label { font-size: 14px; letter-spacing: 1px; }
-
-  .status {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    font-size: 11px;
-    color: #00ff8c;
-  }
-  .dot {
-    width: 6px; height: 6px;
-    border-radius: 50%;
-    background: #00ff8c;
-    box-shadow: 0 0 8px #00ff8c;
-    animation: blink 1.5s infinite;
-  }
-  @keyframes blink { 50% { opacity: 0.3; } }
-
   .top { position: relative; text-align: center; }
 
   h1 {
     font-size: 36px;
-    margin-bottom: 32px;
+    margin-bottom: 20px;
     background: linear-gradient(90deg, #ffffff, #00ff8c);
     -webkit-background-clip: text;
     background-clip: text;
@@ -91,9 +48,49 @@
   p.sub {
     color: #7fa893;
     font-size: 14px;
-    margin-top: 36px;
     letter-spacing: 1px;
+    margin-bottom: 40px;
   }
+
+  /* 正方形小框（居中，加大版） */
+  .box {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    width: 140px;
+    height: 140px;
+    border: 1px solid rgba(0, 255, 140, 0.35);
+    border-radius: 16px;
+    background: rgba(10, 18, 14, 0.85);
+    text-decoration: none;
+    color: #e8f5ee;
+    box-shadow: 0 0 16px rgba(0, 255, 140, 0.1);
+    transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+  }
+  .box:hover {
+    transform: translateY(-3px);
+    border-color: #00ff8c;
+    box-shadow: 0 0 28px rgba(0, 255, 140, 0.4);
+  }
+  .box .label { font-size: 16px; letter-spacing: 1px; }
+
+  .status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #00ff8c;
+  }
+  .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: #00ff8c;
+    box-shadow: 0 0 8px #00ff8c;
+    animation: blink 1.5s infinite;
+  }
+  @keyframes blink { 50% { opacity: 0.3; } }
 
   .bottom {
     position: relative;
@@ -106,15 +103,13 @@
 </style>
 </head>
 <body>
-  <!-- 左上角正方形入口 -->
-  <a class="box" href="https://www.zrfeng.top/aboutme">
-    <span class="label">关于开发者</span>
-    <span class="status"><span class="dot"></span>在线</span>
-  </a>
-
   <div class="top">
     <h1>这里是导航页</h1>
     <p class="sub">欢迎访问，从这里开始你的旅程</p>
+    <a class="box" href="https://www.zrfeng.top/aboutme">
+      <span class="label">关于开发者</span>
+      <span class="status"><span class="dot"></span>在线</span>
+    </a>
   </div>
 
   <div class="bottom">
