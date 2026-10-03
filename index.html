@@ -41,6 +41,12 @@ h1{font-size:clamp(32px,6vw,58px);font-weight:900;line-height:1.15;margin-bottom
 .fade3{animation:fd .8s .4s ease both}
 @keyframes fd{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
 .line{height:1px;background:linear-gradient(90deg,transparent,rgba(0,255,170,.15),transparent);margin:10px 0 20px}
+.btn-nav{display:inline-flex;align-items:center;gap:10px;background:linear-gradient(135deg,rgba(0,255,170,.15),rgba(0,255,170,.05));border:1px solid rgba(0,255,170,.3);color:var(--accent);font-size:15px;font-weight:700;font-family:'Noto Sans SC',sans-serif;padding:14px 32px;border-radius:40px;cursor:pointer;text-decoration:none;letter-spacing:1px;transition:all .3s ease;box-shadow:0 0 20px rgba(0,255,170,.08)}
+.btn-nav:hover{background:linear-gradient(135deg,rgba(0,255,170,.25),rgba(0,255,170,.08));box-shadow:0 0 35px rgba(0,255,170,.2);transform:translateY(-2px)}
+.btn-nav:active{transform:translateY(0)}
+.btn-nav i{transition:transform .3s ease}
+.btn-nav:hover i{transform:translateX(4px)}
+.btn-wrap{text-align:center;margin-top:20px}
 footer{text-align:center;color:var(--muted);font-size:12px;margin-top:40px;letter-spacing:1px}
 @media(max-width:520px){.timer-grid{grid-template-columns:repeat(3,1fr)}.clock-box{top:12px;right:12px;padding:8px 12px}}
 </style>
@@ -86,6 +92,10 @@ footer{text-align:center;color:var(--muted);font-size:12px;margin-top:40px;lette
       <div class="timer-item"><div class="timer-val" id="tmi">0</div><div class="timer-unit">分</div></div>
       <div class="timer-item"><div class="timer-val" id="ts">0</div><div class="timer-unit">秒</div></div>
     </div>
+  </div>
+
+  <div class="btn-wrap">
+    <a class="btn-nav" href="https://www.zrfeng.top/guide">前往导航站 <i class="fas fa-arrow-right"></i></a>
   </div>
 
   <footer>&copy; 2026 zrfeng.top &mdash; All Rights Reserved</footer>
