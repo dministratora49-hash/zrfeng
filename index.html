@@ -74,8 +74,8 @@ footer{text-align:center;color:var(--muted);font-size:12px;margin-top:40px;lette
   <div class="card fade3">
     <div class="card-label"><i class="fas fa-chart-line"></i> 访客统计</div>
     <div class="line"></div>
-    <p class="visitor-sub">您是今天访问本站的第</p>
-    <div class="visitor-num" id="vc">0</div>
+    <p class="visitor-sub">您是本站的第</p>
+    <div class="visitor-num" id="vc">...</div>
     <p class="visitor-sub">位访客</p>
   </div>
 
@@ -101,6 +101,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;margin-top:40px;lette
   <footer>&copy; 2026 zrfeng.top &mdash; All Rights Reserved</footer>
 </div>
 
+<script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
 <script>
 (function(){
   var c=document.getElementById("p"),ctx=c.getContext("2d"),pts=[];
@@ -120,12 +121,14 @@ footer{text-align:center;color:var(--muted);font-size:12px;margin-top:40px;lette
 })();
 
 (function(){
-  var k="zrfeng_vc",today=new Date().toDateString(),raw=localStorage.getItem(k),data;
-  try{data=raw?JSON.parse(raw):null}catch(e){data=null}
-  if(!data||data.d!==today){data={d:today,n:1}}else{data.n++}
-  localStorage.setItem(k,JSON.stringify(data));
-  var el=document.getElementById("vc"),cur=0,target=data.n;
-  (function count(){if(cur<target){cur+=Math.max(1,Math.ceil((target-cur)/10));if(cur>target)cur=target;el.textContent=cur;requestAnimationFrame(count)}else{el.textContent=target}})();
+  var el=document.getElementById("vc");
+  function tryGet(){
+    var v=document.getElementById("busuanzi_value_site_pv");
+    if(v&&v.textContent){el.textContent=v.textContent;return}
+    setTimeout(tryGet,300);
+  }
+  tryGet();
+  setTimeout(function(){if(el.textContent==="...")el.textContent="--"},8000);
 })();
 
 (function(){
