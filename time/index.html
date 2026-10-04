@@ -44,7 +44,7 @@
 </style>
 </head>
 <body>
-<div class="card" id="card">
+<div class="card">
   <span class="badge">⏱ 北京时间（同步阿里时间服务器）</span>
   <h1>北京时间</h1>
   <div class="sub">UTC+8 · 启动时同步阿里时间服务器，含网络延迟补偿，每10分钟重校准</div>
@@ -67,7 +67,10 @@
     <div id="detail" style="opacity:.7;margin-top:6px;"></div>
   </div>
 
-  <div class="btn-row" id="btnRow"></div>
+  <div class="btn-row">
+    <div class="btn" id="fmtBtn">切换为12小时制</div>
+    <a class="btn" href="https://www.zrfeng.top/guide">← 返回</a>
+  </div>
 </div>
 
 <script>
@@ -81,45 +84,10 @@ var $ = function(id){ return document.getElementById(id); };
 var week = ['日','一','二','三','四','五','六'];
 var p = 0;
 
-/* ========== 按钮区：由脚本全权管理，每秒自愈 ========== */
-function buildButtons(){
-  var row = $('btnRow');
-  row.innerHTML = '';
-
-  var fmt = document.createElement('div');
-  fmt.className = 'btn';
-  fmt.id = 'fmtBtn';
-  fmt.textContent = use12 ? '切换为24小时制' : '切换为12小时制';
-
-  var back = document.createElement('a');
-  back.className = 'btn';
-  back.id = 'backBtn';
-  back.href = 'https://www.zrfeng.top/guide';
-  back.target = '_blank';          // 关键：新标签页打开，本页永不销毁
-  back.rel = 'noopener';
-  back.textContent = '← 返回';
-
-  row.appendChild(fmt);
-  row.appendChild(back);
-}
-
-// 自愈：每秒检查按钮区是否完整，不完整立即重建
-setInterval(function(){
-  var row = $('btnRow');
-  var fmt = $('fmtBtn'), back = $('backBtn');
-  if (!row || !fmt || !back ||
-      fmt.parentNode !== row || back.parentNode !== row) {
-    buildButtons();
-  } else {
-    var want = use12 ? '切换为24小时制' : '切换为12小时制';
-    if (fmt.textContent !== want) fmt.textContent = want; // 文案也校准
-  }
-}, 1000);
-
-/* ========== 切换：事件委托，绑在document上，永不丢失 ========== */
+/* ===== 12/24小时制切换（事件委托，只绑一次） ===== */
 document.addEventListener('click', function(ev){
   var t = ev.target;
-  if (t && t.id === 'fmtBtn' || (t && t.parentNode && t.parentNode.id === 'fmtBtn')) {
+  if (t && t.id === 'fmtBtn') {
     use12 = !use12;
     try{ localStorage.setItem('clockUse12', use12?'1':'0'); }catch(e){}
     var btn = $('fmtBtn');
@@ -127,7 +95,7 @@ document.addEventListener('click', function(ev){
   }
 });
 
-/* ========== 时间同步：阿里 → timeapi.io → 代理转发 ========== */
+/* ===== 时间同步：阿里 → timeapi.io → 代理转发 ===== */
 function jsonp(url, timeout){
   return new Promise(function(res, rej){
     var cb='_cb'+(++p), s=document.createElement('script');
@@ -185,28 +153,27 @@ function startSync(){
   syncTimer = setInterval(syncTime, 10*60*1000);
 }
 
-/* ========== 渲染 ========== */
+/* ===== 渲染 ===== */
 function render(){
   var d=new Date(Date.now()+offset);
   var frac=(d.getMilliseconds()/1000).toFixed(4).slice(1);
   var h=d.getHours(), ap='';
   if(use12){ ap = h<12?'上午':'下午'; h=h%12; if(h===0)h=12; }
-  var e;
-  if((e=$('t-main'))) e.textContent=pad(h)+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
-  if((e=$('t-frac'))) e.textContent=frac;
-  if((e=$('t-ampm'))) e.textContent=ap;
-  if((e=$('date'))) e.textContent=d.getFullYear()+'年'+pad(d.getMonth()+1)+'月'+pad(d.getDate())+'日 星期'+week[d.getDay()];
-  if((e=$('y')))  e.textContent=d.getFullYear();
-  if((e=$('mo'))) e.textContent=pad(d.getMonth()+1);
-  if((e=$('d')))  e.textContent=pad(d.getDate());
-  if((e=$('h')))  e.textContent=pad(h);
-  if((e=$('mi'))) e.textContent=pad(d.getMinutes());
-  if((e=$('s')))  e.textContent=pad(d.getSeconds());
-  if((e=$('ms'))) e.textContent=frac;
+  $('t-main').textContent=pad(h)+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
+  $('t-frac').textContent=frac;
+  $('t-ampm').textContent=ap;
+  $('date').textContent=d.getFullYear()+'年'+pad(d.getMonth()+1)+'月'+pad(d.getDate())+'日 星期'+week[d.getDay()];
+  $('y').textContent=d.getFullYear();
+  $('mo').textContent=pad(d.getMonth()+1);
+  $('d').textContent=pad(d.getDate());
+  $('h').textContent=pad(h);
+  $('mi').textContent=pad(d.getMinutes());
+  $('s').textContent=pad(d.getSeconds());
+  $('ms').textContent=frac;
   requestAnimationFrame(render);
 }
 
-buildButtons();
+$('fmtBtn').textContent = use12 ? '切换为24小时制' : '切换为12小时制';
 render();
 startSync();
 </script>
