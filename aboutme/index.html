@@ -1,70 +1,62 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>关于开发者</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
-            background: #0a0f0d;
-            color: #e0e0e0;
-            min-height: 100vh;
-            padding: 60px 40px;
-        }
-
-        h1 {
-            font-size: 34px;
-            margin-bottom: 24px;
-            background: linear-gradient(90deg, #00ff88, #00ccff);
-            -webkit-background-clip: text;
-            background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-
-        p {
-            font-size: 18px;
-            line-height: 2;
-            color: #c8d0cc;
-        }
-
-        .highlight {
-            color: #00ff88;
-            font-weight: bold;
-        }
-
-        .back-btn {
-            display: inline-block;
-            margin-top: 40px;
-            padding: 12px 32px;
-            font-size: 16px;
-            color: #00ff88;
-            background: transparent;
-            border: 1px solid #00ff88;
-            border-radius: 8px;
-            cursor: pointer;
-            text-decoration: none;
-            transition: all 0.3s;
-        }
-
-        .back-btn:hover {
-            background: #00ff88;
-            color: #0a0f0d;
-            box-shadow: 0 0 20px rgba(0, 255, 136, 0.5);
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>关于开发者 · zrfeng.top</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family:"Microsoft YaHei","PingFang SC",sans-serif;
+      background:linear-gradient(135deg,#0a101c 0%,#0d2818 100%);
+      min-height:100vh; display:flex; align-items:center;
+      justify-content:center; padding:20px; color:#e8f0f0;
+    }
+    .card {
+      background:rgba(10,16,28,.92);
+      border:1px solid rgba(0,255,170,.15);
+      border-radius:16px; max-width:600px; width:100%;
+      padding:32px 28px; box-shadow:0 0 40px rgba(0,255,170,.06);
+    }
+    header { text-align:center; margin-bottom:24px; }
+    header h1 { color:#00ffaa; font-size:24px; margin-bottom:8px; }
+    header p { color:#8899aa; font-size:13px; }
+    p { line-height:1.9; font-size:15px; color:#cdd8d8; margin-bottom:14px; }
+    .hl { color:#00ffaa; font-weight:600; }
+    .links { text-align:center; margin-top:24px; }
+    .links a {
+      display:inline-block; margin:6px; padding:8px 18px;
+      border:1px solid rgba(0,255,170,.3); border-radius:20px;
+      color:#00ffaa; text-decoration:none; font-size:13px;
+    }
+    .links a:hover { background:rgba(0,255,170,.08); }
+    footer { text-align:center; color:#5a6a7a; font-size:12px;
+             margin-top:24px; }
+  </style>
 </head>
 <body>
-    <h1>关于开发者</h1>
-    <p>
-        我的网名是<span class="highlight">Summer</span>，是一位<span class="highlight">13岁</span>的开发者，一位<span class="highlight">江苏初中生</span>，没什么兴趣爱好，时间被作业和各种补习班充满。
-    </p>
-    <a class="back-btn" href="https://www.zrfeng.top/guide">← 返回</a>
+  <div class="card">
+    <header>
+      <h1>关于开发者</h1>
+      <p>About the Developer</p>
+    </header>
+
+    <p>我的网名是 <span class="hl">Summer</span>，是一位 <span class="hl">13岁</span> 的开发者，来自江苏。</p>
+
+    <p>平时的时间大多被作业和补习班占着，但剩下的每一分钟，我喜欢写代码、研究航空、听洛天依——以及，折腾这个网站。</p>
+
+    <p>你正在看的这个站，所有页面都是我用 <span class="hl">一台手机</span> 完成的：写代码、配DNS、部署上线，全程没有碰过电脑。</p>
+
+    <p>如果它对你有一点点用处或启发，那这件小事就值得了。</p>
+
+    <div class="links">
+      <a href="https://www.zrfeng.top">🏠 主站</a>
+      <a href="https://www.zrfeng.top/guide/">🧭 导航</a>
+      <a href="https://www.zrfeng.top/time/">⏰ 原子钟</a>
+      <a href="https://github.com/dministratora49-hash/zrfeng">📦 源码</a>
+    </div>
+
+    <footer>© 2026 zrfeng.top · 自然风，正在吹 🍃</footer>
+  </div>
 </body>
 </html>
