@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AliPay - 正在维护</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    min-height: 100vh;
+    background:
+      radial-gradient(ellipse at 20% 80%, rgba(0, 255, 140, 0.06), transparent 50%),
+      radial-gradient(ellipse at 80% 20%, rgba(0, 255, 140, 0.04), transparent 50%),
+      #050a07;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: "Microsoft YaHei", sans-serif;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  /* 网格背景 */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0, 255, 140, 0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 255, 140, 0.035) 1px, transparent 1px);
+    background-size: 44px 44px;
+    pointer-events: none;
+  }
+
+  /* 渐渐浮现的框 */
+  .box {
+    position: relative;
+    text-align: center;
+    background: rgba(0, 20, 10, 0.55);
+    border: 1px solid rgba(0, 255, 140, 0.35);
+    border-radius: 14px;
+    box-shadow: 0 0 24px rgba(0, 255, 136, 0.15), inset 0 0 16px rgba(0, 255, 136, 0.05);
+    padding: 44px 34px;
+    max-width: 340px;
+    width: calc(100% - 40px);
+    opacity: 0;
+    transform: translateY(24px) scale(0.97);
+    animation: fadeUp 0.9s ease 0.3s forwards;
+  }
+
+  @keyframes fadeUp {
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  .icon {
+    font-size: 34px;
+    margin-bottom: 18px;
+    filter: drop-shadow(0 0 12px rgba(255, 85, 85, 0.6));
+  }
+
+  .title {
+    color: #ff5555;
+    font-size: 18px;
+    font-weight: bold;
+    text-shadow: 0 0 14px rgba(255, 60, 60, 0.6);
+    margin-bottom: 14px;
+  }
+
+  .desc {
+    color: rgba(200, 255, 220, 0.6);
+    font-size: 13px;
+    line-height: 1.7;
+    margin-bottom: 28px;
+  }
+
+  .btn {
+    display: inline-block;
+    padding: 10px 34px;
+    font-size: 14px;
+    color: #00ff88;
+    background: rgba(0, 255, 140, 0.06);
+    border: 1px solid rgba(0, 255, 140, 0.5);
+    border-radius: 8px;
+    text-decoration: none;
+    text-shadow: 0 0 8px rgba(0, 255, 136, 0.5);
+    box-shadow: 0 0 14px rgba(0, 255, 136, 0.12);
+    transition: box-shadow 0.25s, border-color 0.25s, background 0.25s;
+  }
+
+  .btn:hover {
+    background: rgba(0, 255, 140, 0.14);
+    border-color: rgba(0, 255, 140, 0.9);
+    box-shadow: 0 0 22px rgba(0, 255, 136, 0.35);
+  }
+</style>
+</head>
+<body>
+
+  <div class="box">
+    <div class="icon">❌</div>
+    <div class="title">AliPay赞助正在维护</div>
+    <div class="desc">请耐心等待，或更换赞助方式</div>
+    <a class="btn" href="https://www.zrfeng.top/sponsorship">返回</a>
+  </div>
+
+</body>
+</html>
