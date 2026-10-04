@@ -10,11 +10,11 @@
 
 | 页面 | 地址 | 说明 |
 |------|------|------|
-| 🏠 主站 | [zrfeng.top](https://zrfeng.top) | 门户与公告 |
-| 🧭 导航 | [zrfeng.top/guide/](https://zrfeng.top/guide/) | 上网起点 |
-| ⏰ 原子钟 | [zrfeng.top/time/](https://zrfeng.top/time/) | NTP同步·毫秒级·自动校准 |
-| 👤 关于 | [zrfeng.top/aboutme/](https://zrfeng.top/aboutme/) | 开发者信息 |
-| ☕ 赞助 | [zrfeng.top/sponsorship/](https://zrfeng.top/sponsorship/) | 支持我 |
+| 🏠 主站 | [www.zrfeng.top](https://www.zrfeng.top) | 门户与公告 |
+| 🧭 导航 | [www.zrfeng.top/guide/](https://www.zrfeng.top/guide/) | 上网起点 |
+| ⏰ 原子钟 | [www.zrfeng.top/time/](https://www.zrfeng.top/time/) | NTP同步·毫秒级·自动校准 |
+| 👤 关于 | [www.zrfeng.top/aboutme/](https://www.zrfeng.top/aboutme/) | 开发者信息 |
+| ☕ 赞助 | [www.zrfeng.top/sponsorship/](https://www.zrfeng.top/sponsorship/) | 支持我 |
 
 ## 🛠️ 技术栈
 
@@ -26,7 +26,7 @@
 ## 📱 特别之处
 
 整个网站——从写代码、配置 DNS 到部署上线——
-**全部在一台 Android 手机上完成**，没有使用电脑。
+**全部在一台 鸿蒙Harmony 手机上完成**，没有使用电脑。
 
 ## 🚀 本地运行
 
