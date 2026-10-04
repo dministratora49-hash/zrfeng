@@ -102,6 +102,27 @@
     0%, 100% { opacity: 1; }
     50% { opacity: 0.25; }
   }
+
+  /* 返回按钮 */
+  .back-btn {
+    margin-top: 46px;
+    padding: 10px 36px;
+    font-size: 14px;
+    color: #00ff88;
+    background: rgba(0, 255, 140, 0.06);
+    border: 1px solid rgba(0, 255, 140, 0.5);
+    border-radius: 8px;
+    text-decoration: none;
+    text-shadow: 0 0 8px rgba(0, 255, 136, 0.5);
+    box-shadow: 0 0 14px rgba(0, 255, 136, 0.12);
+    transition: box-shadow 0.25s, border-color 0.25s, background 0.25s;
+  }
+
+  .back-btn:hover {
+    background: rgba(0, 255, 140, 0.14);
+    border-color: rgba(0, 255, 140, 0.9);
+    box-shadow: 0 0 22px rgba(0, 255, 136, 0.35);
+  }
 </style>
 </head>
 <body>
@@ -121,6 +142,8 @@
       <div class="status">正在维护</div>
     </a>
   </div>
+
+  <a class="back-btn" href="https://www.zrfeng.top/guide">返回</a>
 
 </body>
 </html>
