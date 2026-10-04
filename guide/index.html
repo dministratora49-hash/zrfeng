@@ -3,23 +3,24 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>导航页</title>
+<title>赞助页</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
   body {
     min-height: 100vh;
-    background: #050807;
-    background-image:
-      radial-gradient(circle at 20% 20%, rgba(0, 255, 140, 0.06) 0%, transparent 50%),
-      radial-gradient(circle at 80% 80%, rgba(0, 255, 140, 0.05) 0%, transparent 50%);
+    background:
+      radial-gradient(ellipse at 20% 80%, rgba(0, 255, 140, 0.06), transparent 50%),
+      radial-gradient(ellipse at 80% 20%, rgba(0, 255, 140, 0.04), transparent 50%),
+      #050a07;
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: space-between;
-    padding: 80px 24px 24px;
-    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
-    color: #e8f5ee;
+    justify-content: flex-start;
+    padding-top: 15vh;
+    font-family: "Microsoft YaHei", sans-serif;
+    position: relative;
+    overflow-x: hidden;
   }
 
   /* 网格背景 */
@@ -28,112 +29,121 @@
     position: fixed;
     inset: 0;
     background-image:
-      linear-gradient(rgba(0,255,140,0.03) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(0,255,140,0.03) 1px, transparent 1px);
-    background-size: 40px 40px;
+      linear-gradient(rgba(0, 255, 140, 0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 255, 140, 0.035) 1px, transparent 1px);
+    background-size: 44px 44px;
     pointer-events: none;
   }
 
-  .top { position: relative; text-align: center; }
-
   h1 {
-    font-size: 36px;
-    margin-bottom: 20px;
-    background: linear-gradient(90deg, #ffffff, #00ff8c);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
+    color: #00ff88;
+    font-size: 26px;
+    text-shadow: 0 0 18px rgba(0, 255, 136, 0.7), 0 0 40px rgba(0, 255, 136, 0.35);
+    margin-bottom: 14px;
+    letter-spacing: 2px;
   }
 
-  p.sub {
-    color: #7fa893;
-    font-size: 14px;
-    letter-spacing: 1px;
+  .sub {
+    color: rgba(200, 255, 220, 0.55);
+    font-size: 13px;
     margin-bottom: 40px;
   }
 
-  .boxes {
+  .cards {
     display: flex;
-    gap: 24px;
-    justify-content: center;
-    flex-wrap: wrap;
+    gap: 18px;
   }
 
-  .box {
-    display: inline-flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
+  .card {
     width: 140px;
-    height: 140px;
+    padding: 22px 14px;
+    text-align: center;
+    background: rgba(0, 20, 10, 0.55);
     border: 1px solid rgba(0, 255, 140, 0.35);
-    border-radius: 16px;
-    background: rgba(10, 18, 14, 0.85);
+    border-radius: 12px;
+    box-shadow: 0 0 18px rgba(0, 255, 136, 0.12), inset 0 0 12px rgba(0, 255, 136, 0.05);
+    cursor: pointer;
     text-decoration: none;
-    color: #e8f5ee;
-    box-shadow: 0 0 16px rgba(0, 255, 140, 0.1);
-    transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+    display: block;
+    transition: box-shadow 0.25s, border-color 0.25s, transform 0.25s;
   }
-  .box:hover {
-    transform: translateY(-3px);
-    border-color: #00ff8c;
-    box-shadow: 0 0 28px rgba(0, 255, 140, 0.4);
+
+  .card:hover {
+    border-color: rgba(0, 255, 140, 0.8);
+    box-shadow: 0 0 26px rgba(0, 255, 136, 0.3), inset 0 0 12px rgba(0, 255, 136, 0.08);
+    transform: translateY(-2px);
   }
-  .box .label { font-size: 16px; letter-spacing: 1px; }
+
+  .card .name {
+    color: #d7ffe9;
+    font-size: 15px;
+    margin-bottom: 10px;
+  }
+
+  .card .cn {
+    color: rgba(200, 255, 220, 0.6);
+    font-size: 12px;
+    margin-bottom: 12px;
+  }
 
   .status {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 12px;
-    color: #00ff8c;
+    font-size: 11px;
+    color: #ff5555;
+    text-shadow: 0 0 10px rgba(255, 60, 60, 0.6);
   }
-  .dot {
-    width: 7px; height: 7px;
-    border-radius: 50%;
-    background: #00ff8c;
-    box-shadow: 0 0 8px #00ff8c;
-    animation: blink 1.5s infinite;
-  }
-  @keyframes blink { 50% { opacity: 0.3; } }
 
-  .bottom {
-    position: relative;
-    text-align: center;
-    font-size: 12px;
-    color: #4a6a58;
-    line-height: 2;
-    letter-spacing: 1px;
+  .status::before {
+    content: "●";
+    margin-right: 5px;
+    animation: blink 1.4s infinite;
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.25; }
+  }
+
+  /* 返回按钮 */
+  .back-btn {
+    margin-top: 46px;
+    padding: 10px 36px;
+    font-size: 14px;
+    color: #00ff88;
+    background: rgba(0, 255, 140, 0.06);
+    border: 1px solid rgba(0, 255, 140, 0.5);
+    border-radius: 8px;
+    text-decoration: none;
+    text-shadow: 0 0 8px rgba(0, 255, 136, 0.5);
+    box-shadow: 0 0 14px rgba(0, 255, 136, 0.12);
+    transition: box-shadow 0.25s, border-color 0.25s, background 0.25s;
+  }
+
+  .back-btn:hover {
+    background: rgba(0, 255, 140, 0.14);
+    border-color: rgba(0, 255, 140, 0.9);
+    box-shadow: 0 0 22px rgba(0, 255, 136, 0.35);
   }
 </style>
 </head>
 <body>
-  <div class="top">
-    <h1>这里是导航页</h1>
-    <p class="sub">欢迎访问，从这里开始你的旅程</p>
 
-    <div class="boxes">
-      <a class="box" href="https://www.zrfeng.top/aboutme">
-        <span class="label">关于开发者</span>
-        <span class="status"><span class="dot"></span>在线</span>
-      </a>
+  <h1>选择赞助方式</h1>
+  <div class="sub">感谢您的支持！</div>
 
-      <a class="box" href="https://www.zrfeng.top/time">
-        <span class="label">北京时间</span>
-        <span class="status"><span class="dot"></span>在线</span>
-      </a>
-
-      <a class="box" href="https://www.zrfeng.top/sponsorship">
-        <span class="label">赞助</span>
-        <span class="status"><span class="dot"></span>在线</span>
-      </a>
-    </div>
+  <div class="cards">
+    <a class="card" href="https://www.zrfeng.top/sponsorship/wechatpay/">
+      <div class="name">WeChatPay</div>
+      <div class="cn">微信支付</div>
+      <div class="status">正在维护</div>
+    </a>
+    <a class="card" href="https://www.zrfeng.top/sponsorship/alipay/">
+      <div class="name">AliPay</div>
+      <div class="cn">支付宝支付</div>
+      <div class="status">正在维护</div>
+    </a>
   </div>
 
-  <div class="bottom">
-    <div>zrfeng.top</div>
-    <div>© 2026 zrfeng.top — All Rights Reserved</div>
-  </div>
+  <a class="back-btn" href="https://www.zrfeng.top/guide">返回</a>
+
 </body>
 </html>
