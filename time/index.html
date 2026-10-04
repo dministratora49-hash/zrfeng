@@ -6,20 +6,13 @@
 <title>北京时间 · 同步阿里时间服务器</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
-  body {
-    min-height:100vh;
+  body { min-height:100vh;
     background: radial-gradient(circle at 20% 20%, #06120c 0%, #030805 60%, #010302 100%);
-    color:#00e676;
-    font-family:"Consolas","JetBrains Mono",monospace;
-    display:flex; align-items:center; justify-content:center; padding:16px;
-  }
-  .card {
-    border:1px solid rgba(0,230,118,.25);
-    background:rgba(0,20,10,.55);
-    border-radius:14px; padding:28px 22px;
-    max-width:720px; width:100%;
-    box-shadow:0 0 40px rgba(0,230,118,.12);
-  }
+    color:#00e676; font-family:"Consolas","JetBrains Mono",monospace;
+    display:flex; align-items:center; justify-content:center; padding:16px; }
+  .card { border:1px solid rgba(0,230,118,.25); background:rgba(0,20,10,.55);
+    border-radius:14px; padding:28px 22px; max-width:720px; width:100%;
+    box-shadow:0 0 40px rgba(0,230,118,.12); }
   .badge { display:inline-block; border:1px solid rgba(0,230,118,.4); border-radius:20px;
     padding:4px 14px; font-size:12px; letter-spacing:2px; background:rgba(0,230,118,.08); }
   h1 { font-size:22px; margin:18px 0 6px; color:#e8ffe8; }
@@ -28,6 +21,7 @@
     text-shadow:0 0 18px rgba(0,255,136,.5); margin-bottom:8px;
     font-variant-numeric:tabular-nums; }
   .big small { font-size:.42em; color:rgba(0,255,136,.75); }
+  .ampm { font-size:.35em; color:#bdfccf; letter-spacing:2px; margin-left:6px; }
   .date { font-size:17px; color:#bdfccf; letter-spacing:3px; margin-bottom:22px; }
   .grid { display:flex; gap:8px; flex-wrap:wrap; }
   .cell { flex:1; min-width:74px; border:1px solid rgba(0,230,118,.25);
@@ -40,15 +34,22 @@
     box-shadow:0 0 8px #00ff88; margin-right:6px; animation:pulse 1.5s infinite; }
   .dot.red { background:#ff5555; box-shadow:0 0 8px #ff5555; }
   @keyframes pulse { 50% { opacity:.35; } }
+  .btn-row { display:flex; gap:10px; margin-top:22px; }
+  .btn { flex:1; text-align:center; padding:12px;
+    border:1px solid rgba(0,230,118,.4); border-radius:8px;
+    background:rgba(0,230,118,.08); color:#00e676;
+    text-decoration:none; font-size:14px; letter-spacing:4px;
+    cursor:pointer; user-select:none; -webkit-tap-highlight-color:transparent; transition:.2s; }
+  .btn:active { background:rgba(0,230,118,.25); box-shadow:0 0 14px rgba(0,255,136,.4); }
 </style>
 </head>
 <body>
-<div class="card">
+<div class="card" id="card">
   <span class="badge">⏱ 北京时间（同步阿里时间服务器）</span>
   <h1>北京时间</h1>
   <div class="sub">UTC+8 · 启动时同步阿里时间服务器，含网络延迟补偿，每10分钟重校准</div>
 
-  <div class="big" id="time">--:--:--<small>.0000</small></div>
+  <div class="big"><span id="t-main">--:--:--</span><small id="t-frac">.0000</small><span class="ampm" id="t-ampm"></span></div>
   <div class="date" id="date">----年--月--日 星期-</div>
 
   <div class="grid">
@@ -65,99 +66,149 @@
     <span class="dot" id="dot"></span><span id="sync">正在同步阿里时间服务器…</span>
     <div id="detail" style="opacity:.7;margin-top:6px;"></div>
   </div>
+
+  <div class="btn-row" id="btnRow"></div>
 </div>
 
 <script>
-let offset = 0;
-const pad = (n,w=2)=>String(n).padStart(w,'0');
-const $ = id => document.getElementById(id);
-const week = ['日','一','二','三','四','五','六'];
-let p = 0;
+'use strict';
+var offset = 0;
+var use12 = (function(){ try{ return localStorage.getItem('clockUse12')==='1'; }catch(e){ return false; } })();
+var syncTimer = null;
 
-function jsonp(url, timeout=6000){
-  return new Promise((res,rej)=>{
-    const cb='_cb'+(++p), s=document.createElement('script');
-    const t=setTimeout(()=>{done();rej('超时');},timeout);
-    function done(){clearTimeout(t);delete window[cb];s.remove();}
-    window[cb]=d=>{done();res(d);};
-    s.onerror=()=>{done();rej('加载失败');};
-    s.src=url+(url.includes('?')?'&':'?')+'callback='+cb;
+var pad = function(n){ return String(n).padStart(2,'0'); };
+var $ = function(id){ return document.getElementById(id); };
+var week = ['日','一','二','三','四','五','六'];
+var p = 0;
+
+/* ========== 按钮区：由脚本全权管理，每秒自愈 ========== */
+function buildButtons(){
+  var row = $('btnRow');
+  row.innerHTML = '';
+
+  var fmt = document.createElement('div');
+  fmt.className = 'btn';
+  fmt.id = 'fmtBtn';
+  fmt.textContent = use12 ? '切换为24小时制' : '切换为12小时制';
+
+  var back = document.createElement('a');
+  back.className = 'btn';
+  back.id = 'backBtn';
+  back.href = 'https://www.zrfeng.top/guide';
+  back.target = '_blank';          // 关键：新标签页打开，本页永不销毁
+  back.rel = 'noopener';
+  back.textContent = '← 返回';
+
+  row.appendChild(fmt);
+  row.appendChild(back);
+}
+
+// 自愈：每秒检查按钮区是否完整，不完整立即重建
+setInterval(function(){
+  var row = $('btnRow');
+  var fmt = $('fmtBtn'), back = $('backBtn');
+  if (!row || !fmt || !back ||
+      fmt.parentNode !== row || back.parentNode !== row) {
+    buildButtons();
+  } else {
+    var want = use12 ? '切换为24小时制' : '切换为12小时制';
+    if (fmt.textContent !== want) fmt.textContent = want; // 文案也校准
+  }
+}, 1000);
+
+/* ========== 切换：事件委托，绑在document上，永不丢失 ========== */
+document.addEventListener('click', function(ev){
+  var t = ev.target;
+  if (t && t.id === 'fmtBtn' || (t && t.parentNode && t.parentNode.id === 'fmtBtn')) {
+    use12 = !use12;
+    try{ localStorage.setItem('clockUse12', use12?'1':'0'); }catch(e){}
+    var btn = $('fmtBtn');
+    if (btn) btn.textContent = use12 ? '切换为24小时制' : '切换为12小时制';
+  }
+});
+
+/* ========== 时间同步：阿里 → timeapi.io → 代理转发 ========== */
+function jsonp(url, timeout){
+  return new Promise(function(res, rej){
+    var cb='_cb'+(++p), s=document.createElement('script');
+    var t=setTimeout(function(){ cleanup(); rej('超时'); }, timeout||6000);
+    function cleanup(){ clearTimeout(t); try{delete window[cb];}catch(e){} if(s.parentNode)s.parentNode.removeChild(s); }
+    window[cb]=function(d){ cleanup(); res(d); };
+    s.onerror=function(){ cleanup(); rej('加载失败'); };
+    s.src=url+(url.indexOf('?')>=0?'&':'?')+'callback='+cb;
     document.head.appendChild(s);
   });
 }
 
-function ok(msg){
-  $('dot').classList.remove('red');
-  $('sync').textContent = msg;
+function ok(msg){ $('dot').classList.remove('red'); $('sync').textContent=msg; $('detail').textContent=''; }
+function fail(msg,detail){ $('dot').classList.add('red'); $('sync').textContent=msg; $('detail').textContent=detail; }
+
+function syncTime(){
+  var logs=[];
+  return jsonp('https://acs.m.taobao.com/gw/mtop.common.getTimestamp/')
+    .then(function(j){
+      offset=(+j.data.t)-Date.now();
+      ok('✔ 已同步（阿里时间服务器）校准 '+offset.toFixed(1)+'ms · 10分钟后重校');
+    })
+    .catch(function(){
+      logs.push('阿里:失败');
+      var t0=Date.now();
+      return fetch('https://www.timeapi.io/api/Time/current/zone?timeZone=Asia/Shanghai',{cache:'no-store'})
+        .then(function(r){return r.json();})
+        .then(function(j){
+          var rtt=Date.now()-t0;
+          offset=new Date(j.dateTime+'Z').getTime()-8*3600e3+rtt/2-Date.now();
+          ok('✔ 已同步（timeapi.io 备用）校准 '+offset.toFixed(1)+'ms');
+        });
+    })
+    .catch(function(){
+      logs.push('timeapi:失败');
+      var t0=Date.now();
+      return fetch('https://api.allorigins.win/raw?url='+encodeURIComponent('https://acs.m.taobao.com/gw/mtop.common.getTimestamp/'),{cache:'no-store'})
+        .then(function(r){return r.json();})
+        .then(function(j){
+          var rtt=Date.now()-t0;
+          offset=(+j.data.t)+rtt/2-Date.now();
+          ok('✔ 已同步（代理转发阿里）校准 '+offset.toFixed(1)+'ms');
+        });
+    })
+    .catch(function(){
+      logs.push('代理:失败');
+      fail('⚠ 全部通道失败，暂用本机时间，30秒后重试','失败详情: '+logs.join(' | '));
+      setTimeout(syncTime, 30000);
+    });
 }
-function fail(msg, detail){
-  $('dot').classList.add('red');
-  $('sync').textContent = msg;
-  $('detail').textContent = detail;
+
+function startSync(){
+  if(syncTimer) return;
+  syncTime();
+  syncTimer = setInterval(syncTime, 10*60*1000);
 }
 
-async function syncTime(){
-  const logs = [];
-
-  // 通道1: 阿里时间服务器 JSONP
-  try{
-    const t0=Date.now();
-    const j = await jsonp('https://acs.m.taobao.com/gw/mtop.common.getTimestamp/');
-    const rtt=Date.now()-t0;
-    offset = +j.data.t + rtt/2 - Date.now();
-    ok(`✔ 已同步（阿里时间服务器）校准 ${offset.toFixed(1)}ms · 延迟 ${rtt}ms · 10分钟后重校`);
-    $('detail').textContent='';
-    return;
-  }catch(e){ logs.push('阿里:'+e); }
-
-  // 通道2: timeapi.io（阿里备用）
-  try{
-    const t0=Date.now();
-    const r=await fetch('https://www.timeapi.io/api/Time/current/zone?timeZone=Asia/Shanghai',{cache:'no-store'});
-    const j=await r.json();
-    const rtt=Date.now()-t0;
-    offset = new Date(j.dateTime+'Z').getTime() - 8*3600e3 + rtt/2 - Date.now();
-    ok(`✔ 已同步（timeapi.io 备用）校准 ${offset.toFixed(1)}ms · 延迟 ${rtt}ms`);
-    $('detail').textContent='';
-    return;
-  }catch(e){ logs.push('timeapi:'+e); }
-
-  // 通道3: allorigins 代理转发阿里时间接口
-  try{
-    const t0=Date.now();
-    const r=await fetch('https://api.allorigins.win/raw?url='+
-      encodeURIComponent('https://acs.m.taobao.com/gw/mtop.common.getTimestamp/'),{cache:'no-store'});
-    const j=await r.json();
-    const rtt=Date.now()-t0;
-    offset = +j.data.t + rtt/2 - Date.now();
-    ok(`✔ 已同步（代理转发阿里）校准 ${offset.toFixed(1)}ms · 延迟 ${rtt}ms`);
-    $('detail').textContent='';
-    return;
-  }catch(e){ logs.push('代理:'+e); }
-
-  fail('⚠ 全部通道失败，暂用本机时间，30秒后重试', '失败详情: ' + logs.join(' | '));
-  setTimeout(syncTime, 30000);
-}
-syncTime();
-setInterval(syncTime, 10*60*1000);
-
-function now(){ return Date.now() + offset; }
-
+/* ========== 渲染 ========== */
 function render(){
-  const d = new Date(now());
-  const frac = (d.getMilliseconds()/1000).toFixed(4).slice(1);
-  $('time').innerHTML = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}<small>${frac}</small>`;
-  $('date').textContent = `${d.getFullYear()}年${pad(d.getMonth()+1)}月${pad(d.getDate())}日 星期${week[d.getDay()]}`;
-  $('y').textContent  = d.getFullYear();
-  $('mo').textContent = pad(d.getMonth()+1);
-  $('d').textContent  = pad(d.getDate());
-  $('h').textContent  = pad(d.getHours());
-  $('mi').textContent = pad(d.getMinutes());
-  $('s').textContent  = pad(d.getSeconds());
-  $('ms').textContent = frac;
+  var d=new Date(Date.now()+offset);
+  var frac=(d.getMilliseconds()/1000).toFixed(4).slice(1);
+  var h=d.getHours(), ap='';
+  if(use12){ ap = h<12?'上午':'下午'; h=h%12; if(h===0)h=12; }
+  var e;
+  if((e=$('t-main'))) e.textContent=pad(h)+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
+  if((e=$('t-frac'))) e.textContent=frac;
+  if((e=$('t-ampm'))) e.textContent=ap;
+  if((e=$('date'))) e.textContent=d.getFullYear()+'年'+pad(d.getMonth()+1)+'月'+pad(d.getDate())+'日 星期'+week[d.getDay()];
+  if((e=$('y')))  e.textContent=d.getFullYear();
+  if((e=$('mo'))) e.textContent=pad(d.getMonth()+1);
+  if((e=$('d')))  e.textContent=pad(d.getDate());
+  if((e=$('h')))  e.textContent=pad(h);
+  if((e=$('mi'))) e.textContent=pad(d.getMinutes());
+  if((e=$('s')))  e.textContent=pad(d.getSeconds());
+  if((e=$('ms'))) e.textContent=frac;
   requestAnimationFrame(render);
 }
+
+buildButtons();
 render();
+startSync();
 </script>
 </body>
 </html>
