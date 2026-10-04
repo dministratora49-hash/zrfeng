@@ -2,7 +2,7 @@
 
 > 一个 12 岁学生用一台手机完成的个人网站。
 
-**在线访问：[zrfeng.top](https://zrfeng.top)**
+**在线访问：[www.zrfeng.top](https://www.zrfeng.top)**
 
 ## ✨ 这是什么
 
