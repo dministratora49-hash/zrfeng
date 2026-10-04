@@ -123,6 +123,59 @@
     border-color: rgba(0, 255, 140, 0.9);
     box-shadow: 0 0 22px rgba(0, 255, 136, 0.35);
   }
+
+  /* GitHub 卡片 */
+  .github-card {
+    margin-top: 46px;
+    width: 200px;
+    padding: 20px 14px;
+    text-align: center;
+    background: rgba(0, 20, 10, 0.55);
+    border: 1px solid rgba(0, 255, 140, 0.35);
+    border-radius: 12px;
+    box-shadow: 0 0 18px rgba(0, 255, 136, 0.12), inset 0 0 12px rgba(0, 255, 136, 0.05);
+    cursor: pointer;
+    text-decoration: none;
+    display: block;
+    transition: box-shadow 0.25s, border-color 0.25s, transform 0.25s;
+  }
+
+  .github-card:hover {
+    border-color: rgba(0, 255, 140, 0.8);
+    box-shadow: 0 0 26px rgba(0, 255, 136, 0.3), inset 0 0 12px rgba(0, 255, 136, 0.08);
+    transform: translateY(-2px);
+  }
+
+  .github-card .star {
+    font-size: 22px;
+    margin-bottom: 8px;
+    filter: drop-shadow(0 0 10px rgba(0, 255, 136, 0.6));
+  }
+
+  .github-card .text {
+    color: #d7ffe9;
+    font-size: 14px;
+    margin-bottom: 8px;
+  }
+
+  .github-card .name {
+    color: rgba(200, 255, 220, 0.6);
+    font-size: 13px;
+    margin-bottom: 10px;
+  }
+
+  /* 绿色在线状态 */
+  .online {
+    font-size: 11px;
+    color: #00ff88;
+    text-shadow: 0 0 10px rgba(0, 255, 136, 0.6);
+  }
+
+  .online::before {
+    content: "●";
+    margin-right: 5px;
+    animation: blink 1.4s infinite;
+  }
 </style>
 </head>
 <body>
@@ -144,6 +197,13 @@
   </div>
 
   <a class="back-btn" href="https://www.zrfeng.top/guide">返回</a>
+
+  <a class="github-card" href="https://github.com/dministratora49-hash/zrfeng/tree/main" target="_blank" rel="noopener">
+    <div class="star">⭐</div>
+    <div class="text">为我的仓库点一个 Star</div>
+    <div class="name">GitHub</div>
+    <div class="online">在线</div>
+  </a>
 
 </body>
 </html>
