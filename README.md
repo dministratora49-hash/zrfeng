@@ -15,6 +15,8 @@
 | ⏰ 原子钟 | [www.zrfeng.top/time/](https://www.zrfeng.top/time/) | NTP同步·毫秒级·自动校准 |
 | 👤 关于 | [www.zrfeng.top/aboutme/](https://www.zrfeng.top/aboutme/) | 开发者信息 |
 | ☕ 赞助 | [www.zrfeng.top/sponsorship/](https://www.zrfeng.top/sponsorship/) | 支持我 |
+| 📚 资源库 | [www.zrfeng.top/file/](https://www.zrfeng.top/file/) | 资源聚合与分类 |
+| 📖 小说 | [www.zrfeng.top/file/novel/](https://www.zrfeng.top/file/novel/) | 在线阅读 |
 
 ## 🛠️ 技术栈
 
@@ -46,6 +48,10 @@ python -m http.server 8000
 ├── guide/            # 导航页
 ├── time/             # NTP 原子钟
 ├── sponsorship/      # 赞助页
+│   ├── alipay/       # 支付宝（维护中）
+│   └── wechatpay/    # 微信支付（维护中）
+├── file/             # 资源库
+│   └── novel/        # 小说
 └── wrangler.toml     # Cloudflare 部署配置
 ```
 
