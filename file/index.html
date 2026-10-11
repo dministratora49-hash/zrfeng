@@ -57,64 +57,7 @@
     margin-bottom: 40px;
   }
 
-  /* ===== 空状态 ===== */
-  .empty {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 16px;
-    padding: 56px 28px;
-    border: 1px dashed rgba(0, 255, 140, 0.3);
-    border-radius: 20px;
-    background: rgba(10, 18, 14, 0.7);
-    box-shadow: 0 0 16px rgba(0, 255, 140, 0.08);
-  }
-
-  .empty .icon {
-    font-size: 44px;
-    line-height: 1;
-    filter: drop-shadow(0 0 14px rgba(0, 255, 140, 0.35));
-    opacity: 0.85;
-  }
-
-  .empty .title {
-    font-size: 19px;
-    letter-spacing: 2px;
-    color: #e8f5ee;
-  }
-
-  .empty .desc {
-    font-size: 13px;
-    line-height: 1.9;
-    color: #7fa893;
-    letter-spacing: 1px;
-  }
-
-  .empty .tag {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    margin-top: 6px;
-    padding: 5px 14px;
-    font-size: 12px;
-    letter-spacing: 1px;
-    color: #ffb74d;
-    border: 1px solid rgba(255, 183, 77, 0.35);
-    border-radius: 20px;
-    background: rgba(255, 183, 77, 0.08);
-  }
-  .empty .tag::before {
-    content: "";
-    width: 7px; height: 7px;
-    border-radius: 50%;
-    background: #ffb74d;
-    box-shadow: 0 0 8px #ffb74d;
-    animation: blink 1.5s infinite;
-  }
-
-  @keyframes blink { 50% { opacity: 0.3; } }
-
-  /* ===== 资源卡片（将来放资源时使用） ===== */
+  /* ===== 资源卡片 ===== */
   .boxes {
     display: flex;
     gap: 24px;
@@ -160,6 +103,8 @@
     animation: blink 1.5s infinite;
   }
 
+  @keyframes blink { 50% { opacity: 0.3; } }
+
   /* ===== 返回按钮 ===== */
   .back {
     position: relative;
@@ -196,7 +141,6 @@
   @media (max-width: 520px) {
     body { padding-top: 56px; }
     h1 { font-size: 28px; }
-    .empty { padding: 44px 20px; }
   }
 </style>
 </head>
@@ -205,31 +149,17 @@
     <h1>资源库</h1>
     <p class="sub">精选工具与链接，持续整理中</p>
 
-    <!-- 目前为空状态；将来添加资源时，把下面的 .empty 换成 .boxes 结构即可 -->
-    <div class="empty">
-      <div class="icon">📦</div>
-      <div class="title">暂无资源</div>
-      <div class="desc">
-        这里还没有发布任何资源<br>
-        整理完成后会陆续上线
-      </div>
-      <span class="tag">建设中</span>
+    <!-- 资源列表：以后添加资源时，复制下面的 <a class="box"> 整块即可 -->
+    <div class="boxes">
+      <a class="box" href="https://www.zrfeng.top/file/novel">
+        <span class="label">小说</span>
+        <span class="status"><span class="dot"></span>在线</span>
+      </a>
     </div>
 
     <div class="back">
       <a href="https://www.zrfeng.top/guide">← 返回导航站</a>
     </div>
-
-    <!--
-      添加资源时参考这段结构（复制多个即可）：
-
-      <div class="boxes">
-        <a class="box" href="https://example.com">
-          <span class="label">资源名称</span>
-          <span class="status"><span class="dot"></span>可用</span>
-        </a>
-      </div>
-    -->
   </div>
 
   <div>
