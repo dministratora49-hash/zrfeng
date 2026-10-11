@@ -17,6 +17,7 @@
 | ☕ 赞助 | [www.zrfeng.top/sponsorship/](https://www.zrfeng.top/sponsorship/) | 支持我 |
 | 📚 资源库 | [www.zrfeng.top/file/](https://www.zrfeng.top/file/) | 资源聚合与分类 |
 | 📖 小说 | [www.zrfeng.top/file/novel/](https://www.zrfeng.top/file/novel/) | 在线阅读 |
+| 💗 言情小说 | [www.zrfeng.top/file/novel/romancenovel/](https://www.zrfeng.top/file/novel/romancenovel/) | 《听潮》·支持网盘下载 |
 
 ## 🛠️ 技术栈
 
@@ -52,6 +53,7 @@ python -m http.server 8000
 │   └── wechatpay/    # 微信支付（维护中）
 ├── file/             # 资源库
 │   └── novel/        # 小说
+│       └── romancenovel/  # 言情小说《听潮》
 └── wrangler.toml     # Cloudflare 部署配置
 ```
 
