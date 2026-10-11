@@ -193,6 +193,20 @@
     transition: background 0.25s, border-color 0.25s, box-shadow 0.25s;
   }
   .client + .client { margin-top: 12px; }
+  /* 带提取密码的渠道：名称靠左，密码标签靠右 */
+  .client.with-pwd { justify-content: space-between; gap: 8px; }
+  .client .pwd {
+    margin-left: auto;
+    padding: 3px 10px;
+    font-size: 12px;
+    letter-spacing: 0;
+    color: #7fa893;
+    border: 1px solid rgba(0, 255, 140, 0.25);
+    border-radius: 20px;
+    white-space: nowrap;
+    user-select: all;
+    -webkit-user-select: all;
+  }
   .client:hover {
     background: rgba(0, 255, 140, 0.14);
     border-color: #00ff8c;
@@ -266,6 +280,16 @@
       <a class="client" href="https://share.feijipan.com/s/zVwvQGQA" target="_blank" rel="noopener">☁ 小飞机网盘</a>
       <a class="client" href="https://1849827934.share.123pan.cn/123pan/YlKovd-Ins0d" target="_blank" rel="noopener">☁ 123网盘</a>
       <a class="client" href="https://pan.xunlei.com/s/VP3cwjtUAt_ZQPZXiSlbA30OA1?pwd=2hae" target="_blank" rel="noopener">☁ 迅雷云盘</a>
+      <a class="client with-pwd" href="https://zrfengmc.lanzoul.com/i7Arj4bjs9vi" target="_blank" rel="noopener">
+        <span>☁ 蓝奏云盘</span>
+        <span class="pwd">密码：csft</span>
+      </a>
+      <a class="client" href="https://pan.quark.cn/s/8d9dc39b6d24" target="_blank" rel="noopener">☁ 夸克网盘</a>
+      <a class="client with-pwd" href="https://pan.baidu.com/s/1l5oVZJSDblb3g2yczkuPZA?pwd=pRNK" target="_blank" rel="noopener">
+        <span>☁ 百度网盘</span>
+        <span class="pwd">密码：pRNK</span>
+      </a>
+      <a class="client" href="https://www.alipan.com/s/vRxjyqhwctZ" target="_blank" rel="noopener">☁ 阿里云盘</a>
       <button class="close" id="closeBtn" type="button">关闭</button>
     </div>
   </div>
