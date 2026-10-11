@@ -15,6 +15,7 @@
 | ⏰ 原子钟 | [www.zrfeng.top/time/](https://www.zrfeng.top/time/) | NTP同步·毫秒级·自动校准 |
 | 👤 关于 | [www.zrfeng.top/aboutme/](https://www.zrfeng.top/aboutme/) | 开发者信息 |
 | ☕ 赞助 | [www.zrfeng.top/sponsorship/](https://www.zrfeng.top/sponsorship/) | 支持我 |
+| ✉️ 联系 | [www.zrfeng.top/contact/](https://www.zrfeng.top/contact/) | 联系邮箱 |
 | 📚 资源库 | [www.zrfeng.top/file/](https://www.zrfeng.top/file/) | 资源聚合与分类 |
 | 📖 小说 | [www.zrfeng.top/file/novel/](https://www.zrfeng.top/file/novel/) | 在线阅读 |
 | 💗 言情小说 | [www.zrfeng.top/file/novel/romancenovel/](https://www.zrfeng.top/file/novel/romancenovel/) | 《听潮》·支持网盘下载 |
@@ -51,6 +52,7 @@ python -m http.server 8000
 ├── sponsorship/      # 赞助页
 │   ├── alipay/       # 支付宝（维护中）
 │   └── wechatpay/    # 微信支付（维护中）
+├── contact/          # 联系我们
 ├── file/             # 资源库
 │   └── novel/        # 小说
 │       └── romancenovel/  # 言情小说《听潮》
