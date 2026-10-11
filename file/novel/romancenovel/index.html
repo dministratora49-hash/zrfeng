@@ -50,14 +50,14 @@
     -webkit-text-fill-color: transparent;
   }
 
-  /* ===== 作品横排 ===== */
+  /* ===== 作品横排：书名靠左，状态与下载靠右 ===== */
   .row {
     display: flex;
     align-items: center;
-    justify-content: center;
-    gap: 20px;
+    justify-content: space-between;
+    gap: 16px;
     flex-wrap: wrap;
-    padding: 26px 28px;
+    padding: 24px 28px;
     border: 1px solid rgba(0, 255, 140, 0.35);
     border-radius: 16px;
     background: rgba(10, 18, 14, 0.85);
@@ -70,12 +70,21 @@
     color: #e8f5ee;
   }
 
+  /* 右侧一组：状态 + 下载 */
+  .row .right {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    margin-left: auto;
+  }
+
   .status {
     display: inline-flex;
     align-items: center;
     gap: 6px;
     font-size: 13px;
     color: #00ff8c;
+    white-space: nowrap;
   }
   .dot {
     width: 7px; height: 7px;
@@ -97,12 +106,36 @@
     border-radius: 8px;
     background: rgba(0, 255, 140, 0.08);
     cursor: pointer;
+    white-space: nowrap;
     transition: background 0.25s, border-color 0.25s, box-shadow 0.25s;
   }
   .dl-btn:hover {
     background: rgba(0, 255, 140, 0.16);
     border-color: #00ff8c;
     box-shadow: 0 0 20px rgba(0, 255, 140, 0.3);
+  }
+
+  /* ===== 返回按钮 ===== */
+  .back {
+    position: relative;
+    margin-top: 34px;
+  }
+  .back a {
+    display: inline-block;
+    padding: 11px 36px;
+    font-size: 14px;
+    letter-spacing: 2px;
+    color: #00ff8c;
+    text-decoration: none;
+    border: 1px solid rgba(0, 255, 140, 0.4);
+    border-radius: 8px;
+    background: rgba(0, 255, 140, 0.06);
+    transition: background 0.25s, border-color 0.25s, box-shadow 0.25s;
+  }
+  .back a:hover {
+    background: rgba(0, 255, 140, 0.14);
+    border-color: #00ff8c;
+    box-shadow: 0 0 22px rgba(0, 255, 140, 0.3);
   }
 
   /* ===== 弹窗 ===== */
@@ -157,6 +190,7 @@
     background: rgba(0, 255, 140, 0.06);
     transition: background 0.25s, border-color 0.25s, box-shadow 0.25s;
   }
+  .client + .client { margin-top: 12px; }
   .client:hover {
     background: rgba(0, 255, 140, 0.14);
     border-color: #00ff8c;
@@ -189,18 +223,15 @@
     letter-spacing: 1px;
     margin-top: 48px;
   }
-  .bottom a {
-    color: #7fa893;
-    text-decoration: none;
-    border-bottom: 1px dashed rgba(0, 255, 140, 0.3);
-  }
-  .bottom a:hover { color: #00ff8c; }
 
   @media (max-width: 520px) {
     body { padding-top: 56px; }
     h1 { font-size: 23px; margin-bottom: 34px; }
-    .row { gap: 14px; padding: 22px 16px; }
+    .row { gap: 12px; padding: 20px 18px; }
     .book { font-size: 17px; }
+    .row .right { gap: 14px; }
+    .dl-btn { padding: 8px 22px; letter-spacing: 1px; }
+    .back a { padding: 10px 28px; }
   }
 </style>
 </head>
@@ -210,16 +241,20 @@
 
     <div class="row">
       <span class="book">《听潮》</span>
-      <span class="status"><span class="dot"></span>开放下载</span>
-      <button class="dl-btn" id="dlBtn" type="button">下载</button>
+      <span class="right">
+        <span class="status"><span class="dot"></span>开放下载</span>
+        <button class="dl-btn" id="dlBtn" type="button">下载</button>
+      </span>
+    </div>
+
+    <div class="back">
+      <a href="https://www.zrfeng.top/file/novel">← 返回小说页</a>
     </div>
   </div>
 
-  <div>
-    <div class="bottom">
-      <div><a href="https://www.zrfeng.top/file/novel">← 返回小说</a></div>
-      <div>© 2026 zrfeng.top — All Rights Reserved</div>
-    </div>
+  <div class="bottom">
+    <div>zrfeng.top</div>
+    <div>© 2026 zrfeng.top — All Rights Reserved</div>
   </div>
 
   <!-- 下载弹窗 -->
@@ -227,6 +262,7 @@
     <div class="modal">
       <div class="head">选择下载方式</div>
       <a class="client" href="https://share.feijipan.com/s/zVwvQGQA" target="_blank" rel="noopener">☁ 小飞机网盘</a>
+      <a class="client" href="https://1849827934.share.123pan.cn/123pan/YlKovd-Ins0d" target="_blank" rel="noopener">☁ 123网盘</a>
       <button class="close" id="closeBtn" type="button">关闭</button>
     </div>
   </div>
