@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>联系我们 · zrfeng.top</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    min-height: 100vh;
+    background: #050807;
+    background-image:
+      radial-gradient(circle at 20% 20%, rgba(0, 255, 140, 0.06) 0%, transparent 50%),
+      radial-gradient(circle at 80% 80%, rgba(0, 255, 140, 0.05) 0%, transparent 50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    padding: 80px 24px 24px;
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    color: #e8f5ee;
+  }
+
+  /* 网格背景 */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,255,140,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,255,140,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+  }
+
+  .top {
+    position: relative;
+    text-align: center;
+    width: 100%;
+    max-width: 620px;
+  }
+
+  h1 {
+    font-size: 36px;
+    margin-bottom: 20px;
+    background: linear-gradient(90deg, #ffffff, #00ff8c);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  p.sub {
+    color: #7fa893;
+    font-size: 14px;
+    letter-spacing: 1px;
+    margin-bottom: 40px;
+  }
+
+  /* ===== 分节标题 ===== */
+  .sec-title {
+    margin-bottom: 16px;
+    padding-left: 6px;
+    text-align: left;
+    font-size: 13px;
+    letter-spacing: 2px;
+    color: #00ff8c;
+  }
+
+  /* ===== 邮箱列表 ===== */
+  .list {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    text-align: left;
+  }
+
+  .item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 18px 20px;
+    border: 1px solid rgba(0, 255, 140, 0.35);
+    border-radius: 16px;
+    background: rgba(10, 18, 14, 0.85);
+    box-shadow: 0 0 16px rgba(0, 255, 140, 0.1);
+    transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+  }
+  .item:hover {
+    transform: translateY(-2px);
+    border-color: #00ff8c;
+    box-shadow: 0 0 26px rgba(0, 255, 140, 0.3);
+  }
+
+  .addr {
+    flex: 1;
+    min-width: 0;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #e8f5ee;
+    text-decoration: none;
+    word-break: break-all;
+    transition: color 0.2s;
+  }
+  .addr:hover { color: #00ff8c; }
+
+  /* 标注：主要 / 回复随缘 */
+  .tag {
+    flex-shrink: 0;
+    padding: 3px 12px;
+    font-size: 12px;
+    letter-spacing: 1px;
+    border-radius: 20px;
+    white-space: nowrap;
+  }
+  .tag.main {
+    color: #00ff8c;
+    border: 1px solid rgba(0, 255, 140, 0.45);
+    background: rgba(0, 255, 140, 0.1);
+    box-shadow: 0 0 12px rgba(0, 255, 140, 0.15);
+  }
+  .tag.casual {
+    color: #ffb74d;
+    border: 1px solid rgba(255, 183, 77, 0.35);
+    background: rgba(255, 183, 77, 0.08);
+  }
+
+  .copy {
+    flex-shrink: 0;
+    padding: 6px 14px;
+    font-size: 12px;
+    font-family: inherit;
+    letter-spacing: 1px;
+    color: #7fa893;
+    border: 1px solid rgba(0, 255, 140, 0.25);
+    border-radius: 20px;
+    background: transparent;
+    cursor: pointer;
+    transition: color 0.2s, border-color 0.2s, background 0.2s;
+  }
+  .copy:hover {
+    color: #00ff8c;
+    border-color: rgba(0, 255, 140, 0.6);
+    background: rgba(0, 255, 140, 0.08);
+  }
+  .copy.done {
+    color: #00ff8c;
+    border-color: #00ff8c;
+    background: rgba(0, 255, 140, 0.14);
+  }
+
+  /* ===== 返回按钮 ===== */
+  .back {
+    position: relative;
+    margin-top: 38px;
+  }
+  .back a {
+    display: inline-block;
+    padding: 11px 36px;
+    font-size: 14px;
+    letter-spacing: 2px;
+    color: #00ff8c;
+    text-decoration: none;
+    border: 1px solid rgba(0, 255, 140, 0.4);
+    border-radius: 8px;
+    background: rgba(0, 255, 140, 0.06);
+    transition: background 0.25s, border-color 0.25s, box-shadow 0.25s;
+  }
+  .back a:hover {
+    background: rgba(0, 255, 140, 0.14);
+    border-color: #00ff8c;
+    box-shadow: 0 0 22px rgba(0, 255, 140, 0.3);
+  }
+
+  .bottom {
+    position: relative;
+    text-align: center;
+    font-size: 12px;
+    color: #4a6a58;
+    line-height: 2;
+    letter-spacing: 1px;
+    margin-top: 48px;
+  }
+
+  @media (max-width: 520px) {
+    body { padding-top: 56px; }
+    h1 { font-size: 28px; }
+    .item { padding: 16px 16px; gap: 10px; }
+    .addr { font-size: 13px; }
+  }
+</style>
+</head>
+<body>
+  <div class="top">
+    <h1>联系我们</h1>
+    <p class="sub">欢迎通过以下邮箱与我取得联系</p>
+
+    <div class="sec-title">主要联系方式</div>
+
+    <div class="list">
+      <div class="item">
+        <a class="addr" href="mailto:3802780917@qq.com">3802780917@qq.com</a>
+        <span class="tag main">主要</span>
+        <button class="copy" type="button" data-mail="3802780917@qq.com">复制</button>
+      </div>
+
+      <div class="item">
+        <a class="addr" href="mailto:summer@zrfeng.top">summer@zrfeng.top</a>
+        <button class="copy" type="button" data-mail="summer@zrfeng.top">复制</button>
+      </div>
+
+      <div class="item">
+        <a class="addr" href="mailto:zrfengmc@outlook.com">zrfengmc@outlook.com</a>
+        <span class="tag casual">回复随缘</span>
+        <button class="copy" type="button" data-mail="zrfengmc@outlook.com">复制</button>
+      </div>
+
+      <div class="item">
+        <a class="addr" href="mailto:dministratora49@gmail.com">dministratora49@gmail.com</a>
+        <span class="tag casual">回复随缘</span>
+        <button class="copy" type="button" data-mail="dministratora49@gmail.com">复制</button>
+      </div>
+    </div>
+
+    <div class="back">
+      <a href="https://www.zrfeng.top/guide">← 返回导航站</a>
+    </div>
+  </div>
+
+  <div class="bottom">
+    <div>zrfeng.top</div>
+    <div>© 2026 zrfeng.top — All Rights Reserved</div>
+  </div>
+
+<script>
+(function () {
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest ? e.target.closest('.copy') : null;
+    if (!btn) return;
+    var mail = btn.getAttribute('data-mail');
+    if (!mail) return;
+
+    function done() {
+      var old = btn.textContent;
+      btn.textContent = '已复制';
+      btn.classList.add('done');
+      setTimeout(function () {
+        btn.textContent = old;
+        btn.classList.remove('done');
+      }, 1500);
+    }
+
+    /* 优先用剪贴板接口；不可用时回退到旧方式；都失败则提示手动复制 */
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(mail).then(done).catch(fallback);
+    } else {
+      fallback();
+    }
+
+    function fallback() {
+      try {
+        var ta = document.createElement('textarea');
+        ta.value = mail;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.top = '-1000px';
+        document.body.appendChild(ta);
+        ta.select();
+        var ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+        if (ok) { done(); return; }
+      } catch (err) { /* 忽略，走下面的提示 */ }
+      btn.textContent = '请长按复制';
+      setTimeout(function () { btn.textContent = '复制'; }, 1800);
+    }
+  });
+})();
+</script>
+</body>
+</html>
