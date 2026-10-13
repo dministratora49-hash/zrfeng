@@ -1,5 +1,35 @@
 name = "zrfeng"
 compatibility_date = "2026-10-01"
 
+# Worker 入口：提供 /api/* 接口（注册、登录、验证码、下载门控），
+# 其余请求交给静态资源。run_worker_first 让 /api/* 优先命中 Worker。
+main = "worker.js"
+
 [assets]
 directory = "./"
+binding = "ASSETS"
+# 仅路径以 /api/ 开头时才先走 Worker，其余直接由静态资源处理（更快）。
+run_worker_first = ["/api/*"]
+
+# ---------------------------------------------------------------------------
+# 需要配置的绑定与密钥（不要把明文写进本文件，它会提交到公开仓库！）
+#
+# 1) KV 命名空间（存用户、会话、验证码）
+#      npx wrangler kv namespace create USERS
+#    ⚠️ 必须填入真实 id 才会生效。填好之前请保持注释状态，
+#       这样即使尚未配置，站点也能照常部署（静态页面完全不受影响，
+#       仅 /api/* 返回「服务端未配置」提示），不会让构建失败。
+#
+#      [[kv_namespaces]]
+#      binding = "USERS"
+#      id = "填入真实的 KV namespace id"
+#
+# 2) 密钥（用 wrangler secret put <名字> 逐条设置）
+#      SESSION_SECRET     必填，任意长随机串（签名会话与验证码）
+#      DOWNLOAD_LINKS     必填，JSON 数组，7 个网盘链接放这里
+#      ADMIN_PASSWORD     管理员密码（不设则用 admin@123）
+#      RESEND_API_KEY     邮件服务密钥（真发验证码）
+#      MAIL_FROM          发件人，如 "zrfeng.top <noreply@zrfeng.top>"
+#      TURNSTILE_SECRET   （可选）Cloudflare 人机验证密钥
+#      TURNSTILE_SITE_KEY （可选）配套的前端 site key
+# ---------------------------------------------------------------------------
