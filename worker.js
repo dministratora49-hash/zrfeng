@@ -535,6 +535,64 @@ export default {
 
     // 所有 API 都不缓存
     if (path.startsWith('/api/')) {
+      // 诊断接口：不需要任何密钥即可访问，用于确认绑定与配置是否就绪。
+      // 只报告「有没有」，绝不回显任何密钥内容。
+      if (path === '/api/health' && method === 'GET') {
+        const report = {
+          ok: true,
+          kv: { bound: !!env.USERS, working: false, error: null },
+          secrets: {
+            SESSION_SECRET: !!env.SESSION_SECRET,
+            DOWNLOAD_LINKS: !!env.DOWNLOAD_LINKS,
+            ADMIN_PASSWORD: !!env.ADMIN_PASSWORD,
+            RESEND_API_KEY: !!env.RESEND_API_KEY,
+            MAIL_FROM: !!env.MAIL_FROM,
+            TURNSTILE_SECRET: !!env.TURNSTILE_SECRET,
+          },
+          downloadLinks: { configured: false, count: 0, valid: false },
+        };
+
+        // 真正读写一次 KV，确认绑定可用（而不只是存在）
+        if (env.USERS) {
+          try {
+            const probe = 'health:' + Date.now();
+            await env.USERS.put(probe, 'ok', { expirationTtl: 60 });
+            const back = await env.USERS.get(probe);
+            await env.USERS.delete(probe);
+            report.kv.working = back === 'ok';
+            if (!report.kv.working) report.kv.error = '写入成功但读取不一致';
+          } catch (e) {
+            report.kv.error = String(e && e.message ? e.message : e).slice(0, 200);
+          }
+        } else {
+          report.kv.error = '未绑定 USERS，请检查 wrangler.toml 的 kv_namespaces';
+        }
+
+        // 检查 DOWNLOAD_LINKS 是否是合法 JSON 数组
+        if (env.DOWNLOAD_LINKS) {
+          try {
+            const parsed = JSON.parse(env.DOWNLOAD_LINKS);
+            report.downloadLinks.valid = Array.isArray(parsed);
+            report.downloadLinks.count = Array.isArray(parsed) ? parsed.length : 0;
+            report.downloadLinks.configured = true;
+          } catch {
+            report.downloadLinks.configured = true;
+            report.downloadLinks.valid = false;
+          }
+        }
+
+        // 整体是否可对外服务
+        report.ready = report.kv.working && !!env.SESSION_SECRET && report.downloadLinks.valid;
+
+        const missing = [];
+        if (!report.kv.working) missing.push('KV 绑定(USERS)');
+        if (!env.SESSION_SECRET) missing.push('SESSION_SECRET');
+        if (!report.downloadLinks.valid) missing.push('DOWNLOAD_LINKS');
+        report.missing = missing;
+
+        return json(report);
+      }
+
       // SESSION_SECRET 必须存在，否则签名不安全
       if (!env.SESSION_SECRET) {
         return json(
