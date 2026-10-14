@@ -41,7 +41,14 @@ const CAPTCHA_TTL = 5 * 60;
 const PBKDF2_ITERATIONS = 15000;
 
 /** 保留用户名，不允许注册 */
-const RESERVED = new Set(['admin', 'administrator', 'root', 'system', 'zrfeng']);
+const RESERVED = new Set(['admin', 'administrator', 'root', 'system', 'zrfeng', '42']);
+
+/** 试用账户天数（未激活账户的倒计时） */
+const TRIAL_DAYS = 7;
+
+/** 试用账户的用户名与密码 */
+const TRIAL_ACCOUNT = '42';
+const TRIAL_PASSWORD = '424242';
 
 /* ========================== 工具函数 ========================== */
 
@@ -238,6 +245,70 @@ async function findByLogin(env, account) {
   const username = await env.USERS.get('email:' + a);
   if (username) u = await env.USERS.get('user:' + username, 'json');
   return u || null;
+}
+
+/**
+ * 计算账户状态。前端状态栏完全依赖这个结果。
+ *
+ *   guest   —— 未登录           红点「登录以享受服务」
+ *   admin   —— 管理员           黄点「未激活，试用期仅剩-1天」（永不到期）
+ *   trial   —— 试用期未结束     黄点「未激活，试用期仅剩N天」
+ *   blocked —— 试用期已到       黄点 + You are blocked 弹窗
+ *   active  —— 已完成邮箱验证   绿点「账户正常」+ 右上角控制台
+ */
+function accountStatus(user) {
+  if (!user) {
+    return { state: 'guest', dot: 'red', label: '登录以享受服务', activated: false, days: null };
+  }
+
+  // 管理员：显示为 -1 天，含义是永不到期
+  if (user.isAdmin) {
+    return { state: 'admin', dot: 'yellow', label: '未激活，试用期仅剩-1天', activated: false, days: -1 };
+  }
+
+  // 已激活 = 完成了电子邮件验证
+  if (user.verified) {
+    return { state: 'active', dot: 'green', label: '账户正常', activated: true, days: null };
+  }
+
+  // 试用账户：从开通那天起一天天往下减
+  const start = Number(user.trialStart || user.createdAt || Date.now());
+  const total = Number(user.trialDays) > 0 ? Number(user.trialDays) : TRIAL_DAYS;
+  const elapsed = Math.floor((Date.now() - start) / 86400000);
+  const days = Math.max(0, total - elapsed);
+  if (days > 0) {
+    return { state: 'trial', dot: 'yellow', label: `未激活，试用期仅剩${days}天`, activated: false, days };
+  }
+  return { state: 'blocked', dot: 'yellow', label: '未激活，试用期已到', activated: false, days: 0 };
+}
+
+/** 读取会话对应的完整用户记录，用于计算实时状态 */
+async function sessionUser(env, session) {
+  if (!session) return null;
+  return await getUser(env, session.username);
+}
+
+/** 确保试用账户 42 存在（用户名 42 / 密码 424242） */
+async function ensureTrial(env) {
+  const existing = await env.USERS.get('user:' + TRIAL_ACCOUNT, 'json');
+  if (existing) return existing;
+
+  const salt = randomHex(16);
+  const hash = await hashPassword(TRIAL_PASSWORD, salt);
+  const now = Date.now();
+  const user = {
+    username: TRIAL_ACCOUNT,
+    email: '',
+    salt,
+    hash,
+    isAdmin: false,
+    verified: false,
+    isTrial: true,
+    trialStart: now,
+    createdAt: now,
+  };
+  await env.USERS.put('user:' + TRIAL_ACCOUNT, JSON.stringify(user));
+  return user;
 }
 
 /** 确保管理员账户存在（首次访问时创建） */
@@ -470,6 +541,8 @@ async function handleLogin(env, request, ip) {
 
   // admin 首次登录时自动建号
   if (account === 'admin' || account === 'admin@zrfeng.top') await ensureAdmin(env);
+  // 试用账户 42 首次登录时自动建号
+  if (account === TRIAL_ACCOUNT) await ensureTrial(env);
 
   const user = await findByLogin(env, account);
   if (!user) return json({ ok: false, message: '账号或密码错误' }, 401);
@@ -479,12 +552,14 @@ async function handleLogin(env, request, ip) {
     return json({ ok: false, message: '账号或密码错误' }, 401);
   }
 
+  const status = accountStatus(user);
   const { cookie } = await createSession(env, user);
   return json(
     {
       ok: true,
       message: '登录成功',
       user: { username: user.username, email: user.email, isAdmin: !!user.isAdmin },
+      account: status,
     },
     200,
     { 'Set-Cookie': cookie }
@@ -511,6 +586,16 @@ async function handleDownloads(env, request) {
     return json({ ok: false, message: '请先登录后再下载', needLogin: true }, 401);
   }
 
+  // 试用期已到的账户不能下载，必须联系管理员激活
+  const user = await sessionUser(env, session);
+  const status = accountStatus(user);
+  if (status.state === 'blocked') {
+    return json(
+      { ok: false, message: '账户试用期已到，请联系管理员以激活账户', blocked: true, needLogin: false, account: status },
+      403
+    );
+  }
+
   let links = [];
   if (env.DOWNLOAD_LINKS) {
     try {
@@ -521,7 +606,122 @@ async function handleDownloads(env, request) {
   }
   if (!Array.isArray(links)) links = [];
 
-  return json({ ok: true, links, user: { username: session.username, isAdmin: !!session.isAdmin } });
+  return json({
+    ok: true,
+    links,
+    user: { username: session.username, isAdmin: !!session.isAdmin },
+    account: status,
+  });
+}
+
+/* ========================== 管理员控制台 ========================== */
+
+/** 要求当前会话是管理员，否则返回 null */
+async function requireAdmin(env, request) {
+  const session = await getSession(env, request);
+  if (!session) return { error: json({ ok: false, message: '请先登录', needLogin: true }, 401) };
+  const user = await sessionUser(env, session);
+  if (!user || !user.isAdmin) {
+    return { error: json({ ok: false, message: '无权访问，仅管理员可用' }, 403) };
+  }
+  return { session, user };
+}
+
+/** 列出全部账户（给控制台用）。不返回任何密码字段 */
+async function handleAdminUsers(env, request) {
+  const guard = await requireAdmin(env, request);
+  if (guard.error) return guard.error;
+
+  const list = await env.USERS.list({ prefix: 'user:', limit: 1000 });
+  const users = [];
+  for (const k of list.keys) {
+    const u = await env.USERS.get(k.name, 'json');
+    if (!u) continue;
+    const st = accountStatus(u);
+    users.push({
+      username: u.username,
+      email: u.email || '',
+      isAdmin: !!u.isAdmin,
+      verified: !!u.verified,
+      isTrial: !!u.isTrial,
+      createdAt: u.createdAt || null,
+      state: st.state,
+      label: st.label,
+      days: st.days,
+    });
+  }
+  // 管理员在前，其余按创建时间倒序
+  users.sort((a, b) => (b.isAdmin ? 1 : 0) - (a.isAdmin ? 1 : 0) || (b.createdAt || 0) - (a.createdAt || 0));
+
+  const stats = {
+    total: users.length,
+    active: users.filter((u) => u.state === 'active').length,
+    trial: users.filter((u) => u.state === 'trial').length,
+    blocked: users.filter((u) => u.state === 'blocked').length,
+  };
+
+  return json({ ok: true, users, stats });
+}
+
+/**
+ * 激活 / 取消激活账户。
+ * 激活 = 把 verified 置为 true，也就是「完成了电子邮件验证」。
+ */
+async function handleAdminActivate(env, request) {
+  const guard = await requireAdmin(env, request);
+  if (guard.error) return guard.error;
+
+  const body = await readJson(request);
+  const username = String(body.username || '').trim().toLowerCase();
+  const activate = body.activate !== false;
+
+  if (!username) return json({ ok: false, message: '缺少用户名' }, 400);
+  if (username === 'admin') {
+    return json({ ok: false, message: '管理员账户无需激活' }, 400);
+  }
+
+  const user = await getUser(env, username);
+  if (!user) return json({ ok: false, message: '账户不存在' }, 404);
+
+  user.verified = activate;
+  if (activate && !user.activatedAt) user.activatedAt = Date.now();
+  if (activate) user.activatedBy = guard.session.username;
+  await putUser(env, user);
+
+  return json({
+    ok: true,
+    message: activate ? '已激活账户 ' + username : '已取消激活 ' + username,
+    username,
+    account: accountStatus(user),
+  });
+}
+
+/**
+ * 续期试用：把试用起点重置为现在，等于重新给 7 天。
+ */
+async function handleAdminExtend(env, request) {
+  const guard = await requireAdmin(env, request);
+  if (guard.error) return guard.error;
+
+  const body = await readJson(request);
+  const username = String(body.username || '').trim().toLowerCase();
+  if (!username) return json({ ok: false, message: '缺少用户名' }, 400);
+  if (username === 'admin') return json({ ok: false, message: '管理员账户永不到期' }, 400);
+
+  const user = await getUser(env, username);
+  if (!user) return json({ ok: false, message: '账户不存在' }, 404);
+
+  const days = Math.min(365, Math.max(1, Number(body.days) || TRIAL_DAYS));
+  user.trialStart = Date.now();
+  user.trialDays = days;
+  await putUser(env, user);
+
+  return json({
+    ok: true,
+    message: `已为 ${username} 重置 ${days} 天试用期`,
+    username,
+    account: accountStatus(user),
+  });
 }
 
 /* ========================== 主入口 ========================== */
@@ -640,14 +840,47 @@ export default {
         }
         if (path === '/api/me' && method === 'GET') {
           const s = await getSession(env, request);
-          return json(
-            s
-              ? { ok: true, loggedIn: true, user: { username: s.username, email: s.email, isAdmin: !!s.isAdmin } }
-              : { ok: true, loggedIn: false }
-          );
+          if (!s) {
+            return json({ ok: true, loggedIn: false, account: accountStatus(null) });
+          }
+          const u = await sessionUser(env, s);
+          return json({
+            ok: true,
+            loggedIn: true,
+            user: {
+              username: s.username,
+              email: s.email,
+              isAdmin: !!s.isAdmin,
+              verified: !!(u && u.verified),
+            },
+            account: accountStatus(u),
+          });
+        }
+        // 状态栏轻量接口：只返回状态，不含任何用户隐私
+        if (path === '/api/status' && method === 'GET') {
+          const s = await getSession(env, request);
+          const u = s ? await sessionUser(env, s) : null;
+          return json({
+            ok: true,
+            loggedIn: !!s,
+            username: s ? s.username : null,
+            isAdmin: !!(u && u.isAdmin),
+            account: accountStatus(u),
+          });
         }
         if (path === '/api/downloads' && method === 'GET') {
           return await handleDownloads(env, request);
+        }
+
+        // 管理员控制台
+        if (path === '/api/admin/users' && method === 'GET') {
+          return await handleAdminUsers(env, request);
+        }
+        if (path === '/api/admin/activate' && method === 'POST') {
+          return await handleAdminActivate(env, request);
+        }
+        if (path === '/api/admin/extend' && method === 'POST') {
+          return await handleAdminExtend(env, request);
         }
 
         return json({ ok: false, message: '接口不存在' }, 404);

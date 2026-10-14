@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>控制台 · zrfeng</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    min-height: 100vh;
+    padding: 56px 16px 40px;
+    background: #050807;
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    color: #e8f5ee;
+    font-size: 14px;
+  }
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,255,140,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,255,140,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+  }
+  .wrap { position: relative; max-width: 760px; margin: 0 auto; }
+  h1 {
+    font-size: 24px;
+    color: #00ff8c;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+  }
+  .sub { font-size: 12px; color: #7fa893; margin-bottom: 22px; }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-bottom: 22px;
+  }
+  .stat {
+    padding: 14px 10px;
+    text-align: center;
+    border: 1px solid rgba(0,255,140,0.22);
+    border-radius: 12px;
+    background: rgba(10,18,14,0.7);
+  }
+  .stat b { display: block; font-size: 22px; color: #00ff8c; font-family: Orbitron, monospace; }
+  .stat span { font-size: 11px; color: #7fa893; }
+
+  .card {
+    border: 1px solid rgba(0,255,140,0.35);
+    border-radius: 16px;
+    background: rgba(10,18,14,0.9);
+    padding: 20px 18px;
+    margin-bottom: 18px;
+  }
+  .card h2 { font-size: 15px; color: #00ff8c; margin-bottom: 14px; font-weight: 600; }
+
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 11px 0;
+    border-bottom: 1px solid rgba(0,255,140,0.1);
+    flex-wrap: wrap;
+  }
+  .row:last-child { border-bottom: none; }
+  .info { flex: 1; min-width: 140px; }
+  .name { font-size: 14px; color: #e8f5ee; word-break: break-all; }
+  .meta { font-size: 11px; color: #7fa893; margin-top: 3px; word-break: break-all; }
+
+  .tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-size: 11px;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+  .tag.active  { background: rgba(0,255,140,0.15); color: #00ff8c; border: 1px solid rgba(0,255,140,0.4); }
+  .tag.trial   { background: rgba(255,204,0,0.15); color: #ffcc00; border: 1px solid rgba(255,204,0,0.4); }
+  .tag.blocked { background: rgba(255,77,77,0.15); color: #ff5c5c; border: 1px solid rgba(255,77,77,0.45); }
+  .tag.admin   { background: rgba(0,200,255,0.15); color: #4dd2ff; border: 1px solid rgba(0,200,255,0.4); }
+
+  button {
+    padding: 7px 13px;
+    border-radius: 8px;
+    border: 1px solid rgba(0,255,140,0.45);
+    background: rgba(0,255,140,0.08);
+    color: #00ff8c;
+    font-size: 12px;
+    cursor: pointer;
+    font-family: inherit;
+    white-space: nowrap;
+  }
+  button:active { opacity: .65; }
+  button:disabled { opacity: .35; cursor: default; }
+  button.warn { border-color: rgba(255,77,77,0.5); background: rgba(255,77,77,0.1); color: #ff8a8a; }
+
+  .msg { font-size: 12px; margin-top: 12px; min-height: 16px; }
+  .msg.ok { color: #00ff8c; }
+  .msg.err { color: #ff5c5c; }
+  .center { text-align: center; color: #7fa893; padding: 30px 0; }
+  .center a { color: #00ff8c; }
+
+  @media (max-width: 520px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    h1 { font-size: 20px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>控制台</h1>
+  <div class="sub" id="who">加载中…</div>
+
+  <div id="app"></div>
+</div>
+
+<script>
+(function () {
+  var app = document.getElementById('app');
+  var who = document.getElementById('who');
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function fmtDate(ts) {
+    if (!ts) return '—';
+    var d = new Date(ts);
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
+  function tagOf(u) {
+    if (u.isAdmin) return '<span class="tag admin">管理员</span>';
+    if (u.state === 'active') return '<span class="tag active">已激活</span>';
+    if (u.state === 'blocked') return '<span class="tag blocked">试用期已到</span>';
+    return '<span class="tag trial">未激活 ' + (u.days != null ? u.days + ' 天' : '') + '</span>';
+  }
+
+  var isAdmin = false;
+
+  function renderUsers(data) {
+    var s = data.stats || {};
+    var html =
+      '<div class="stats">' +
+      '<div class="stat"><b>' + (s.total || 0) + '</b><span>账户总数</span></div>' +
+      '<div class="stat"><b>' + (s.active || 0) + '</b><span>已激活</span></div>' +
+      '<div class="stat"><b>' + (s.trial || 0) + '</b><span>试用中</span></div>' +
+      '<div class="stat"><b style="color:#ff5c5c">' + (s.blocked || 0) + '</b><span>已到期</span></div>' +
+      '</div>' +
+      '<div class="card"><h2>账户管理</h2>';
+
+    if (!isAdmin) {
+      html += '<div class="center">只有管理员可以管理账户。<br>如需激活账户，请<a href="/contact/">联系我们</a>。</div>';
+    } else if (!data.users.length) {
+      html += '<div class="center">暂无账户</div>';
+    } else {
+      data.users.forEach(function (u) {
+        var meta = (u.email || '（无邮箱）') + ' · 注册于 ' + fmtDate(u.createdAt);
+        html +=
+          '<div class="row">' +
+          '<div class="info">' +
+          '<div class="name">' + esc(u.username) + tagOf(u) + '</div>' +
+          '<div class="meta">' + esc(meta) + '</div>' +
+          '</div>';
+        if (u.isAdmin) {
+          html += '<button disabled>永不到期</button>';
+        } else {
+          if (u.state === 'active') {
+            html += '<button class="warn" data-act="deactivate" data-u="' + esc(u.username) + '">取消激活</button>';
+          } else {
+            html += '<button data-act="activate" data-u="' + esc(u.username) + '">激活</button>';
+          }
+          html += '<button data-act="extend" data-u="' + esc(u.username) + '">续 7 天</button>';
+        }
+        html += '</div>';
+      });
+    }
+    html += '</div><div class="msg" id="msg"></div>';
+    app.innerHTML = html;
+
+    app.querySelectorAll('button[data-act]').forEach(function (b) {
+      b.onclick = function () { act(b); };
+    });
+  }
+
+  function note(text, ok) {
+    var m = document.getElementById('msg');
+    if (!m) return;
+    m.textContent = text;
+    m.className = 'msg ' + (ok ? 'ok' : 'err');
+  }
+
+  function act(btn) {
+    var action = btn.dataset.act;
+    var username = btn.dataset.u;
+    var map = { activate: 'activate', deactivate: 'activate', extend: 'extend' };
+    var url = '/api/admin/' + map[action];
+    var body = action === 'extend' ? { username: username, days: 7 } : { username: username, activate: action === 'activate' };
+
+    btn.disabled = true;
+    fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        note(j.message || (j.ok ? '完成' : '失败'), !!j.ok);
+        if (j.ok) load();
+        else btn.disabled = false;
+      })
+      .catch(function () { note('网络错误', false); btn.disabled = false; });
+  }
+
+  function load() {
+    fetch('/api/admin/users', { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j.ok) {
+          if (j.needLogin) {
+            who.textContent = '未登录';
+            app.innerHTML = '<div class="card"><div class="center">请先<a href="/login/">登录</a>后再访问控制台。</div></div>';
+            return;
+          }
+          who.textContent = '无权限';
+          app.innerHTML = '<div class="card"><div class="center">' + esc(j.message || '无权访问') + '<br>如需激活账户，请<a href="/contact/">联系我们</a>。</div></div>';
+          return;
+        }
+        isAdmin = true;
+        who.textContent = '管理员视图 · 可激活或续期账户';
+        renderUsers(j);
+      })
+      .catch(function () {
+        who.textContent = '加载失败';
+        app.innerHTML = '<div class="card"><div class="center">网络错误，请稍后重试。</div></div>';
+      });
+  }
+
+  load();
+})();
+</script>
+  <script src="/status.js" defer></script>
+</body>
+</html>

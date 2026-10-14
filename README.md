@@ -20,6 +20,25 @@
 | 📖 小说 | [www.zrfeng.top/file/novel/](https://www.zrfeng.top/file/novel/) | 在线阅读 |
 | 💗 言情小说 | [www.zrfeng.top/file/novel/romancenovel/](https://www.zrfeng.top/file/novel/romancenovel/) | 《听潮》·登录后可下载 |
 | 🔐 登录 / 注册 | [www.zrfeng.top/login/](https://www.zrfeng.top/login/) | 邮箱验证码注册 |
+| 🖥️ 控制台 | [www.zrfeng.top/console/](https://www.zrfeng.top/console/) | 账户状态与激活管理 |
+
+## 📊 账户状态栏
+
+每个页面顶部都有一条状态栏，颜色和文案由服务端 `/api/status` 计算后下发
+（前端不自行判断，改本地时间绕不过试用期）：
+
+| 圆点 | 身份 | 状态栏文案 | 右上角 |
+|------|------|-----------|--------|
+| 🔴 红 | 未登录 | 登录以享受服务（点击去登录） | — |
+| 🟡 黄 | 试用账户 `42` | 未激活，试用期仅剩 N 天（逐日递减） | 控制台 / 登出 |
+| 🟡 黄 | 试用到期 | 未激活，试用期已到 + **You are blocked** 弹窗 | 登出 |
+| 🟡 黄 | 管理员 `admin` | 未激活，试用期仅剩 **-1** 天（永不到期） | 控制台 / 登出 |
+| 🟢 绿 | 已完成邮箱验证 | 账户正常 | **控制台** |
+
+- **试用账户**：用户名 `42`，密码 `424242`，自动创建，试用期 7 天；
+- **激活**＝完成电子邮件验证，激活后圆点变绿、下载不再受限；
+- 试用到期后**无法下载**（服务端返回 403），须由管理员在控制台激活或续期；
+- 管理员可在 `/console/` 查看全部账户、激活 / 取消激活、续 7 天。
 
 ## 🔐 登录与下载
 
@@ -67,10 +86,12 @@ python -m http.server 8000
 │   └── wechatpay/    # 微信支付（维护中）
 ├── contact/          # 联系我们
 ├── login/            # 登录 / 注册
+├── console/          # 控制台（账户激活管理）
 ├── file/             # 资源库
 │   └── novel/        # 小说
 │       └── romancenovel/  # 言情小说《听潮》
-├── worker.js         # 后端：注册/登录/验证码/下载门控
+├── status.js         # 全站账户状态栏
+├── worker.js         # 后端：注册/登录/验证码/下载门控/账户状态
 └── wrangler.toml     # Cloudflare 部署配置
 ```
 
