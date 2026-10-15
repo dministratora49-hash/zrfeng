@@ -252,34 +252,56 @@ async function findByLogin(env, account) {
  *
  *   guest   —— 未登录           红点「登录以享受服务」
  *   admin   —— 管理员           黄点「未激活，试用期仅剩-1天」（永不到期）
- *   trial   —— 试用期未结束     黄点「未激活，试用期仅剩N天」
+ *   trial   —— 试用期未结束     黄点「未激活，试用期仅剩…」（前端按 remainingMs 秒级倒数）
  *   blocked —— 试用期已到       黄点 + You are blocked 弹窗
  *   active  —— 已完成邮箱验证   绿点「账户正常」+ 右上角控制台
+ *
+ * 试用账户会额外返回 remainingMs / expiresAt：
+ * 前端拿 remainingMs 换算成本地截止时刻再逐秒递减，
+ * 这样即使客户端时钟不准，倒计时也不会算错；而真正的拦截始终由服务端判定。
  */
 function accountStatus(user) {
   if (!user) {
-    return { state: 'guest', dot: 'red', label: '登录以享受服务', activated: false, days: null };
+    return { state: 'guest', dot: 'red', label: '登录以享受服务', activated: false, days: null, remainingMs: null };
   }
 
   // 管理员：显示为 -1 天，含义是永不到期
   if (user.isAdmin) {
-    return { state: 'admin', dot: 'yellow', label: '未激活，试用期仅剩-1天', activated: false, days: -1 };
+    return { state: 'admin', dot: 'yellow', label: '未激活，试用期仅剩-1天', activated: false, days: -1, remainingMs: null };
   }
 
   // 已激活 = 完成了电子邮件验证
   if (user.verified) {
-    return { state: 'active', dot: 'green', label: '账户正常', activated: true, days: null };
+    return { state: 'active', dot: 'green', label: '账户正常', activated: true, days: null, remainingMs: null };
   }
 
-  // 试用账户：从开通那天起一天天往下减
+  // 试用账户：剩余时间精确到毫秒
   const start = Number(user.trialStart || user.createdAt || Date.now());
   const total = Number(user.trialDays) > 0 ? Number(user.trialDays) : TRIAL_DAYS;
-  const elapsed = Math.floor((Date.now() - start) / 86400000);
-  const days = Math.max(0, total - elapsed);
-  if (days > 0) {
-    return { state: 'trial', dot: 'yellow', label: `未激活，试用期仅剩${days}天`, activated: false, days };
+  const expiresAt = start + total * 86400000;
+  const remainingMs = Math.max(0, expiresAt - Date.now());
+  // days 取上整：剩余 6 天多仍显示 7 天，与倒计时并存，供控制台等处使用
+  const days = Math.ceil(remainingMs / 86400000);
+  if (remainingMs > 0) {
+    return {
+      state: 'trial',
+      dot: 'yellow',
+      label: `未激活，试用期仅剩${days}天`,
+      activated: false,
+      days,
+      remainingMs,
+      expiresAt,
+    };
   }
-  return { state: 'blocked', dot: 'yellow', label: '未激活，试用期已到', activated: false, days: 0 };
+  return {
+    state: 'blocked',
+    dot: 'yellow',
+    label: '未激活，试用期已到',
+    activated: false,
+    days: 0,
+    remainingMs: 0,
+    expiresAt,
+  };
 }
 
 /** 读取会话对应的完整用户记录，用于计算实时状态 */
