@@ -453,7 +453,7 @@
 
     if (r.data.ok) {
       show(msg, '登录成功，正在跳转…', 'ok');
-      setTimeout(function () { location.href = SITE + '/file/novel/romancenovel/'; }, 700);
+      setTimeout(function () { location.href = SITE + '/'; }, 700);
     } else {
       show(msg, r.data.message || '登录失败', 'err');
       btn.disabled = false;
@@ -487,7 +487,7 @@
 
     if (r.data.ok) {
       show(msg, '注册成功，正在跳转…', 'ok');
-      setTimeout(function () { location.href = SITE + '/file/novel/romancenovel/'; }, 700);
+      setTimeout(function () { location.href = SITE + '/'; }, 700);
     } else {
       show(msg, r.data.message || '注册失败', 'err');
       btn.disabled = false;
@@ -549,7 +549,7 @@
     try {
       var me = await api('/api/me');
       if (me.data && me.data.loggedIn) {
-        location.href = SITE + '/file/novel/romancenovel/';
+        location.href = SITE + '/';
       }
     } catch (e) { /* 忽略 */ }
   })();

@@ -131,8 +131,9 @@
       c.textContent = '控制台';
       right.appendChild(c);
     }
-    // 已登录但未激活：给个登出，方便切换账号
-    if (data && data.loggedIn && !acc.activated) {
+    // 登出：所有已登录用户都要有。
+    // 登录页在已登录时会把用户弹走，所以这里必须给出口，否则已激活用户无法切换账号。
+    if (data && data.loggedIn) {
       var out = document.createElement('a');
       out.className = 'sb-btn';
       out.href = '#';
