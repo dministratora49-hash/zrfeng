@@ -57,6 +57,8 @@
   .tag.blocked { background: rgba(255,77,77,0.15); color: #ff5c5c; border: 1px solid rgba(255,77,77,0.45); }
   .tag.admin   { background: rgba(0,200,255,0.15); color: #4dd2ff; border: 1px solid rgba(0,200,255,0.4); }
   .tag.banned  { background: rgba(255,68,68,0.18); color: #ff4444; border: 1px solid rgba(255,68,68,0.55); }
+  .tag.super   { background: rgba(255,215,0,0.18); color: #ffd700; border: 1px solid rgba(255,215,0,0.5); }
+  .tag.sub     { background: rgba(170,120,255,0.18); color: #b98cff; border: 1px solid rgba(170,120,255,0.5); }
 
   button {
     padding: 7px 13px; border-radius: 8px;
@@ -203,7 +205,8 @@
   function fromLocalInput(v) { return v ? new Date(v).getTime() : NaN; }
 
   function tagOf(u) {
-    if (u.isAdmin) return '<span class="tag admin">管理员</span>';
+    if (u.role === 'super') return '<span class="tag super">主管理员</span>';
+    if (u.role === 'sub') return '<span class="tag sub">副管理员</span>';
     if (u.banned) return '<span class="tag banned">已封禁</span>';
     if (u.state === 'active') return '<span class="tag active">已激活</span>';
     if (u.state === 'blocked') return '<span class="tag blocked">试用期已到</span>';
@@ -370,8 +373,44 @@
   }
 
   /* ===================== 管理员：账户管理 ===================== */
+  /** 我是不是主管理员（只有主管理员能改别人的管理员权限） */
+  function amSuper() { return !!(ME && ME.user && ME.user.isSuper); }
+
+  /**
+   * 某一行账户的操作按钮。权限规则与服务端一致：
+   *   主管理员账户 —— 任何人都不能操作
+   *   副管理员账户 —— 只有主管理员能操作（副管理员之间互相不能动）
+   *   普通用户     —— 主/副管理员都能操作
+   *   设/解除副管理员 —— 仅主管理员
+   */
+  function rowButtons(u, iAmSuper) {
+    if (u.role === 'super') return '<button class="mute" disabled>不可操作</button>';
+
+    var canManage = iAmSuper || u.role === 'user';
+    if (!canManage) return '<button class="mute" disabled>副管理员</button>';
+
+    var un = esc(u.username);
+    var out = '';
+    if (u.role === 'user') {
+      if (u.isTrial) out += '<button class="mute" disabled>试用账户</button>';
+      else if (u.state === 'active') out += '<button class="warn" data-act="deactivate" data-u="' + un + '">取消激活</button>';
+      else out += '<button data-act="activate" data-u="' + un + '">激活</button>';
+      out += '<button data-act="extend" data-u="' + un + '">续 7 天</button>';
+    }
+    out += u.banned
+      ? '<button data-act="unban" data-u="' + un + '">解封</button>'
+      : '<button class="warn" data-act="ban" data-u="' + un + '">封禁</button>';
+    if (iAmSuper) {
+      out += u.role === 'sub'
+        ? '<button class="mute" data-act="demote" data-u="' + un + '">解除管理员</button>'
+        : '<button data-act="promote" data-u="' + un + '">设为副管理员</button>';
+    }
+    return out;
+  }
+
   function renderUsers(data) {
     var s = data.stats || {};
+    var iAmSuper = amSuper();
     var html =
       '<div class="stats">' +
       '<div class="stat"><b>' + (s.total || 0) + '</b><span>账户总数</span></div>' +
@@ -389,22 +428,8 @@
         var meta = (u.email || '（无邮箱）') + ' · 注册于 ' + fmtDate(u.createdAt);
         html += '<div class="row"><div class="info">' +
           '<div class="name">' + esc(u.username) + tagOf(u) + '</div>' +
-          '<div class="meta">' + esc(meta) + '</div></div>';
-        if (u.isAdmin) {
-          html += '<button disabled>永不到期</button>';
-        } else {
-          if (u.isTrial) {
-            html += '<button class="mute" disabled>试用账户</button>';
-          } else if (u.state === 'active') {
-            html += '<button class="warn" data-act="deactivate" data-u="' + esc(u.username) + '">取消激活</button>';
-          } else {
-            html += '<button data-act="activate" data-u="' + esc(u.username) + '">激活</button>';
-          }
-          html += '<button data-act="extend" data-u="' + esc(u.username) + '">续 7 天</button>';
-          html += u.banned
-            ? '<button data-act="unban" data-u="' + esc(u.username) + '">解封</button>'
-            : '<button class="warn" data-act="ban" data-u="' + esc(u.username) + '">封禁</button>';
-        }
+          '<div class="meta">' + esc(meta) + '</div></div>' +
+          rowButtons(u, iAmSuper);
         html += '</div>';
       });
     }
@@ -431,6 +456,9 @@
     } else if (action === 'activate' || action === 'deactivate') {
       url = '/api/admin/activate';
       body = { username: username, activate: action === 'activate' };
+    } else if (action === 'promote' || action === 'demote') {
+      url = '/api/admin/role';
+      body = { username: username, admin: action === 'promote' };
     } else {
       // ban / unban
       url = '/api/admin/ban';
@@ -541,9 +569,11 @@
       }
       ME = j;
       var u = j.user || {};
-      who.textContent = u.isAdmin
-        ? '管理员视图 · 可激活 / 续期账户'
-        : '账户视图 · 可查看状态与注销账户';
+      who.textContent = u.isSuper
+        ? '主管理员视图 · 可管理账户、设置管理员、维护时间'
+        : (u.isAdmin
+            ? '副管理员视图 · 可管理普通用户、设置维护时间（不能操作管理员账户）'
+            : '账户视图 · 可查看状态与注销账户');
       renderMe(j);
       if (u.isAdmin) loadAdmin();
     })

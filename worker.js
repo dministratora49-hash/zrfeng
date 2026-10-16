@@ -251,10 +251,52 @@ async function findByLogin(env, account) {
 }
 
 /**
+ * 权限层级。
+ *   super —— 主管理员（admin 本人），权限最高
+ *   sub   —— 副管理员，由主管理员设置
+ *   user  —— 普通用户
+ *
+ * 兼容早期数据：只有 admin 会带 isAdmin:true 而没有 role，一律按主管理员处理。
+ */
+function roleOf(user) {
+  if (!user) return 'guest';
+  if (user.role === 'super') return 'super';
+  if (user.role === 'sub') return 'sub';
+  if (user.isAdmin) return 'super';
+  return 'user';
+}
+
+const isAdminRole = (r) => r === 'super' || r === 'sub';
+
+/**
+ * 能不能对该账户做管理操作（激活 / 取消激活 / 续期 / 封禁 / 解封）。
+ *   - 主管理员账户永远不可被操作（连主管理员自己也不行）；
+ *   - 副管理员只能操作普通用户，不能碰任何管理员账户；
+ *   - 主管理员可以操作普通用户和副管理员。
+ */
+function canManageAccount(actor, target) {
+  const ar = roleOf(actor);
+  if (!isAdminRole(ar)) {
+    return { ok: false, res: json({ ok: false, message: '无权访问，仅管理员可用' }, 403) };
+  }
+  if (!target) return { ok: false, res: json({ ok: false, message: '账户不存在' }, 404) };
+
+  const tr = roleOf(target);
+  if (tr === 'super') {
+    return { ok: false, res: json({ ok: false, message: '主管理员账户不可被操作' }, 403) };
+  }
+  if (ar === 'sub' && tr !== 'user') {
+    return { ok: false, res: json({ ok: false, message: '副管理员不能操作管理员账户' }, 403) };
+  }
+  return { ok: true };
+}
+
+/**
  * 计算账户状态。前端状态栏完全依赖这个结果。
  *
  *   guest   —— 未登录           红点「登录以享受服务」
  *   admin   —— 管理员           黄点「未激活，试用期仅剩-1天」（永不到期）
+ *   banned  —— 已被封禁         红点 + You are banned 弹窗
  *   trial   —— 试用期未结束     黄点「未激活，试用期仅剩…」（前端按 remainingMs 秒级倒数）
  *   blocked —— 试用期已到       黄点 + You are blocked 弹窗
  *   active  —— 已完成邮箱验证   绿点「账户正常」+ 右上角控制台
@@ -268,9 +310,17 @@ function accountStatus(user) {
     return { state: 'guest', dot: 'red', label: '登录以享受服务', activated: false, days: null, remainingMs: null };
   }
 
-  // 管理员：显示为 -1 天，含义是永不到期
+  // 管理员（主 / 副）：显示为 -1 天，含义是永不到期
   if (user.isAdmin) {
-    return { state: 'admin', dot: 'yellow', label: '未激活，试用期仅剩-1天', activated: false, days: -1, remainingMs: null };
+    return {
+      state: 'admin',
+      dot: 'yellow',
+      label: '未激活，试用期仅剩-1天',
+      activated: false,
+      days: -1,
+      remainingMs: null,
+      role: roleOf(user),
+    };
   }
 
   // 被封禁：优先级仅次于管理员。仍然允许登录，目的是让他看到「You are banned」；
@@ -366,6 +416,7 @@ async function ensureAdmin(env) {
     salt,
     hash,
     isAdmin: true,
+    role: 'super',
     verified: true,
     createdAt: Date.now(),
   };
@@ -859,10 +910,24 @@ async function requireAdmin(env, request) {
   const session = await getSession(env, request);
   if (!session) return { error: json({ ok: false, message: '请先登录', needLogin: true }, 401) };
   const user = await sessionUser(env, session);
-  if (!user || !user.isAdmin) {
+  if (!user || !isAdminRole(roleOf(user))) {
     return { error: json({ ok: false, message: '无权访问，仅管理员可用' }, 403) };
   }
-  return { session, user };
+  // 被同时标记为封禁的管理员也不能进后台，避免「封禁了却还能管理」
+  if (user.banned) {
+    return { error: json({ ok: false, message: '该账户已被封禁' }, 403) };
+  }
+  return { session, user, role: roleOf(user) };
+}
+
+/** 要求主管理员（副管理员不能做权限变更类操作） */
+async function requireSuperAdmin(env, request) {
+  const guard = await requireAdmin(env, request);
+  if (guard.error) return guard;
+  if (guard.role !== 'super') {
+    return { error: json({ ok: false, message: '只有主管理员可以进行此操作' }, 403) };
+  }
+  return guard;
 }
 
 /** 列出全部账户（给控制台用）。不返回任何密码字段 */
@@ -886,6 +951,7 @@ async function handleAdminUsers(env, request) {
       state: st.state,
       label: st.label,
       days: st.days,
+      role: roleOf(u),
       banned: !!u.banned,
       bannedAt: u.bannedAt || null,
     });
@@ -1035,12 +1101,10 @@ async function handleAdminActivate(env, request) {
   const activate = body.activate !== false;
 
   if (!username) return json({ ok: false, message: '缺少用户名' }, 400);
-  if (username === 'admin') {
-    return json({ ok: false, message: '管理员账户无需激活' }, 400);
-  }
 
   const user = await getUser(env, username);
-  if (!user) return json({ ok: false, message: '账户不存在' }, 404);
+  const perm = canManageAccount(guard.user, user);
+  if (!perm.ok) return perm.res;
 
   user.verified = activate;
   if (activate && !user.activatedAt) user.activatedAt = Date.now();
@@ -1065,10 +1129,10 @@ async function handleAdminExtend(env, request) {
   const body = await readJson(request);
   const username = String(body.username || '').trim().toLowerCase();
   if (!username) return json({ ok: false, message: '缺少用户名' }, 400);
-  if (username === 'admin') return json({ ok: false, message: '管理员账户永不到期' }, 400);
 
   const user = await getUser(env, username);
-  if (!user) return json({ ok: false, message: '账户不存在' }, 404);
+  const perm = canManageAccount(guard.user, user);
+  if (!perm.ok) return perm.res;
 
   const days = Math.min(365, Math.max(1, Number(body.days) || TRIAL_DAYS));
   user.trialStart = Date.now();
@@ -1098,10 +1162,10 @@ async function handleAdminBan(env, request) {
   const banned = body.banned !== false;
 
   if (!username) return json({ ok: false, message: '缺少用户名' }, 400);
-  if (username === 'admin') return json({ ok: false, message: '管理员账户不可封禁' }, 400);
 
   const user = await getUser(env, username);
-  if (!user) return json({ ok: false, message: '账户不存在' }, 404);
+  const perm = canManageAccount(guard.user, user);
+  if (!perm.ok) return perm.res;
 
   user.banned = banned;
   if (banned) {
@@ -1122,6 +1186,58 @@ async function handleAdminBan(env, request) {
     message: banned ? '已封禁账户 ' + username : '已解封账户 ' + username,
     username,
     kicked,
+    account: accountStatus(user),
+  });
+}
+
+/* ========================== 管理员权限（主 / 副） ========================== */
+
+/**
+ * 设置或解除「副管理员」。
+ * 只有主管理员能做；主管理员自己的权限不能改；被封禁的账户不能提升。
+ * 副管理员不能解除别的副管理员 —— 这一点由「必须主管理员」天然保证。
+ */
+async function handleAdminRole(env, request) {
+  const guard = await requireSuperAdmin(env, request);
+  if (guard.error) return guard.error;
+
+  const body = await readJson(request);
+  const username = String(body.username || '').trim().toLowerCase();
+  const makeSub = body.admin !== false;
+
+  if (!username) return json({ ok: false, message: '缺少用户名' }, 400);
+
+  const user = await getUser(env, username);
+  if (!user) return json({ ok: false, message: '账户不存在' }, 404);
+
+  const tr = roleOf(user);
+  if (tr === 'super') {
+    return json({ ok: false, message: '主管理员权限不可更改' }, 400);
+  }
+  if (makeSub && user.banned) {
+    return json({ ok: false, message: '该账户已被封禁，请先解封再设为管理员' }, 400);
+  }
+
+  if (makeSub) {
+    user.role = 'sub';
+    user.isAdmin = true;
+    user.grantedBy = guard.session.username;
+    user.grantedAt = Date.now();
+  } else {
+    delete user.role;
+    delete user.grantedBy;
+    delete user.grantedAt;
+    user.isAdmin = false;
+    // 被降级后回到普通账户：如果从没验证过邮箱，就是一个试用账户
+    if (!user.isTrial && !user.verified && !user.trialStart) user.trialStart = Date.now();
+  }
+  await putUser(env, user);
+
+  return json({
+    ok: true,
+    message: makeSub ? '已设为副管理员：' + username : '已解除管理员权限：' + username,
+    username,
+    role: roleOf(user),
     account: accountStatus(user),
   });
 }
@@ -1252,9 +1368,12 @@ export default {
             user: {
               username: s.username,
               email: s.email,
-              isAdmin: !!s.isAdmin,
+              isAdmin: !!(u && isAdminRole(roleOf(u))),
               verified: !!(u && u.verified),
               isTrial: !!(u && u.isTrial),
+              // 权限层级：super=主管理员，sub=副管理员，user=普通用户
+              role: roleOf(u),
+              isSuper: roleOf(u) === 'super',
               // 能否自助注销：由服务端判定，前端只用来决定是否显示按钮
               canDelete: !!(u && !u.isAdmin && !u.isTrial && u.email),
             },
@@ -1305,6 +1424,9 @@ export default {
         }
         if (path === '/api/admin/ban' && method === 'POST') {
           return await handleAdminBan(env, request);
+        }
+        if (path === '/api/admin/role' && method === 'POST') {
+          return await handleAdminRole(env, request);
         }
 
         return json({ ok: false, message: '接口不存在' }, 404);
