@@ -660,7 +660,13 @@ async function handleLogin(env, request, ip) {
     {
       ok: true,
       message: '登录成功',
-      user: { username: user.username, email: user.email, isAdmin: !!user.isAdmin },
+      user: {
+        username: user.username,
+        email: user.email,
+        isAdmin: isAdminRole(roleOf(user)),
+        role: roleOf(user),
+        isSuper: roleOf(user) === 'super',
+      },
       account: status,
     },
     200,
