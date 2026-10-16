@@ -31,8 +31,6 @@
   var maintTimer = null;
   /** 当前维护时段 {start,end}，用于判断窗口是否变了 */
   var maintCur = null;
-  /** 管理员手动关掉弹窗后，同一个维护时段内不再自动弹出 */
-  var maintDismissed = false;
 
   /* 状态栏基础样式。用 !important 覆盖各页面自己的 body padding，
      因为状态栏是 fixed 定位，不给 body 留出空间会盖住页面内容。 */
@@ -190,11 +188,6 @@
       updateMaintLeft(endAt);
       return;
     }
-    var acts = isAdmin
-      ? '<div class="mt-acts"><a href="/console/">进入控制台</a>' +
-        '<button type="button" id="dsh-mt-close">管理员关闭</button></div>' +
-        '<div class="mt-note">管理员可关闭本弹窗以便继续操作</div>'
-      : '';
     var mask = document.createElement('div');
     mask.id = MAINT_ID;
     mask.innerHTML =
@@ -203,16 +196,25 @@
       '<p>站点正在维护中，请稍后再来。</p>' +
       (endAt ? '<p class="mt-cd">预计剩余 <span id="dsh-mt-left">—</span></p>' : '') +
       (st && st.start && endAt ? '<p class="mt-range">维护时段：' + fmtClock(st.start) + ' → ' + fmtClock(endAt) + '</p>' : '') +
-      acts +
+      '<div class="mt-acts"><button type="button" id="dsh-mt-admin">管理员关闭</button></div>' +
+      '<div class="mt-note" id="dsh-mt-note">管理员可进入控制台关闭维护</div>' +
       '</div>';
     document.body.appendChild(mask);
 
-    var btn = document.getElementById('dsh-mt-close');
+    // 「管理员关闭」：管理员跳转到控制台去处理；没有权限则明确拒绝。
+    // 按钮对所有人可见，所以权限判断必须在这里做，而不是靠隐藏按钮。
+    var btn = document.getElementById('dsh-mt-admin');
     if (btn) {
       btn.onclick = function () {
-        // 管理员专属出口：否则维护期间管理员会被自己的弹窗锁在外面
-        maintDismissed = true;
-        hideMaintenance();
+        if (isAdmin) {
+          location.href = '/console/';
+          return;
+        }
+        var n = document.getElementById('dsh-mt-note');
+        if (n) {
+          n.textContent = '你无权进行此操作';
+          n.style.color = '#ff7b7b';
+        }
       };
     }
 
@@ -245,17 +247,23 @@
   }
 
   /** 根据服务端下发的维护状态，决定弹或不弹 */
+  /** 是否正处在控制台页面（管理员在这里不弹维护窗，否则会挡住自己） */
+  function onConsolePage() {
+    try {
+      return typeof location !== 'undefined' && !!location.pathname && location.pathname.indexOf('/console') === 0;
+    } catch (e) {
+      return false;
+    }
+  }
+
   function applyMaintenance(st, isAdmin) {
     var active = !!(st && st.active);
     var win = st && st.set ? { start: st.start, end: st.end } : null;
-
-    // 维护时段换了（或取消了），重置「管理员已关闭」
-    if (!maintCur || !win || maintCur.start !== win.start || maintCur.end !== win.end) {
-      maintDismissed = false;
-    }
     maintCur = win;
 
-    if (active && !maintDismissed) {
+    var skipForAdmin = isAdmin && onConsolePage();
+
+    if (active && !skipForAdmin) {
       showMaintenance(st, isAdmin);
     } else {
       hideMaintenance();
