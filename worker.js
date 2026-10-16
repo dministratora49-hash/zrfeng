@@ -721,12 +721,16 @@ async function recordDeletion(env, user) {
   await env.USERS.put(NOTICE_KEY, JSON.stringify(list.slice(0, NOTICE_MAX)));
 }
 
-/** 踢掉某个账户的全部会话 */
-async function deleteUserSessions(env, username) {
+/**
+ * 踢掉某个账户的全部会话。
+ * keepToken 用于「改密码」场景：踢掉其它设备，保留当前这台，免得用户改完立刻被登出。
+ */
+async function deleteUserSessions(env, username, keepToken) {
   let removed = 0;
   try {
     const list = await env.USERS.list({ prefix: 'session:', limit: 1000 });
     for (const k of list.keys) {
+      if (keepToken && k.name === 'session:' + keepToken) continue;
       const s = await env.USERS.get(k.name, 'json');
       if (s && s.username === username) {
         await env.USERS.delete(k.name);
@@ -1248,6 +1252,195 @@ async function handleAdminRole(env, request) {
   });
 }
 
+/* ========================== 修改用户名 / 密码 ========================== */
+
+/** 修改类验证码有效期（秒） */
+const CHANGECODE_TTL = 10 * 60;
+
+const CHANGE_LABEL = { username: '用户名', password: '密码' };
+
+/** 从 Cookie 里取出当前会话 token */
+function sessionToken(request) {
+  const cookie = request.headers.get('Cookie') || '';
+  const m = cookie.match(/(?:^|;\s*)session=([a-f0-9]{64})/);
+  return m ? m[1] : null;
+}
+
+/** 修改用户名 / 密码的通用前置校验 */
+async function changeGuard(env, request) {
+  const session = await getSession(env, request);
+  if (!session) return { error: json({ ok: false, message: '请先登录', needLogin: true }, 401) };
+  const user = await sessionUser(env, session);
+  if (!user) return { error: json({ ok: false, message: '账户不存在' }, 404) };
+  if (user.banned) return { error: json({ ok: false, message: '该账户已被封禁' }, 403) };
+  if (!user.email) {
+    return { error: json({ ok: false, message: '该账户没有绑定邮箱，无法通过邮箱验证' }, 400) };
+  }
+  return { session, user };
+}
+
+/**
+ * 第一步：校验新值，然后发一封确认邮件。
+ * 密码在这一步就哈希好，避免明文躺在 KV 里。
+ */
+async function handleChangeRequest(env, request) {
+  const g = await changeGuard(env, request);
+  if (g.error) return g.error;
+  const { user } = g;
+
+  const body = await readJson(request);
+  const field = String(body.field || '');
+  if (field !== 'username' && field !== 'password') {
+    return json({ ok: false, message: '不支持的修改类型' }, 400);
+  }
+
+  const rec = { field, tries: 0 };
+
+  if (field === 'username') {
+    if (roleOf(user) === 'super') {
+      return json({ ok: false, message: '主管理员账户不可修改用户名' }, 403);
+    }
+    const newName = String(body.value || '').trim().toLowerCase();
+    if (!/^[a-z0-9_-]{3,20}$/.test(newName)) {
+      return json({ ok: false, message: '用户名需 3-20 位，仅字母数字下划线连字符' }, 400);
+    }
+    if (RESERVED.has(newName)) {
+      return json({ ok: false, message: '该用户名为系统保留，请换一个' }, 400);
+    }
+    if (newName === user.username) {
+      return json({ ok: false, message: '新用户名与当前用户名相同' }, 400);
+    }
+    if (await getUser(env, newName)) {
+      return json({ ok: false, message: '该用户名已被占用' }, 400);
+    }
+    rec.newUsername = newName;
+  } else {
+    const pw = String(body.value || '');
+    if (pw.length < 6) return json({ ok: false, message: '密码至少 6 位' }, 400);
+    if (pw.length > 128) return json({ ok: false, message: '密码过长' }, 400);
+    rec.salt = randomHex(16);
+    rec.hash = await hashPassword(pw, rec.salt);
+  }
+
+  // 冷却：同一账户 60 秒内只能发一次
+  const ck = 'changecooldown:' + user.username;
+  if (await env.USERS.get(ck)) {
+    return json({ ok: false, message: '确认码刚发过，请稍后再试或查看邮箱' }, 429);
+  }
+
+  const code = String(Math.floor(100000 + Math.random() * 900000));
+  rec.code = code;
+  await env.USERS.put('changecode:' + user.username, JSON.stringify(rec), { expirationTtl: CHANGECODE_TTL });
+  await env.USERS.put(ck, '1', { expirationTtl: CODE_COOLDOWN });
+
+  const what = CHANGE_LABEL[field];
+  const detail =
+    field === 'username'
+      ? `新用户名：<b style="color:#00ff8c">${rec.newUsername}</b>`
+      : '新密码已在提交时记录（本邮件不会显示密码内容）';
+
+  const sent = await sendMail(
+    env,
+    user.email,
+    `【zrfeng.top】修改${what}确认`,
+    `<div style="font-family:system-ui,-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;padding:24px;background:#050807;color:#e8f5ee">
+       <h2 style="color:#00ff8c;margin:0 0 12px">修改${what}确认</h2>
+       <p style="color:#a9c6b8;margin:0 0 8px">账户 <b style="color:#00ff8c">${user.username}</b> 正在申请修改${what}。</p>
+       <p style="color:#a9c6b8;margin:0 0 16px">${detail}</p>
+       <p style="color:#a9c6b8;margin:0 0 8px">确认码：</p>
+       <p style="font-size:30px;letter-spacing:8px;font-weight:700;color:#00ff8c;margin:0 0 18px">${code}</p>
+       <p style="color:#7fa893;font-size:13px;margin:0">10 分钟内有效。</p>
+       <p style="color:#5c7a6b;font-size:12px;margin:16px 0 0">如果这不是你本人操作，请忽略本邮件，${what}不会有任何变化。</p>
+     </div>`
+  );
+  if (!sent.ok) return json({ ok: false, message: sent.message }, 502);
+
+  return json({
+    ok: true,
+    message: `确认码已发送到 ${maskEmail(user.email)}`,
+    needCode: true,
+    field,
+  });
+}
+
+/** 第二步（二次确认）：凭邮件里的确认码真正修改 */
+async function handleChangeConfirm(env, request) {
+  const g = await changeGuard(env, request);
+  if (g.error) return g.error;
+  const { user } = g;
+
+  const body = await readJson(request);
+  const field = String(body.field || '');
+  const input = String(body.code || '').trim();
+  if (field !== 'username' && field !== 'password') {
+    return json({ ok: false, message: '不支持的修改类型' }, 400);
+  }
+  if (!/^\d{6}$/.test(input)) return json({ ok: false, message: '请输入 6 位确认码' }, 400);
+
+  const rec = await env.USERS.get('changecode:' + user.username, 'json');
+  if (!rec || rec.field !== field) {
+    return json({ ok: false, message: '确认码已过期，请重新获取' }, 400);
+  }
+  if (rec.tries >= 5) {
+    await env.USERS.delete('changecode:' + user.username);
+    return json({ ok: false, message: '尝试次数过多，请重新获取确认码' }, 400);
+  }
+  if (String(input) !== String(rec.code)) {
+    rec.tries = (rec.tries || 0) + 1;
+    await env.USERS.put('changecode:' + user.username, JSON.stringify(rec), { expirationTtl: CHANGECODE_TTL });
+    return json({ ok: false, message: '确认码不正确' }, 400);
+  }
+
+  const token = sessionToken(request);
+
+  if (field === 'username') {
+    const newName = rec.newUsername;
+    // 再查一次：这十分钟里可能被别人抢注了
+    if (await getUser(env, newName)) {
+      return json({ ok: false, message: '该用户名刚被占用，请重新发起修改' }, 409);
+    }
+    const oldName = user.username;
+    user.username = newName;
+    await env.USERS.delete('user:' + oldName);
+    await putUser(env, user); // 写 user:<新名> 与 email:<邮箱> → 新名
+
+    // 让当前这台设备的会话跟到新名字，其它设备上的会话失效（它们的用户名已不存在）
+    if (token) {
+      const s = await env.USERS.get('session:' + token, 'json');
+      if (s) {
+        s.username = newName;
+        await env.USERS.put('session:' + token, JSON.stringify(s));
+      }
+    }
+    const kicked = await deleteUserSessions(env, oldName, token);
+    await env.USERS.delete('changecode:' + oldName);
+    await env.USERS.delete('changecooldown:' + oldName);
+
+    return json({
+      ok: true,
+      field,
+      message: `用户名已修改为 ${newName}`,
+      username: newName,
+      kicked,
+    });
+  }
+
+  // 改密码：只踢掉其它设备，当前这台继续用
+  user.salt = rec.salt;
+  user.hash = rec.hash;
+  user.passwordChangedAt = Date.now();
+  await putUser(env, user);
+  await env.USERS.delete('changecode:' + user.username);
+  const kicked = await deleteUserSessions(env, user.username, token);
+
+  return json({
+    ok: true,
+    field,
+    message: kicked > 0 ? `密码已修改，其它 ${kicked} 台设备已登出` : '密码已修改',
+    kicked,
+  });
+}
+
 /* ========================== 主入口 ========================== */
 
 export default {
@@ -1382,6 +1575,9 @@ export default {
               isSuper: roleOf(u) === 'super',
               // 能否自助注销：由服务端判定，前端只用来决定是否显示按钮
               canDelete: !!(u && !u.isAdmin && !u.isTrial && u.email),
+              // 能否在控制台自助修改用户名 / 密码（都需要邮箱验证码）
+              canChangeUsername: !!(u && roleOf(u) !== 'super' && u.email && !u.banned),
+              canChangePassword: !!(u && u.email && !u.banned),
             },
             account: accountStatus(u),
           });
@@ -1410,6 +1606,14 @@ export default {
         }
         if (path === '/api/account/delete/confirm' && method === 'POST') {
           return await handleDeleteConfirm(env, request);
+        }
+
+        // 修改用户名 / 密码：同样是「先发邮件确认码，再二次确认」
+        if (path === '/api/account/change/request' && method === 'POST') {
+          return await handleChangeRequest(env, request);
+        }
+        if (path === '/api/account/change/confirm' && method === 'POST') {
+          return await handleChangeConfirm(env, request);
         }
 
         // 管理员控制台

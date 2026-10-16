@@ -242,10 +242,121 @@
       html += '<div class="msg" style="color:#7fa893">试用账户不可注销。</div>';
     }
     html += '</div>';
+
+    // 账户安全：改用户名 / 改密码，两者都必须过邮箱验证码
+    var sec = '';
+    if (u.canChangeUsername) {
+      sec += '<div class="row"><div class="info">' +
+        '<div class="name">修改用户名</div>' +
+        '<div class="meta">需要邮箱验证码；改后本设备保持登录，其它设备需重新登录</div></div>' +
+        '<button data-ch="username">修改</button></div>';
+    }
+    if (u.canChangePassword) {
+      sec += '<div class="row"><div class="info">' +
+        '<div class="name">修改密码</div>' +
+        '<div class="meta">需要邮箱验证码；改后其它设备会被登出</div></div>' +
+        '<button data-ch="password">修改</button></div>';
+    }
+    if (sec) html += '<div class="card"><h2>账户安全</h2>' + sec + '</div>';
     meEl.innerHTML = html;
 
     var b = document.getElementById('delBtn');
     if (b) b.onclick = openDelete;
+    meEl.querySelectorAll('button[data-ch]').forEach(function (x) {
+      x.onclick = function () { openChange(x.dataset.ch); };
+    });
+  }
+
+  /* ===================== 修改用户名 / 修改密码 ===================== */
+  var changeField = null;
+
+  function openChange(field) {
+    changeField = field;
+    var isName = field === 'username';
+    setErr('');
+    dmTitle.textContent = isName ? '修改用户名' : '修改密码';
+    dmStep.textContent = '第 1 / 2 步 · ' + (isName ? '输入新用户名' : '输入新密码');
+    dmBody.innerHTML = isName
+      ? '<p>新用户名需要<b>邮箱验证</b>后才会生效。</p>' +
+        '<p class="small">3-20 位，仅字母、数字、下划线、连字符。改后本设备保持登录，其它设备需重新登录。</p>' +
+        '<input type="text" id="chVal" placeholder="新用户名" autocomplete="off">'
+      : '<p>新密码需要<b>邮箱验证</b>后才会生效。</p>' +
+        '<p class="small">至少 6 位。改后其它设备会被登出，本设备保持登录。</p>' +
+        '<input type="password" id="chVal" placeholder="新密码" autocomplete="new-password">' +
+        '<input type="password" id="chVal2" placeholder="再输一次新密码" autocomplete="new-password">';
+    dmActs.innerHTML =
+      '<button class="mute" id="chCancel">取消</button>' +
+      '<button id="chSend">发送验证码</button>';
+    delMask.className = 'mask';
+    document.getElementById('chCancel').onclick = closeModal;
+    document.getElementById('chSend').onclick = sendChange;
+    var v = document.getElementById('chVal');
+    if (v) v.focus();
+  }
+
+  function sendChange() {
+    var isName = changeField === 'username';
+    var v1 = (document.getElementById('chVal') || {}).value || '';
+    if (!v1) { setErr(isName ? '请输入新用户名' : '请输入新密码'); return; }
+    if (!isName) {
+      var v2 = (document.getElementById('chVal2') || {}).value || '';
+      if (v1 !== v2) { setErr('两次输入的密码不一致'); return; }
+      if (v1.length < 6) { setErr('密码至少 6 位'); return; }
+    }
+    var btn = document.getElementById('chSend');
+    btn.disabled = true;
+    setErr('');
+    fetch('/api/account/change/request', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ field: changeField, value: v1 }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j.ok) { setErr(j.message || '发送失败'); btn.disabled = false; return; }
+        openChangeStep2(j.message || '');
+      })
+      .catch(function () { setErr('网络错误'); btn.disabled = false; });
+  }
+
+  function openChangeStep2(sentMsg) {
+    var isName = changeField === 'username';
+    setErr('');
+    dmTitle.textContent = isName ? '修改用户名' : '修改密码';
+    dmStep.textContent = '第 2 / 2 步 · 输入邮件验证码';
+    dmBody.innerHTML =
+      '<p>' + esc(sentMsg) + '</p>' +
+      '<p class="small">10 分钟内有效。如果没收到，请查看垃圾箱。</p>' +
+      '<input type="text" class="code" id="chCode" inputmode="numeric" maxlength="6" placeholder="000000">';
+    dmActs.innerHTML =
+      '<button class="mute" id="chBack">返回</button>' +
+      '<button id="chConfirm">确认修改</button>';
+    document.getElementById('chBack').onclick = function () { openChange(changeField); };
+    document.getElementById('chConfirm').onclick = doChange;
+    var c = document.getElementById('chCode');
+    if (c) { c.focus(); c.onkeydown = function (e) { if (e.key === 'Enter') doChange(); }; }
+  }
+
+  function doChange() {
+    var code = ((document.getElementById('chCode') || {}).value || '').trim();
+    if (!/^\d{6}$/.test(code)) { setErr('请输入 6 位验证码'); return; }
+    var btn = document.getElementById('chConfirm');
+    btn.disabled = true;
+    setErr('');
+    fetch('/api/account/change/confirm', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ field: changeField, code: code }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j.ok) { setErr(j.message || '修改失败'); btn.disabled = false; return; }
+        dmTitle.textContent = '修改成功';
+        dmStep.textContent = '完成';
+        dmBody.innerHTML = '<p>' + esc(j.message) + '</p>';
+        dmActs.innerHTML = '<button id="chDone">好</button>';
+        document.getElementById('chDone').onclick = function () { closeModal(); loadMe(); };
+        setTimeout(function () { closeModal(); loadMe(); }, 1800);
+      })
+      .catch(function () { setErr('网络错误'); btn.disabled = false; });
   }
 
   /* ===================== 注销流程（两步） ===================== */
@@ -559,7 +670,8 @@
   }
 
   /* ===================== 入口 ===================== */
-  fetch('/api/me', { cache: 'no-store' })
+  function loadMe() {
+    return fetch('/api/me', { cache: 'no-store' })
     .then(function (r) { return r.json(); })
     .then(function (j) {
       if (!j.loggedIn) {
@@ -581,6 +693,9 @@
       who.textContent = '加载失败';
       meEl.innerHTML = '<div class="card"><div class="center">网络错误，请稍后重试。</div></div>';
     });
+  }
+
+  loadMe();
 })();
 </script>
   <script src="/status.js" defer></script>
