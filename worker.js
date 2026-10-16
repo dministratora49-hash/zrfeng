@@ -893,6 +893,7 @@ async function handleAdminUsers(env, request) {
       count: deletions.length,
       latestAt: deletions.length ? deletions[0].at : null,
     },
+    maintenance: maintenanceState(await getMaintenance(env), Date.now()),
   });
 }
 
@@ -914,6 +915,85 @@ async function handleAdminNoticesRead(env, request) {
   await env.USERS.delete(NOTICE_KEY);
 
   return json({ ok: true, message: '已清空 ' + count + ' 条注销通知', cleared: count });
+}
+
+/* ========================== 维护时间 ========================== */
+
+/** 维护时段存放的 KV 键 */
+const MAINT_KEY = 'config:maintenance';
+
+/** 维护时段最长允许 30 天，防止误填出一个「永久维护」 */
+const MAINT_MAX_MS = 30 * 86400000;
+
+/** 读取维护时段；没设置或数据损坏时返回 null */
+async function getMaintenance(env) {
+  let m = null;
+  try {
+    m = await env.USERS.get(MAINT_KEY, 'json');
+  } catch {
+    m = null;
+  }
+  if (!m || typeof m.start !== 'number' || typeof m.end !== 'number') return null;
+  if (!(m.end > m.start)) return null;
+  return { start: m.start, end: m.end, setBy: m.setBy || null, setAt: m.setAt || null };
+}
+
+/**
+ * 把维护时段换算成「此刻是否在维护中」。
+ *   active     —— 现在正处于 [start, end) 之内：所有页面弹窗
+ *   startsInMs —— 还没开始，距离开始还有多久
+ *   remainingMs—— 维护中，距离结束还有多久（到点自动关弹窗）
+ */
+function maintenanceState(m, now) {
+  if (!m) {
+    return { set: false, active: false, start: null, end: null, remainingMs: null, startsInMs: null, ended: false };
+  }
+  const active = now >= m.start && now < m.end;
+  return {
+    set: true,
+    active,
+    start: m.start,
+    end: m.end,
+    remainingMs: active ? Math.max(0, m.end - now) : null,
+    startsInMs: now < m.start ? m.start - now : null,
+    ended: now >= m.end,
+    setBy: m.setBy,
+    setAt: m.setAt,
+  };
+}
+
+/** 设置或清除维护时段（仅管理员） */
+async function handleAdminMaintenance(env, request) {
+  const guard = await requireAdmin(env, request);
+  if (guard.error) return guard.error;
+
+  const body = await readJson(request);
+  const now = Date.now();
+
+  // 清除
+  if (body.clear) {
+    await env.USERS.delete(MAINT_KEY);
+    return json({ ok: true, message: '已清除维护时间', maintenance: maintenanceState(null, now) });
+  }
+
+  const start = Number(body.start);
+  const end = Number(body.end);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) {
+    return json({ ok: false, message: '请选择开始时间和结束时间' }, 400);
+  }
+  if (end <= start) {
+    return json({ ok: false, message: '结束时间必须晚于开始时间' }, 400);
+  }
+  if (end - start > MAINT_MAX_MS) {
+    return json({ ok: false, message: '维护时段最长 30 天' }, 400);
+  }
+
+  const m = { start, end, setBy: guard.session.username, setAt: now };
+  await env.USERS.put(MAINT_KEY, JSON.stringify(m));
+
+  const st = maintenanceState(m, now);
+  const human = st.active ? '维护已开始' : '维护将于稍后自动开始';
+  return json({ ok: true, message: '维护时间已设置（' + human + '）', maintenance: st });
 }
 
 /**
@@ -1122,6 +1202,8 @@ export default {
             username: s ? s.username : null,
             isAdmin: !!(u && u.isAdmin),
             account: accountStatus(u),
+            // 维护时段：所有页面据此决定是否弹出「正在维护服务」
+            maintenance: maintenanceState(await getMaintenance(env), Date.now()),
           });
         }
         if (path === '/api/downloads' && method === 'GET') {
@@ -1148,6 +1230,9 @@ export default {
         }
         if (path === '/api/admin/notices/read' && method === 'POST') {
           return await handleAdminNoticesRead(env, request);
+        }
+        if (path === '/api/admin/maintenance' && method === 'POST') {
+          return await handleAdminMaintenance(env, request);
         }
 
         return json({ ok: false, message: '接口不存在' }, 404);

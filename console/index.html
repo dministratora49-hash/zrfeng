@@ -93,6 +93,28 @@
   .kv div { color: #7fa893; }
   .kv b { color: #e8f5ee; font-weight: 500; }
 
+  /* 维护时间面板 */
+  .maint {
+    border: 1px solid rgba(255,170,0,0.4); border-radius: 16px;
+    background: rgba(18,14,6,0.9); padding: 20px 18px; margin-bottom: 18px;
+  }
+  .maint h2 { font-size: 15px; color: #ffb020; margin-bottom: 6px; font-weight: 600; }
+  .maint .m-stat { font-size: 12px; color: #b9a888; margin-bottom: 14px; line-height: 1.8; }
+  .maint .m-stat b { color: #ffb020; }
+  .m-field { margin-bottom: 12px; }
+  .m-field label { display: block; font-size: 12px; color: #a89b7c; margin-bottom: 5px; }
+  .m-field input {
+    width: 100%; padding: 10px 12px; border-radius: 9px;
+    border: 1px solid rgba(255,170,0,0.35); background: rgba(0,0,0,0.45);
+    color: #f0e8d8; font-size: 14px; font-family: inherit;
+  }
+  .m-field input:focus { outline: none; border-color: rgba(255,170,0,0.8); }
+  .m-acts { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+  .m-acts button { flex: 1; min-width: 110px; border-color: rgba(255,170,0,0.5); background: rgba(255,170,0,0.1); color: #ffc55c; }
+  .m-quick { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 14px; }
+  .m-quick button { font-size: 11px; padding: 5px 10px; border-color: rgba(255,170,0,0.3); background: transparent; color: #c9b48a; }
+  .m-now { font-size: 11px; color: #8a8060; margin-top: 10px; }
+
   /* 弹窗 */
   .mask {
     position: fixed; inset: 0; z-index: 100000; background: rgba(0,0,0,.78);
@@ -130,6 +152,7 @@
   <h1>控制台</h1>
   <div class="sub" id="who">加载中…</div>
   <div id="notices"></div>
+  <div id="maint"></div>
   <div id="me"></div>
   <div id="app"></div>
 </div>
@@ -149,6 +172,7 @@
 (function () {
   var who = document.getElementById('who');
   var noticesEl = document.getElementById('notices');
+  var maintEl = document.getElementById('maint');
   var meEl = document.getElementById('me');
   var app = document.getElementById('app');
 
@@ -168,6 +192,14 @@
     var d = new Date(ts);
     return p2(d.getMonth() + 1) + '-' + p2(d.getDate()) + ' ' + p2(d.getHours()) + ':' + p2(d.getMinutes());
   }
+  function fmtClock(ts) { return fmtTime(ts); }
+  /** 时间戳 → <input type="datetime-local"> 需要的本地格式 */
+  function toLocalInput(ts) {
+    var d = new Date(ts);
+    return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate()) +
+      'T' + p2(d.getHours()) + ':' + p2(d.getMinutes());
+  }
+  function fromLocalInput(v) { return v ? new Date(v).getTime() : NaN; }
 
   function tagOf(u) {
     if (u.isAdmin) return '<span class="tag admin">管理员</span>';
@@ -400,12 +432,85 @@
       .catch(function () { note('网络错误', false); btn.disabled = false; });
   }
 
+  /* ===================== 管理员：维护时间 ===================== */
+  function renderMaintenance(m) {
+    if (!m) m = { set: false, active: false };
+    var now = Date.now();
+    var status, color;
+    if (!m.set) { status = '未设置（站点正常开放）'; color = '#7fa893'; }
+    else if (m.active) { status = '维护中 —— 所有页面正在弹出维护提示'; color = '#ffb020'; }
+    else if (now < m.start) { status = '已排期，将于 ' + fmtClock(m.start) + ' 自动开始'; color = '#ffcc00'; }
+    else { status = '已结束'; color = '#7fa893'; }
+
+    maintEl.innerHTML =
+      '<div class="maint"><h2>维护时间</h2>' +
+      '<div class="m-stat">当前状态：<b style="color:' + color + '">' + esc(status) + '</b>' +
+      (m.set ? '<br>维护时段：' + fmtClock(m.start) + ' → ' + fmtClock(m.end) : '') +
+      '</div>' +
+      '<div class="m-field"><label>开始时间（到这个点，所有页面弹出维护弹窗）</label>' +
+      '<input type="datetime-local" id="mStart" value="' + (m.set ? toLocalInput(m.start) : '') + '"></div>' +
+      '<div class="m-field"><label>结束时间（到这个点，自动关闭维护弹窗）</label>' +
+      '<input type="datetime-local" id="mEnd" value="' + (m.set ? toLocalInput(m.end) : '') + '"></div>' +
+      '<div class="m-quick">' +
+      '<button data-quick="30">立即开始 · 30 分钟</button>' +
+      '<button data-quick="60">立即开始 · 1 小时</button>' +
+      '<button data-quick="120">立即开始 · 2 小时</button>' +
+      '</div>' +
+      '<div class="m-acts">' +
+      '<button id="mSave">保存维护时间</button>' +
+      '<button class="mute" id="mClear">清除维护时间</button>' +
+      '</div>' +
+      '<div class="msg" id="mMsg"></div>' +
+      '<div class="m-now">本机当前时间：' + new Date().toLocaleString('zh-CN') + '</div>' +
+      '</div>';
+
+    document.getElementById('mSave').onclick = function () {
+      var s = fromLocalInput(document.getElementById('mStart').value);
+      var e = fromLocalInput(document.getElementById('mEnd').value);
+      if (!isFinite(s) || !isFinite(e)) { mNote('请选择开始和结束时间', false); return; }
+      if (e <= s) { mNote('结束时间必须晚于开始时间', false); return; }
+      saveMaint({ start: s, end: e }, this);
+    };
+    document.getElementById('mClear').onclick = function () {
+      saveMaint({ clear: true }, this);
+    };
+    maintEl.querySelectorAll('button[data-quick]').forEach(function (b) {
+      b.onclick = function () {
+        var mins = Number(b.dataset.quick);
+        var s = Date.now();
+        saveMaint({ start: s, end: s + mins * 60000 }, b);
+      };
+    });
+  }
+
+  function mNote(text, ok) {
+    var el = document.getElementById('mMsg');
+    if (!el) return;
+    el.textContent = text;
+    el.className = 'msg ' + (ok ? 'ok' : 'err');
+  }
+
+  function saveMaint(body, btn) {
+    if (btn) btn.disabled = true;
+    fetch('/api/admin/maintenance', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        mNote(j.message || (j.ok ? '已保存' : '保存失败'), !!j.ok);
+        if (j.ok) renderMaintenance(j.maintenance);
+        else if (btn) btn.disabled = false;
+      })
+      .catch(function () { mNote('网络错误', false); if (btn) btn.disabled = false; });
+  }
+
   function loadAdmin() {
     return fetch('/api/admin/users', { cache: 'no-store' })
       .then(function (r) { return r.json(); })
       .then(function (j) {
-        if (!j.ok) { noticesEl.innerHTML = ''; app.innerHTML = ''; return; }
+        if (!j.ok) { noticesEl.innerHTML = ''; maintEl.innerHTML = ''; app.innerHTML = ''; return; }
         renderNotices(j.notices);
+        renderMaintenance(j.maintenance);
         renderUsers(j);
       })
       .catch(function () { /* 静默 */ });

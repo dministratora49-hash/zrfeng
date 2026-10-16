@@ -18,12 +18,21 @@
 
   var BAR_ID = 'dsh-status-bar';
   var MASK_ID = 'dsh-block-mask';
+  var MAINT_ID = 'dsh-maint-mask';
   var DAY = 86400000;
 
   /** 每秒倒计时的定时器；重新渲染前必须先清掉，避免叠加 */
   var countdownTimer = null;
   /** 周期性与服务端重新同步（管理员激活后最多 60 秒生效） */
   var syncTimer = null;
+  /** 维护弹窗内的秒级倒计时 */
+  var maintTickTimer = null;
+  /** 到点自动开关维护弹窗的定时器 */
+  var maintTimer = null;
+  /** 当前维护时段 {start,end}，用于判断窗口是否变了 */
+  var maintCur = null;
+  /** 管理员手动关掉弹窗后，同一个维护时段内不再自动弹出 */
+  var maintDismissed = false;
 
   /* 状态栏基础样式。用 !important 覆盖各页面自己的 body padding，
      因为状态栏是 fixed 定位，不给 body 留出空间会盖住页面内容。 */
@@ -72,7 +81,28 @@
     'border-radius:9px;font-size:13px;cursor:pointer;text-decoration:none;text-align:center;' +
     'font-family:inherit;border:1px solid rgba(255,77,77,.5);background:rgba(255,77,77,.1);' +
     'color:#ff8a8a;}' +
-    '#' + MASK_ID + ' .bm-acts a:active,#' + MASK_ID + ' .bm-acts button:active{opacity:.7;}';
+    '#' + MASK_ID + ' .bm-acts a:active,#' + MASK_ID + ' .bm-acts button:active{opacity:.7;}' +
+    /* 维护弹窗：琥珀色，比「已拦截」更柔和 */
+    '#' + MAINT_ID + '{position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,.8);' +
+    'display:flex;align-items:center;justify-content:center;padding:20px;' +
+    'font-family:"Microsoft YaHei","PingFang SC",sans-serif;}' +
+    '#' + MAINT_ID + ' .mt-card{width:100%;max-width:360px;padding:28px 22px;text-align:center;' +
+    'background:rgba(16,13,6,.99);border:1px solid rgba(255,170,0,.55);border-radius:16px;' +
+    'box-shadow:0 0 40px rgba(255,170,0,.18);}' +
+    '#' + MAINT_ID + ' h2{margin:0 0 12px;font-size:20px;color:#ffb020;letter-spacing:.5px;' +
+    'font-family:Orbitron,"Microsoft YaHei",sans-serif;}' +
+    '#' + MAINT_ID + ' p{margin:0 0 10px;font-size:13px;line-height:1.9;color:#e6dcc4;}' +
+    '#' + MAINT_ID + ' .mt-cd{color:#ffb020;}' +
+    '#' + MAINT_ID + ' .mt-cd span{font-family:ui-monospace,Menlo,Consolas,monospace;' +
+    'font-variant-numeric:tabular-nums;font-weight:600;}' +
+    '#' + MAINT_ID + ' .mt-range{font-size:11px;color:#9c9078;}' +
+    '#' + MAINT_ID + ' .mt-acts{display:flex;gap:10px;margin-top:16px;}' +
+    '#' + MAINT_ID + ' .mt-acts a,#' + MAINT_ID + ' .mt-acts button{flex:1;padding:9px 0;' +
+    'border-radius:9px;font-size:12px;cursor:pointer;text-decoration:none;text-align:center;' +
+    'font-family:inherit;border:1px solid rgba(255,170,0,.5);background:rgba(255,170,0,.1);' +
+    'color:#ffc55c;}' +
+    '#' + MAINT_ID + ' .mt-acts a:active,#' + MAINT_ID + ' .mt-acts button:active{opacity:.7;}' +
+    '#' + MAINT_ID + ' .mt-note{font-size:11px;color:#8a8060;margin-top:12px;}';
 
   function injectCss() {
     if (document.getElementById('dsh-status-css')) return;
@@ -127,6 +157,110 @@
   function hideBlocked() {
     var m = document.getElementById(MASK_ID);
     if (m) m.remove();
+  }
+
+  /* ==================== 维护弹窗 ==================== */
+
+  /** 把时间戳格式化成「MM-DD HH:MM」 */
+  function fmtClock(ts) {
+    var d = new Date(ts);
+    var p2 = function (n) { return n < 10 ? '0' + n : '' + n; };
+    return p2(d.getMonth() + 1) + '-' + p2(d.getDate()) + ' ' + p2(d.getHours()) + ':' + p2(d.getMinutes());
+  }
+
+  function hideMaintenance() {
+    var m = document.getElementById(MAINT_ID);
+    if (m) m.remove();
+    if (maintTickTimer) {
+      clearInterval(maintTickTimer);
+      maintTickTimer = null;
+    }
+  }
+
+  /** 刷新弹窗里的「预计剩余」 */
+  function updateMaintLeft(endAt) {
+    var el = document.getElementById('dsh-mt-left');
+    if (!el || !endAt) return;
+    el.textContent = fmtLeft(Math.max(0, endAt - Date.now()));
+  }
+
+  function showMaintenance(st, isAdmin) {
+    var endAt = st && st.end ? st.end : null;
+    if (document.getElementById(MAINT_ID)) {
+      updateMaintLeft(endAt);
+      return;
+    }
+    var acts = isAdmin
+      ? '<div class="mt-acts"><a href="/console/">进入控制台</a>' +
+        '<button type="button" id="dsh-mt-close">管理员关闭</button></div>' +
+        '<div class="mt-note">管理员可关闭本弹窗以便继续操作</div>'
+      : '';
+    var mask = document.createElement('div');
+    mask.id = MAINT_ID;
+    mask.innerHTML =
+      '<div class="mt-card">' +
+      '<h2>正在维护服务</h2>' +
+      '<p>站点正在维护中，请稍后再来。</p>' +
+      (endAt ? '<p class="mt-cd">预计剩余 <span id="dsh-mt-left">—</span></p>' : '') +
+      (st && st.start && endAt ? '<p class="mt-range">维护时段：' + fmtClock(st.start) + ' → ' + fmtClock(endAt) + '</p>' : '') +
+      acts +
+      '</div>';
+    document.body.appendChild(mask);
+
+    var btn = document.getElementById('dsh-mt-close');
+    if (btn) {
+      btn.onclick = function () {
+        // 管理员专属出口：否则维护期间管理员会被自己的弹窗锁在外面
+        maintDismissed = true;
+        hideMaintenance();
+      };
+    }
+
+    updateMaintLeft(endAt);
+    if (maintTickTimer) clearInterval(maintTickTimer);
+    maintTickTimer = setInterval(function () {
+      if (!endAt || Date.now() >= endAt) {
+        hideMaintenance();
+        load();
+        return;
+      }
+      updateMaintLeft(endAt);
+    }, 1000);
+  }
+
+  /** 安排一个「到点再看一次」的定时器：最长 60 秒，长时段交给周期同步 */
+  function scheduleMaint() {
+    if (maintTimer) {
+      clearTimeout(maintTimer);
+      maintTimer = null;
+    }
+    if (!maintCur) return;
+    var now = Date.now();
+    var next = now < maintCur.start ? maintCur.start : now < maintCur.end ? maintCur.end : null;
+    if (next === null) return;
+    var delay = Math.max(500, Math.min(next - now + 500, 60000));
+    maintTimer = setTimeout(function () {
+      load();
+    }, delay);
+  }
+
+  /** 根据服务端下发的维护状态，决定弹或不弹 */
+  function applyMaintenance(st, isAdmin) {
+    var active = !!(st && st.active);
+    var win = st && st.set ? { start: st.start, end: st.end } : null;
+
+    // 维护时段换了（或取消了），重置「管理员已关闭」
+    if (!maintCur || !win || maintCur.start !== win.start || maintCur.end !== win.end) {
+      maintDismissed = false;
+    }
+    maintCur = win;
+
+    if (active && !maintDismissed) {
+      showMaintenance(st, isAdmin);
+    } else {
+      hideMaintenance();
+    }
+    scheduleMaint();
   }
 
   function stopCountdown() {
@@ -220,6 +354,9 @@
     } else {
       hideBlocked();
     }
+
+    // 维护时段：到点自动弹出 / 到点自动关闭
+    applyMaintenance(data && data.maintenance, !!(data && data.isAdmin));
 
     // 启动每秒倒计时
     if (cdEl && acc.remainingMs > 0) {
