@@ -25,85 +25,99 @@
     pointer-events: none;
   }
   .wrap { position: relative; max-width: 760px; margin: 0 auto; }
-  h1 {
-    font-size: 24px;
-    color: #00ff8c;
-    letter-spacing: 1px;
-    margin-bottom: 6px;
-  }
+  h1 { font-size: 24px; color: #00ff8c; letter-spacing: 1px; margin-bottom: 6px; }
   .sub { font-size: 12px; color: #7fa893; margin-bottom: 22px; }
 
-  .stats {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 10px;
-    margin-bottom: 22px;
-  }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 22px; }
   .stat {
-    padding: 14px 10px;
-    text-align: center;
-    border: 1px solid rgba(0,255,140,0.22);
-    border-radius: 12px;
-    background: rgba(10,18,14,0.7);
+    padding: 14px 10px; text-align: center;
+    border: 1px solid rgba(0,255,140,0.22); border-radius: 12px; background: rgba(10,18,14,0.7);
   }
   .stat b { display: block; font-size: 22px; color: #00ff8c; font-family: Orbitron, monospace; }
   .stat span { font-size: 11px; color: #7fa893; }
 
   .card {
-    border: 1px solid rgba(0,255,140,0.35);
-    border-radius: 16px;
-    background: rgba(10,18,14,0.9);
-    padding: 20px 18px;
-    margin-bottom: 18px;
+    border: 1px solid rgba(0,255,140,0.35); border-radius: 16px;
+    background: rgba(10,18,14,0.9); padding: 20px 18px; margin-bottom: 18px;
   }
   .card h2 { font-size: 15px; color: #00ff8c; margin-bottom: 14px; font-weight: 600; }
 
   .row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 11px 0;
-    border-bottom: 1px solid rgba(0,255,140,0.1);
-    flex-wrap: wrap;
+    display: flex; align-items: center; gap: 10px;
+    padding: 11px 0; border-bottom: 1px solid rgba(0,255,140,0.1); flex-wrap: wrap;
   }
   .row:last-child { border-bottom: none; }
   .info { flex: 1; min-width: 140px; }
   .name { font-size: 14px; color: #e8f5ee; word-break: break-all; }
   .meta { font-size: 11px; color: #7fa893; margin-top: 3px; word-break: break-all; }
 
-  .tag {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 20px;
-    font-size: 11px;
-    margin-left: 6px;
-    vertical-align: middle;
-  }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; margin-left: 6px; vertical-align: middle; }
   .tag.active  { background: rgba(0,255,140,0.15); color: #00ff8c; border: 1px solid rgba(0,255,140,0.4); }
   .tag.trial   { background: rgba(255,204,0,0.15); color: #ffcc00; border: 1px solid rgba(255,204,0,0.4); }
   .tag.blocked { background: rgba(255,77,77,0.15); color: #ff5c5c; border: 1px solid rgba(255,77,77,0.45); }
   .tag.admin   { background: rgba(0,200,255,0.15); color: #4dd2ff; border: 1px solid rgba(0,200,255,0.4); }
 
   button {
-    padding: 7px 13px;
-    border-radius: 8px;
-    border: 1px solid rgba(0,255,140,0.45);
-    background: rgba(0,255,140,0.08);
-    color: #00ff8c;
-    font-size: 12px;
-    cursor: pointer;
-    font-family: inherit;
-    white-space: nowrap;
+    padding: 7px 13px; border-radius: 8px;
+    border: 1px solid rgba(0,255,140,0.45); background: rgba(0,255,140,0.08);
+    color: #00ff8c; font-size: 12px; cursor: pointer; font-family: inherit; white-space: nowrap;
   }
   button:active { opacity: .65; }
   button:disabled { opacity: .35; cursor: default; }
   button.warn { border-color: rgba(255,77,77,0.5); background: rgba(255,77,77,0.1); color: #ff8a8a; }
+  button.mute { border-color: rgba(127,168,147,0.4); background: transparent; color: #7fa893; }
+
+  /* 通知条：左边文字，右边「已读」 */
+  .notice {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    border: 1px solid rgba(255,204,0,0.5); border-radius: 14px;
+    background: rgba(255,204,0,0.07); padding: 14px 16px; margin-bottom: 18px;
+  }
+  .notice .nt-l { flex: 1; min-width: 0; }
+  .notice .nt-t { font-size: 14px; color: #ffcc00; font-weight: 600; }
+  .notice .nt-s { font-size: 11px; color: #a9a07a; margin-top: 4px; }
+  .notice button { border-color: rgba(255,204,0,0.55); background: rgba(255,204,0,0.12); color: #ffcc00; }
+
+  .dellist { border-top: 1px solid rgba(255,204,0,0.18); padding-top: 10px; margin-bottom: 18px; }
+  .delrow { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; color: #b9b09a; padding: 5px 0; }
+  .delrow .d-u { color: #e8d9a0; word-break: break-all; }
+  .delrow .d-t { color: #7fa893; white-space: nowrap; font-size: 11px; }
 
   .msg { font-size: 12px; margin-top: 12px; min-height: 16px; }
   .msg.ok { color: #00ff8c; }
   .msg.err { color: #ff5c5c; }
-  .center { text-align: center; color: #7fa893; padding: 30px 0; }
+  .center { text-align: center; color: #7fa893; padding: 30px 0; line-height: 1.9; }
   .center a { color: #00ff8c; }
+
+  .kv { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; }
+  .kv div { color: #7fa893; }
+  .kv b { color: #e8f5ee; font-weight: 500; }
+
+  /* 弹窗 */
+  .mask {
+    position: fixed; inset: 0; z-index: 100000; background: rgba(0,0,0,.78);
+    display: flex; align-items: center; justify-content: center; padding: 18px;
+  }
+  .mask.hidden { display: none; }
+  .modal {
+    width: 100%; max-width: 380px; padding: 24px 20px;
+    background: rgba(16,10,10,.99); border: 1px solid rgba(255,77,77,.5);
+    border-radius: 16px; box-shadow: 0 0 40px rgba(255,77,77,.16);
+  }
+  .modal h3 { font-size: 17px; color: #ff5c5c; margin-bottom: 8px; }
+  .modal p { font-size: 13px; line-height: 1.85; color: #d8c8c8; margin-bottom: 14px; }
+  .modal p.small { font-size: 12px; color: #a08f8f; }
+  .modal input {
+    width: 100%; padding: 11px 13px; margin-bottom: 12px;
+    border: 1px solid rgba(255,77,77,.4); border-radius: 9px;
+    background: rgba(0,0,0,.45); color: #f0e8e8; font-size: 15px; font-family: inherit;
+  }
+  .modal input:focus { outline: none; border-color: rgba(255,77,77,.85); }
+  .modal input.code { letter-spacing: 7px; text-align: center; font-family: ui-monospace, monospace; font-size: 20px; }
+  .modal .acts { display: flex; gap: 10px; }
+  .modal .acts button { flex: 1; padding: 10px 0; font-size: 13px; }
+  .modal .err { color: #ff7b7b; font-size: 12px; min-height: 17px; margin-bottom: 6px; }
+  .step-hint { font-size: 11px; color: #a08f8f; margin-bottom: 12px; }
 
   @media (max-width: 520px) {
     .stats { grid-template-columns: repeat(2, 1fr); }
@@ -115,25 +129,44 @@
 <div class="wrap">
   <h1>控制台</h1>
   <div class="sub" id="who">加载中…</div>
-
+  <div id="notices"></div>
+  <div id="me"></div>
   <div id="app"></div>
+</div>
+
+<!-- 注销弹窗：密码 → 邮件确认码 → 二次确认 -->
+<div class="mask hidden" id="delMask">
+  <div class="modal">
+    <h3 id="dmTitle">注销账户</h3>
+    <div class="step-hint" id="dmStep">第 1 / 2 步</div>
+    <div id="dmBody"></div>
+    <div class="err" id="dmErr"></div>
+    <div class="acts" id="dmActs"></div>
+  </div>
 </div>
 
 <script>
 (function () {
-  var app = document.getElementById('app');
   var who = document.getElementById('who');
+  var noticesEl = document.getElementById('notices');
+  var meEl = document.getElementById('me');
+  var app = document.getElementById('app');
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
   }
-
+  function p2(n) { return n < 10 ? '0' + n : '' + n; }
   function fmtDate(ts) {
     if (!ts) return '—';
     var d = new Date(ts);
-    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate());
+  }
+  function fmtTime(ts) {
+    if (!ts) return '—';
+    var d = new Date(ts);
+    return p2(d.getMonth() + 1) + '-' + p2(d.getDate()) + ' ' + p2(d.getHours()) + ':' + p2(d.getMinutes());
   }
 
   function tagOf(u) {
@@ -143,8 +176,166 @@
     return '<span class="tag trial">未激活 ' + (u.days != null ? u.days + ' 天' : '') + '</span>';
   }
 
-  var isAdmin = false;
+  /* ===================== 我的账户 ===================== */
+  var ME = null;
 
+  function renderMe(j) {
+    var u = j.user || {};
+    var acc = j.account || {};
+    var dotColor = acc.dot === 'green' ? '#00ff8c' : (acc.dot === 'yellow' ? '#ffcc00' : '#ff4d4d');
+    var html =
+      '<div class="card"><h2>我的账户</h2>' +
+      '<div class="kv">' +
+      '<div>用户名：<b>' + esc(u.username) + '</b></div>' +
+      '<div>邮箱：<b>' + esc(u.email || '（未绑定）') + '</b></div>' +
+      '<div>状态：<b style="color:' + dotColor + '">' + esc(acc.label || '—') + '</b></div>' +
+      '</div>' +
+      '<div class="msg" id="meMsg"></div>';
+
+    if (u.canDelete) {
+      html +=
+        '<div class="row" style="margin-top:14px;border-top:1px solid rgba(0,255,140,0.1);border-bottom:none">' +
+        '<div class="info"><div class="name">注销账户</div>' +
+        '<div class="meta">需要邮件确认码；注销后该邮箱不可再次注册，数据无法恢复</div></div>' +
+        '<button class="warn" id="delBtn">注销账户</button>' +
+        '</div>';
+    } else if (u.isAdmin) {
+      html += '<div class="msg" style="color:#7fa893">管理员账户不可注销。</div>';
+    } else if (u.isTrial) {
+      html += '<div class="msg" style="color:#7fa893">试用账户不可注销。</div>';
+    }
+    html += '</div>';
+    meEl.innerHTML = html;
+
+    var b = document.getElementById('delBtn');
+    if (b) b.onclick = openDelete;
+  }
+
+  /* ===================== 注销流程（两步） ===================== */
+  var delMask = document.getElementById('delMask');
+  var dmTitle = document.getElementById('dmTitle');
+  var dmStep = document.getElementById('dmStep');
+  var dmBody = document.getElementById('dmBody');
+  var dmErr = document.getElementById('dmErr');
+  var dmActs = document.getElementById('dmActs');
+  var sentTo = '';
+
+  function closeModal() { delMask.className = 'mask hidden'; }
+  function setErr(t) { dmErr.textContent = t || ''; }
+
+  function openDelete() {
+    setErr('');
+    dmTitle.textContent = '注销账户';
+    dmStep.textContent = '第 1 / 2 步 · 验证密码';
+    dmBody.innerHTML =
+      '<p>注销是不可恢复的操作。确认后会向你的邮箱发送一个 <b>6 位确认码</b>，' +
+      '需要再次输入才能完成注销。</p>' +
+      '<p class="small">注销后该邮箱<b>不可再次注册</b>。</p>' +
+      '<input type="password" id="dmPwd" placeholder="请输入当前密码" autocomplete="current-password">';
+    dmActs.innerHTML =
+      '<button class="mute" id="dmCancel">取消</button>' +
+      '<button class="warn" id="dmSend">发送确认码</button>';
+    delMask.className = 'mask';
+    document.getElementById('dmCancel').onclick = closeModal;
+    document.getElementById('dmSend').onclick = sendCode;
+    var p = document.getElementById('dmPwd');
+    if (p) { p.focus(); p.onkeydown = function (e) { if (e.key === 'Enter') sendCode(); }; }
+  }
+
+  function sendCode() {
+    var p = document.getElementById('dmPwd');
+    var pwd = p ? p.value : '';
+    if (!pwd) { setErr('请输入密码'); return; }
+    var btn = document.getElementById('dmSend');
+    btn.disabled = true;
+    setErr('');
+    fetch('/api/account/delete/request', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ password: pwd }),
+    })
+      .then(function (r) { return r.json().then(function (j) { return { s: r.status, j: j }; }); })
+      .then(function (res) {
+        if (!res.j.ok) { setErr(res.j.message || '发送失败'); btn.disabled = false; return; }
+        sentTo = res.j.message || '';
+        step2();
+      })
+      .catch(function () { setErr('网络错误'); btn.disabled = false; });
+  }
+
+  function step2() {
+    setErr('');
+    dmTitle.textContent = '二次确认';
+    dmStep.textContent = '第 2 / 2 步 · 输入邮件确认码';
+    dmBody.innerHTML =
+      '<p>' + esc(sentTo) + '</p>' +
+      '<p class="small">10 分钟内有效。如果没收到，请查看垃圾箱。</p>' +
+      '<input type="text" class="code" id="dmCode" inputmode="numeric" maxlength="6" placeholder="000000">';
+    dmActs.innerHTML =
+      '<button class="mute" id="dmBack">返回</button>' +
+      '<button class="warn" id="dmConfirm">确认注销</button>';
+    document.getElementById('dmBack').onclick = openDelete;
+    document.getElementById('dmConfirm').onclick = doConfirm;
+    var c = document.getElementById('dmCode');
+    if (c) { c.focus(); c.onkeydown = function (e) { if (e.key === 'Enter') doConfirm(); }; }
+  }
+
+  function doConfirm() {
+    var c = document.getElementById('dmCode');
+    var code = c ? c.value.trim() : '';
+    if (!/^\d{6}$/.test(code)) { setErr('请输入 6 位确认码'); return; }
+    var btn = document.getElementById('dmConfirm');
+    btn.disabled = true;
+    setErr('');
+    fetch('/api/account/delete/confirm', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ code: code }),
+    })
+      .then(function (r) { return r.json().then(function (j) { return { s: r.status, j: j }; }); })
+      .then(function (res) {
+        if (!res.j.ok) { setErr(res.j.message || '注销失败'); btn.disabled = false; return; }
+        dmTitle.textContent = '已注销';
+        dmStep.textContent = '完成';
+        dmBody.innerHTML =
+          '<p>' + esc(res.j.message) + '</p><p class="small">' + esc(res.j.detail || '') + '</p>' +
+          '<p class="small">正在返回主站…</p>';
+        dmActs.innerHTML = '<button id="dmHome">返回主站</button>';
+        document.getElementById('dmHome').onclick = function () { location.href = '/'; };
+        setTimeout(function () { location.href = '/'; }, 2600);
+      })
+      .catch(function () { setErr('网络错误'); btn.disabled = false; });
+  }
+
+  /* ===================== 管理员：注销通知 ===================== */
+  function renderNotices(n) {
+    if (!n || !n.count) { noticesEl.innerHTML = ''; return; }
+    var rows = n.deletions.slice(0, 10).map(function (d) {
+      return '<div class="delrow"><span class="d-u">' + esc(d.username) +
+        (d.email ? ' · ' + esc(d.email) : '') + '</span>' +
+        '<span class="d-t">' + fmtTime(d.at) + '</span></div>';
+    }).join('');
+    noticesEl.innerHTML =
+      '<div class="notice">' +
+      '<div class="nt-l">' +
+      '<div class="nt-t">最近注销 ' + n.count + ' 人</div>' +
+      '<div class="nt-s">点「已读」后本条消息消失，之后再有注销会重新出现</div>' +
+      '</div>' +
+      '<button id="readBtn">已读</button>' +
+      '</div>' +
+      '<div class="dellist">' + rows + '</div>';
+    document.getElementById('readBtn').onclick = function () {
+      var b = document.getElementById('readBtn');
+      b.disabled = true;
+      fetch('/api/admin/notices/read', { method: 'POST' })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          if (j.ok) { noticesEl.innerHTML = ''; loadAdmin(); }
+          else { b.disabled = false; }
+        })
+        .catch(function () { b.disabled = false; });
+    };
+  }
+
+  /* ===================== 管理员：账户管理 ===================== */
   function renderUsers(data) {
     var s = data.stats || {};
     var html =
@@ -156,23 +347,20 @@
       '</div>' +
       '<div class="card"><h2>账户管理</h2>';
 
-    if (!isAdmin) {
-      html += '<div class="center">只有管理员可以管理账户。<br>如需激活账户，请<a href="/contact/">联系我们</a>。</div>';
-    } else if (!data.users.length) {
+    if (!data.users.length) {
       html += '<div class="center">暂无账户</div>';
     } else {
       data.users.forEach(function (u) {
         var meta = (u.email || '（无邮箱）') + ' · 注册于 ' + fmtDate(u.createdAt);
-        html +=
-          '<div class="row">' +
-          '<div class="info">' +
+        html += '<div class="row"><div class="info">' +
           '<div class="name">' + esc(u.username) + tagOf(u) + '</div>' +
-          '<div class="meta">' + esc(meta) + '</div>' +
-          '</div>';
+          '<div class="meta">' + esc(meta) + '</div></div>';
         if (u.isAdmin) {
           html += '<button disabled>永不到期</button>';
         } else {
-          if (u.state === 'active') {
+          if (u.isTrial) {
+            html += '<button class="mute" disabled>试用账户</button>';
+          } else if (u.state === 'active') {
             html += '<button class="warn" data-act="deactivate" data-u="' + esc(u.username) + '">取消激活</button>';
           } else {
             html += '<button data-act="activate" data-u="' + esc(u.username) + '">激活</button>';
@@ -185,9 +373,7 @@
     html += '</div><div class="msg" id="msg"></div>';
     app.innerHTML = html;
 
-    app.querySelectorAll('button[data-act]').forEach(function (b) {
-      b.onclick = function () { act(b); };
-    });
+    app.querySelectorAll('button[data-act]').forEach(function (b) { b.onclick = function () { act(b); }; });
   }
 
   function note(text, ok) {
@@ -200,50 +386,52 @@
   function act(btn) {
     var action = btn.dataset.act;
     var username = btn.dataset.u;
-    var map = { activate: 'activate', deactivate: 'activate', extend: 'extend' };
-    var url = '/api/admin/' + map[action];
-    var body = action === 'extend' ? { username: username, days: 7 } : { username: username, activate: action === 'activate' };
-
+    var url = '/api/admin/' + (action === 'extend' ? 'extend' : 'activate');
+    var body = action === 'extend'
+      ? { username: username, days: 7 }
+      : { username: username, activate: action === 'activate' };
     btn.disabled = true;
-    fetch(url, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    })
+    fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
       .then(function (r) { return r.json(); })
       .then(function (j) {
         note(j.message || (j.ok ? '完成' : '失败'), !!j.ok);
-        if (j.ok) load();
-        else btn.disabled = false;
+        if (j.ok) loadAdmin(); else btn.disabled = false;
       })
       .catch(function () { note('网络错误', false); btn.disabled = false; });
   }
 
-  function load() {
-    fetch('/api/admin/users', { cache: 'no-store' })
+  function loadAdmin() {
+    return fetch('/api/admin/users', { cache: 'no-store' })
       .then(function (r) { return r.json(); })
       .then(function (j) {
-        if (!j.ok) {
-          if (j.needLogin) {
-            who.textContent = '未登录';
-            app.innerHTML = '<div class="card"><div class="center">请先<a href="/login/">登录</a>后再访问控制台。</div></div>';
-            return;
-          }
-          who.textContent = '无权限';
-          app.innerHTML = '<div class="card"><div class="center">' + esc(j.message || '无权访问') + '<br>如需激活账户，请<a href="/contact/">联系我们</a>。</div></div>';
-          return;
-        }
-        isAdmin = true;
-        who.textContent = '管理员视图 · 可激活或续期账户';
+        if (!j.ok) { noticesEl.innerHTML = ''; app.innerHTML = ''; return; }
+        renderNotices(j.notices);
         renderUsers(j);
       })
-      .catch(function () {
-        who.textContent = '加载失败';
-        app.innerHTML = '<div class="card"><div class="center">网络错误，请稍后重试。</div></div>';
-      });
+      .catch(function () { /* 静默 */ });
   }
 
-  load();
+  /* ===================== 入口 ===================== */
+  fetch('/api/me', { cache: 'no-store' })
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      if (!j.loggedIn) {
+        who.textContent = '未登录';
+        meEl.innerHTML = '<div class="card"><div class="center">请先<a href="/login/">登录</a>后再访问控制台。</div></div>';
+        return;
+      }
+      ME = j;
+      var u = j.user || {};
+      who.textContent = u.isAdmin
+        ? '管理员视图 · 可激活 / 续期账户'
+        : '账户视图 · 可查看状态与注销账户';
+      renderMe(j);
+      if (u.isAdmin) loadAdmin();
+    })
+    .catch(function () {
+      who.textContent = '加载失败';
+      meEl.innerHTML = '<div class="card"><div class="center">网络错误，请稍后重试。</div></div>';
+    });
 })();
 </script>
   <script src="/status.js" defer></script>

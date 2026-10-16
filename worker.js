@@ -34,6 +34,9 @@ const CODE_TTL = 10 * 60;
 /** 同一邮箱发送验证码的最小间隔（秒） */
 const CODE_COOLDOWN = 60;
 
+/** 注销确认码有效期（秒）：10 分钟 */
+const DELCODE_TTL = 10 * 60;
+
 /** 人机验证票据有效期（秒） */
 const CAPTCHA_TTL = 5 * 60;
 
@@ -446,6 +449,11 @@ async function handleSendCode(env, request, ip) {
   if (!v.ok) return json({ ok: false, message: v.message }, 400);
   const email = v.email;
 
+  // 2.5) 已注销的邮箱不可再注册，提前拦下以免白费一封邮件
+  if (await isEmailRetired(env, email)) {
+    return json({ ok: false, message: '该邮箱已注销，不可再次注册' }, 400);
+  }
+
   // 3) 冷却限制
   const cd = await env.USERS.get('cooldown:' + email);
   if (cd) return json({ ok: false, message: '发送过于频繁，请稍后再试' }, 429);
@@ -486,6 +494,11 @@ async function handleRegister(env, request, ip) {
   const v = validateEmail(body.email);
   if (!v.ok) return json({ ok: false, message: v.message }, 400);
   const email = v.email;
+
+  // 已注销的邮箱永久不可再注册
+  if (await isEmailRetired(env, email)) {
+    return json({ ok: false, message: '该邮箱已注销，不可再次注册' }, 400);
+  }
 
   const username = String(body.username || '').trim().toLowerCase();
   if (!/^[a-z0-9_-]{3,20}$/.test(username)) {
@@ -598,6 +611,186 @@ async function handleLogout(env, request) {
   });
 }
 
+/* ========================== 注销账户 ========================== */
+
+/** 注销通知的 KV 键。管理员点「已读」即删除此键 */
+const NOTICE_KEY = 'notice:deletions';
+/** 通知最多保留多少条，防止无限增长 */
+const NOTICE_MAX = 50;
+
+/** 该邮箱是否已被注销、不可再次注册 */
+async function isEmailRetired(env, email) {
+  if (!email) return false;
+  return !!(await env.USERS.get('retired:' + email));
+}
+
+/** 把邮箱永久加入「不可再注册」名单 */
+async function retireEmail(env, email, username) {
+  if (!email) return;
+  await env.USERS.put('retired:' + email, JSON.stringify({ username, at: Date.now() }));
+}
+
+/** 记一条注销通知（管理员点已读前一直累积） */
+async function recordDeletion(env, user) {
+  let list = [];
+  try {
+    list = (await env.USERS.get(NOTICE_KEY, 'json')) || [];
+  } catch {
+    list = [];
+  }
+  if (!Array.isArray(list)) list = [];
+  list.unshift({
+    username: user.username,
+    email: user.email || '',
+    at: Date.now(),
+    verified: !!user.verified,
+  });
+  await env.USERS.put(NOTICE_KEY, JSON.stringify(list.slice(0, NOTICE_MAX)));
+}
+
+/** 踢掉某个账户的全部会话 */
+async function deleteUserSessions(env, username) {
+  let removed = 0;
+  try {
+    const list = await env.USERS.list({ prefix: 'session:', limit: 1000 });
+    for (const k of list.keys) {
+      const s = await env.USERS.get(k.name, 'json');
+      if (s && s.username === username) {
+        await env.USERS.delete(k.name);
+        removed++;
+      }
+    }
+  } catch {
+    /* 忽略：会话到期会自行失效 */
+  }
+  return removed;
+}
+
+/** 取当前会话对应的用户，并做「能否注销」的通用校验 */
+async function deleteGuard(env, request) {
+  const session = await getSession(env, request);
+  if (!session) return { error: json({ ok: false, message: '请先登录', needLogin: true }, 401) };
+  const user = await sessionUser(env, session);
+  if (!user) return { error: json({ ok: false, message: '账户不存在' }, 404) };
+  // 保护系统账户：管理员注销掉就没人能管理了；42 是公开的共享试用号，
+  // 谁都能登录，若允许注销，任何人都能把演示账号弄没。
+  if (user.isAdmin) return { error: json({ ok: false, message: '管理员账户不可注销' }, 403) };
+  if (user.isTrial) return { error: json({ ok: false, message: '试用账户不可注销' }, 403) };
+  if (!user.email) return { error: json({ ok: false, message: '该账户没有绑定邮箱，无法发送确认邮件' }, 400) };
+  return { session, user };
+}
+
+/**
+ * 注销第一步：校验密码，然后往绑定邮箱发一封注销确认码。
+ * 真正的删除发生在第二步（handleDeleteConfirm），避免误触即刻删号。
+ */
+async function handleDeleteRequest(env, request) {
+  const g = await deleteGuard(env, request);
+  if (g.error) return g.error;
+  const { user } = g;
+
+  const body = await readJson(request);
+  const password = String(body.password || '');
+  if (!password) return json({ ok: false, message: '请输入密码' }, 400);
+
+  const hash = await hashPassword(password, user.salt);
+  if (!timingSafeEqual(hash, user.hash)) {
+    return json({ ok: false, message: '密码不正确' }, 401);
+  }
+
+  // 冷却：同一账户 60 秒内只能发一次确认码
+  const ck = 'delcooldown:' + user.username;
+  if (await env.USERS.get(ck)) {
+    return json({ ok: false, message: '确认码刚发过，请稍后再试或查看邮箱' }, 429);
+  }
+
+  const code = String(Math.floor(100000 + Math.random() * 900000));
+  await env.USERS.put(
+    'delcode:' + user.username,
+    JSON.stringify({ code, tries: 0, email: user.email }),
+    { expirationTtl: DELCODE_TTL }
+  );
+  await env.USERS.put(ck, '1', { expirationTtl: CODE_COOLDOWN });
+
+  const sent = await sendMail(
+    env,
+    user.email,
+    '【zrfeng.top】注销账户确认',
+    `<div style="font-family:system-ui,-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;padding:24px;background:#050807;color:#e8f5ee">
+       <h2 style="color:#ff5c5c;margin:0 0 12px">注销账户确认</h2>
+       <p style="color:#a9c6b8;margin:0 0 16px">你正在注销 zrfeng.top 的账户 <b style="color:#00ff8c">${user.username}</b>。确认码是：</p>
+       <p style="font-size:30px;letter-spacing:8px;font-weight:700;color:#ff5c5c;margin:0 0 18px">${code}</p>
+       <p style="color:#7fa893;font-size:13px;margin:0 0 8px">10 分钟内有效。</p>
+       <p style="color:#7fa893;font-size:13px;margin:0">注销后该邮箱<b>不可再次注册</b>，账户数据将被删除且无法恢复。</p>
+       <p style="color:#5c7a6b;font-size:12px;margin:16px 0 0">如果这不是你本人操作，请忽略本邮件，账户不会有任何变化。</p>
+     </div>`
+  );
+  if (!sent.ok) return json({ ok: false, message: sent.message }, 502);
+
+  return json({
+    ok: true,
+    message: '确认码已发送到 ' + maskEmail(user.email),
+    needCode: true,
+  });
+}
+
+/** 把邮箱打码，避免接口回显完整地址 */
+function maskEmail(email) {
+  const s = String(email || '');
+  const i = s.indexOf('@');
+  if (i <= 0) return '你的邮箱';
+  const name = s.slice(0, i);
+  const head = name.slice(0, Math.min(2, name.length));
+  return head + '***' + s.slice(i);
+}
+
+/**
+ * 注销第二步（二次确认）：校验邮件里的确认码，通过后才真正删除。
+ */
+async function handleDeleteConfirm(env, request) {
+  const g = await deleteGuard(env, request);
+  if (g.error) return g.error;
+  const { user } = g;
+
+  const body = await readJson(request);
+  const input = String(body.code || '').trim();
+  if (!/^\d{6}$/.test(input)) return json({ ok: false, message: '请输入 6 位确认码' }, 400);
+
+  const rec = await env.USERS.get('delcode:' + user.username, 'json');
+  if (!rec) return json({ ok: false, message: '确认码已过期，请重新获取' }, 400);
+  if (rec.tries >= 5) {
+    await env.USERS.delete('delcode:' + user.username);
+    return json({ ok: false, message: '尝试次数过多，请重新获取确认码' }, 400);
+  }
+  if (String(input) !== String(rec.code)) {
+    rec.tries = (rec.tries || 0) + 1;
+    await env.USERS.put('delcode:' + user.username, JSON.stringify(rec), { expirationTtl: DELCODE_TTL });
+    return json({ ok: false, message: '确认码不正确' }, 400);
+  }
+
+  // 1) 邮箱拉黑，永久不可再注册
+  await retireEmail(env, user.email, user.username);
+  // 2) 删除账户与邮箱索引
+  await env.USERS.delete('user:' + user.username);
+  if (user.email) await env.USERS.delete('email:' + user.email);
+  // 3) 清掉所有会话与确认码
+  const sessions = await deleteUserSessions(env, user.username);
+  await env.USERS.delete('delcode:' + user.username);
+  // 4) 给管理员留一条通知
+  await recordDeletion(env, user);
+
+  return json(
+    {
+      ok: true,
+      message: '账户已注销',
+      detail: '该邮箱已不可再次注册，账户数据已删除。',
+      removedSessions: sessions,
+    },
+    200,
+    { 'Set-Cookie': 'session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0' }
+  );
+}
+
 /**
  * 下载链接 —— 只有登录用户才能拿到。
  * 链接来自密钥 DOWNLOAD_LINKS，不在公开仓库里。
@@ -682,7 +875,45 @@ async function handleAdminUsers(env, request) {
     blocked: users.filter((u) => u.state === 'blocked').length,
   };
 
-  return json({ ok: true, users, stats });
+  // 注销通知：管理员点「已读」前一直累积
+  let deletions = [];
+  try {
+    deletions = (await env.USERS.get(NOTICE_KEY, 'json')) || [];
+  } catch {
+    deletions = [];
+  }
+  if (!Array.isArray(deletions)) deletions = [];
+
+  return json({
+    ok: true,
+    users,
+    stats,
+    notices: {
+      deletions,
+      count: deletions.length,
+      latestAt: deletions.length ? deletions[0].at : null,
+    },
+  });
+}
+
+/**
+ * 管理员点「已读」：删除注销通知。
+ * 之后再有人注销，会重新累积出新的通知。
+ */
+async function handleAdminNoticesRead(env, request) {
+  const guard = await requireAdmin(env, request);
+  if (guard.error) return guard.error;
+
+  let count = 0;
+  try {
+    const cur = (await env.USERS.get(NOTICE_KEY, 'json')) || [];
+    count = Array.isArray(cur) ? cur.length : 0;
+  } catch {
+    count = 0;
+  }
+  await env.USERS.delete(NOTICE_KEY);
+
+  return json({ ok: true, message: '已清空 ' + count + ' 条注销通知', cleared: count });
 }
 
 /**
@@ -874,6 +1105,9 @@ export default {
               email: s.email,
               isAdmin: !!s.isAdmin,
               verified: !!(u && u.verified),
+              isTrial: !!(u && u.isTrial),
+              // 能否自助注销：由服务端判定，前端只用来决定是否显示按钮
+              canDelete: !!(u && !u.isAdmin && !u.isTrial && u.email),
             },
             account: accountStatus(u),
           });
@@ -894,6 +1128,14 @@ export default {
           return await handleDownloads(env, request);
         }
 
+        // 自助注销：第一步验密码并发邮件，第二步凭确认码真正删除
+        if (path === '/api/account/delete/request' && method === 'POST') {
+          return await handleDeleteRequest(env, request);
+        }
+        if (path === '/api/account/delete/confirm' && method === 'POST') {
+          return await handleDeleteConfirm(env, request);
+        }
+
         // 管理员控制台
         if (path === '/api/admin/users' && method === 'GET') {
           return await handleAdminUsers(env, request);
@@ -903,6 +1145,9 @@ export default {
         }
         if (path === '/api/admin/extend' && method === 'POST') {
           return await handleAdminExtend(env, request);
+        }
+        if (path === '/api/admin/notices/read' && method === 'POST') {
+          return await handleAdminNoticesRead(env, request);
         }
 
         return json({ ok: false, message: '接口不存在' }, 404);
