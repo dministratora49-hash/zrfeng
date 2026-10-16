@@ -19,6 +19,7 @@
   var BAR_ID = 'dsh-status-bar';
   var MASK_ID = 'dsh-block-mask';
   var MAINT_ID = 'dsh-maint-mask';
+  var BAN_ID = 'dsh-ban-mask';
   var DAY = 86400000;
 
   /** 每秒倒计时的定时器；重新渲染前必须先清掉，避免叠加 */
@@ -100,7 +101,24 @@
     'font-family:inherit;border:1px solid rgba(255,170,0,.5);background:rgba(255,170,0,.1);' +
     'color:#ffc55c;}' +
     '#' + MAINT_ID + ' .mt-acts a:active,#' + MAINT_ID + ' .mt-acts button:active{opacity:.7;}' +
-    '#' + MAINT_ID + ' .mt-note{font-size:11px;color:#8a8060;margin-top:12px;}';
+    '#' + MAINT_ID + ' .mt-note{font-size:11px;color:#8a8060;margin-top:12px;}' +
+    /* 封禁弹窗：与「试用期已到」同款红色卡片，只换文案 */
+    '#' + BAN_ID + '{position:fixed;inset:0;z-index:100002;background:rgba(0,0,0,.78);' +
+    'display:flex;align-items:center;justify-content:center;padding:20px;' +
+    'font-family:"Microsoft YaHei","PingFang SC",sans-serif;}' +
+    '#' + BAN_ID + ' .bn-card{width:100%;max-width:360px;padding:26px 22px;text-align:center;' +
+    'background:rgba(16,8,8,.99);border:1px solid rgba(255,60,60,.6);border-radius:16px;' +
+    'box-shadow:0 0 40px rgba(255,60,60,.22);}' +
+    '#' + BAN_ID + ' h2{margin:0 0 12px;font-size:22px;color:#ff4444;letter-spacing:.5px;' +
+    'font-family:Orbitron,"Microsoft YaHei",sans-serif;}' +
+    '#' + BAN_ID + ' p{margin:0 0 18px;font-size:13px;line-height:1.9;color:#e8d0d0;}' +
+    '#' + BAN_ID + ' .bn-meta{font-size:11px;color:#9c7c7c;margin:-8px 0 16px;}' +
+    '#' + BAN_ID + ' .bn-acts{display:flex;gap:10px;}' +
+    '#' + BAN_ID + ' .bn-acts a,#' + BAN_ID + ' .bn-acts button{flex:1;padding:10px 0;' +
+    'border-radius:9px;font-size:13px;cursor:pointer;text-decoration:none;text-align:center;' +
+    'font-family:inherit;border:1px solid rgba(255,60,60,.5);background:rgba(255,60,60,.1);' +
+    'color:#ff8a8a;}' +
+    '#' + BAN_ID + ' .bn-acts a:active,#' + BAN_ID + ' .bn-acts button:active{opacity:.7;}';
 
   function injectCss() {
     if (document.getElementById('dsh-status-css')) return;
@@ -155,6 +173,40 @@
   function hideBlocked() {
     var m = document.getElementById(MASK_ID);
     if (m) m.remove();
+  }
+
+  /* ==================== 封禁弹窗 ==================== */
+
+  function hideBanned() {
+    var m = document.getElementById(BAN_ID);
+    if (m) m.remove();
+  }
+
+  function showBanned(acc) {
+    if (document.getElementById(BAN_ID)) return;
+    var meta = '';
+    if (acc && acc.bannedAt) meta = '<p class="bn-meta">封禁时间：' + fmtClock(acc.bannedAt) + '</p>';
+    var mask = document.createElement('div');
+    mask.id = BAN_ID;
+    mask.innerHTML =
+      '<div class="bn-card">' +
+      '<h2>You are banned</h2>' +
+      '<p>该账户已被管理员封禁，请联系管理员。</p>' +
+      meta +
+      '<div class="bn-acts">' +
+      '<a href="/contact/">联系我们</a>' +
+      '<button type="button" id="dsh-ban-out">退出登录</button>' +
+      '</div>' +
+      '</div>';
+    document.body.appendChild(mask);
+    var out = document.getElementById('dsh-ban-out');
+    if (out) {
+      out.onclick = function () {
+        fetch('/api/logout', { method: 'POST' }).then(function () {
+          location.href = '/';
+        });
+      };
+    }
   }
 
   /* ==================== 维护弹窗 ==================== */
@@ -361,6 +413,13 @@
       showBlocked();
     } else {
       hideBlocked();
+    }
+
+    // 被封禁：弹出 You are banned
+    if (acc.state === 'banned') {
+      showBanned(acc);
+    } else {
+      hideBanned();
     }
 
     // 维护时段：到点自动弹出 / 到点自动关闭

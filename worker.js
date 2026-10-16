@@ -273,6 +273,22 @@ function accountStatus(user) {
     return { state: 'admin', dot: 'yellow', label: '未激活，试用期仅剩-1天', activated: false, days: -1, remainingMs: null };
   }
 
+  // 被封禁：优先级仅次于管理员。仍然允许登录，目的是让他看到「You are banned」；
+  // 但下载会被服务端拦掉。
+  if (user.banned) {
+    return {
+      state: 'banned',
+      dot: 'red',
+      label: 'You are banned（账户已被封禁）',
+      activated: false,
+      days: null,
+      remainingMs: null,
+      banned: true,
+      bannedAt: user.bannedAt || null,
+      bannedBy: user.bannedBy || null,
+    };
+  }
+
   // 已激活 = 完成了电子邮件验证
   if (user.verified) {
     return { state: 'active', dot: 'green', label: '账户正常', activated: true, days: null, remainingMs: null };
@@ -810,6 +826,13 @@ async function handleDownloads(env, request) {
       403
     );
   }
+  // 被封禁的账户同样拿不到任何下载链接
+  if (status.state === 'banned') {
+    return json(
+      { ok: false, message: '该账户已被封禁，请联系管理员', banned: true, needLogin: false, account: status },
+      403
+    );
+  }
 
   let links = [];
   if (env.DOWNLOAD_LINKS) {
@@ -863,6 +886,8 @@ async function handleAdminUsers(env, request) {
       state: st.state,
       label: st.label,
       days: st.days,
+      banned: !!u.banned,
+      bannedAt: u.bannedAt || null,
     });
   }
   // 管理员在前，其余按创建时间倒序
@@ -873,6 +898,7 @@ async function handleAdminUsers(env, request) {
     active: users.filter((u) => u.state === 'active').length,
     trial: users.filter((u) => u.state === 'trial').length,
     blocked: users.filter((u) => u.state === 'blocked').length,
+    banned: users.filter((u) => u.state === 'banned').length,
   };
 
   // 注销通知：管理员点「已读」前一直累积
@@ -1057,6 +1083,49 @@ async function handleAdminExtend(env, request) {
   });
 }
 
+/* ========================== 封禁 / 解封 ========================== */
+
+/**
+ * 封禁或解封账户。
+ * 封禁后会立刻踢掉该账户的所有会话，于是他再登录时就会看到「You are banned」。
+ */
+async function handleAdminBan(env, request) {
+  const guard = await requireAdmin(env, request);
+  if (guard.error) return guard.error;
+
+  const body = await readJson(request);
+  const username = String(body.username || '').trim().toLowerCase();
+  const banned = body.banned !== false;
+
+  if (!username) return json({ ok: false, message: '缺少用户名' }, 400);
+  if (username === 'admin') return json({ ok: false, message: '管理员账户不可封禁' }, 400);
+
+  const user = await getUser(env, username);
+  if (!user) return json({ ok: false, message: '账户不存在' }, 404);
+
+  user.banned = banned;
+  if (banned) {
+    user.bannedAt = Date.now();
+    user.bannedBy = guard.session.username;
+  } else {
+    delete user.bannedAt;
+    delete user.bannedBy;
+  }
+  await putUser(env, user);
+
+  // 封禁立刻生效：踢掉该账户所有会话，他重新登录就会看到提示
+  let kicked = 0;
+  if (banned) kicked = await deleteUserSessions(env, username);
+
+  return json({
+    ok: true,
+    message: banned ? '已封禁账户 ' + username : '已解封账户 ' + username,
+    username,
+    kicked,
+    account: accountStatus(user),
+  });
+}
+
 /* ========================== 主入口 ========================== */
 
 export default {
@@ -1233,6 +1302,9 @@ export default {
         }
         if (path === '/api/admin/maintenance' && method === 'POST') {
           return await handleAdminMaintenance(env, request);
+        }
+        if (path === '/api/admin/ban' && method === 'POST') {
+          return await handleAdminBan(env, request);
         }
 
         return json({ ok: false, message: '接口不存在' }, 404);

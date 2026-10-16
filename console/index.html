@@ -28,7 +28,7 @@
   h1 { font-size: 24px; color: #00ff8c; letter-spacing: 1px; margin-bottom: 6px; }
   .sub { font-size: 12px; color: #7fa893; margin-bottom: 22px; }
 
-  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 22px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 10px; margin-bottom: 22px; }
   .stat {
     padding: 14px 10px; text-align: center;
     border: 1px solid rgba(0,255,140,0.22); border-radius: 12px; background: rgba(10,18,14,0.7);
@@ -56,6 +56,7 @@
   .tag.trial   { background: rgba(255,204,0,0.15); color: #ffcc00; border: 1px solid rgba(255,204,0,0.4); }
   .tag.blocked { background: rgba(255,77,77,0.15); color: #ff5c5c; border: 1px solid rgba(255,77,77,0.45); }
   .tag.admin   { background: rgba(0,200,255,0.15); color: #4dd2ff; border: 1px solid rgba(0,200,255,0.4); }
+  .tag.banned  { background: rgba(255,68,68,0.18); color: #ff4444; border: 1px solid rgba(255,68,68,0.55); }
 
   button {
     padding: 7px 13px; border-radius: 8px;
@@ -203,6 +204,7 @@
 
   function tagOf(u) {
     if (u.isAdmin) return '<span class="tag admin">管理员</span>';
+    if (u.banned) return '<span class="tag banned">已封禁</span>';
     if (u.state === 'active') return '<span class="tag active">已激活</span>';
     if (u.state === 'blocked') return '<span class="tag blocked">试用期已到</span>';
     return '<span class="tag trial">未激活 ' + (u.days != null ? u.days + ' 天' : '') + '</span>';
@@ -376,6 +378,7 @@
       '<div class="stat"><b>' + (s.active || 0) + '</b><span>已激活</span></div>' +
       '<div class="stat"><b>' + (s.trial || 0) + '</b><span>试用中</span></div>' +
       '<div class="stat"><b style="color:#ff5c5c">' + (s.blocked || 0) + '</b><span>已到期</span></div>' +
+      '<div class="stat"><b style="color:#ff4444">' + (s.banned || 0) + '</b><span>已封禁</span></div>' +
       '</div>' +
       '<div class="card"><h2>账户管理</h2>';
 
@@ -398,6 +401,9 @@
             html += '<button data-act="activate" data-u="' + esc(u.username) + '">激活</button>';
           }
           html += '<button data-act="extend" data-u="' + esc(u.username) + '">续 7 天</button>';
+          html += u.banned
+            ? '<button data-act="unban" data-u="' + esc(u.username) + '">解封</button>'
+            : '<button class="warn" data-act="ban" data-u="' + esc(u.username) + '">封禁</button>';
         }
         html += '</div>';
       });
@@ -418,10 +424,18 @@
   function act(btn) {
     var action = btn.dataset.act;
     var username = btn.dataset.u;
-    var url = '/api/admin/' + (action === 'extend' ? 'extend' : 'activate');
-    var body = action === 'extend'
-      ? { username: username, days: 7 }
-      : { username: username, activate: action === 'activate' };
+    var url, body;
+    if (action === 'extend') {
+      url = '/api/admin/extend';
+      body = { username: username, days: 7 };
+    } else if (action === 'activate' || action === 'deactivate') {
+      url = '/api/admin/activate';
+      body = { username: username, activate: action === 'activate' };
+    } else {
+      // ban / unban
+      url = '/api/admin/ban';
+      body = { username: username, banned: action === 'ban' };
+    }
     btn.disabled = true;
     fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
       .then(function (r) { return r.json(); })
