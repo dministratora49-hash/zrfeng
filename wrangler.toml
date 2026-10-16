@@ -28,7 +28,11 @@ id = "fa1730e5c959430c82fc69708b68dba9"
 #
 #      SESSION_SECRET     必填，任意长随机串（签名会话与验证码）
 #      DOWNLOAD_LINKS     必填，JSON 数组，7 个网盘链接放这里
-#      ADMIN_PASSWORD     管理员密码（不设则用 admin@123）
+#      ADMIN_USERNAME     主管理员账户名（不设则不自动建号）
+#      ADMIN_PASSWORD     主管理员密码
+#      ADMIN_EMAIL        （可选）主管理员邮箱，可用邮箱登录
+#      TRIAL_ACCOUNT      试用账户名（不设则不自动建号）
+#      TRIAL_PASSWORD     试用账户密码
 #      RESEND_API_KEY     邮件服务密钥（真发验证码）
 #      MAIL_FROM          发件人，如 "zrfeng.top <noreply@zrfeng.top>"
 #      TURNSTILE_SECRET   （可选）Cloudflare 人机验证密钥

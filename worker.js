@@ -13,7 +13,11 @@
  * 需要的绑定与密钥（在 Cloudflare 控制台或 wrangler 里配置）：
  *   KV 命名空间绑定  USERS
  *   密钥 DOWNLOAD_LINKS     JSON 数组，形如 [{"name":"小飞机网盘","url":"...","pwd":""}]
- *   密钥 ADMIN_PASSWORD     管理员密码（不设则用 admin@123）
+ *   密钥 ADMIN_USERNAME     主管理员账户名（不设则不自动建号）
+ *   密钥 ADMIN_PASSWORD     主管理员密码
+ *   密钥 ADMIN_EMAIL        （可选）主管理员邮箱，允许用邮箱登录
+ *   密钥 TRIAL_ACCOUNT      试用账户名（不设则不自动建号）
+ *   密钥 TRIAL_PASSWORD     试用账户密码
  *   密钥 SESSION_SECRET     会话/验证码签名密钥（必填，任意长随机串）
  *   密钥 RESEND_API_KEY     邮件服务密钥（真发验证码用）
  *   密钥 MAIL_FROM          发件人，如 "zrfeng.top <noreply@zrfeng.top>"
@@ -43,15 +47,30 @@ const CAPTCHA_TTL = 5 * 60;
 /** PBKDF2 迭代次数。Workers 免费版 CPU 有限，不宜过高 */
 const PBKDF2_ITERATIONS = 15000;
 
-/** 保留用户名，不允许注册 */
-const RESERVED = new Set(['admin', 'administrator', 'root', 'system', 'zrfeng', '42']);
+/** 保留用户名，不允许注册（admin / 试用账户名另外由密钥决定，见 reservedNames） */
+const RESERVED = new Set(['administrator', 'root', 'system', 'zrfeng']);
+
+/**
+ * 管理员与试用账户的账户名 / 密码全部来自 Cloudflare 密钥，
+ * 不写死在代码里 —— 否则会随公开仓库一起泄露。
+ */
+const adminUsername = (env) => String(env.ADMIN_USERNAME || '').trim().toLowerCase();
+const adminEmail = (env) => String(env.ADMIN_EMAIL || '').trim().toLowerCase();
+const trialUsername = (env) => String(env.TRIAL_ACCOUNT || '').trim().toLowerCase();
+
+/** 不允许注册的名字（含运行时的管理员 / 试用账户名） */
+function reservedNames(env) {
+  const set = new Set(RESERVED);
+  const a = adminUsername(env);
+  const t = trialUsername(env);
+  if (a) set.add(a);
+  if (t) set.add(t);
+  return set;
+}
 
 /** 试用账户天数（未激活账户的倒计时） */
 const TRIAL_DAYS = 7;
 
-/** 试用账户的用户名与密码 */
-const TRIAL_ACCOUNT = '42';
-const TRIAL_PASSWORD = '424242';
 
 /* ========================== 工具函数 ========================== */
 
@@ -379,16 +398,20 @@ async function sessionUser(env, session) {
   return await getUser(env, session.username);
 }
 
-/** 确保试用账户 42 存在（用户名 42 / 密码 424242） */
+/** 确保试用账户存在（账户名 / 密码来自密钥，未配置则不建号） */
 async function ensureTrial(env) {
-  const existing = await env.USERS.get('user:' + TRIAL_ACCOUNT, 'json');
+  const name = trialUsername(env);
+  const password = String(env.TRIAL_PASSWORD || '');
+  if (!name || !password) return null;
+
+  const existing = await env.USERS.get('user:' + name, 'json');
   if (existing) return existing;
 
   const salt = randomHex(16);
-  const hash = await hashPassword(TRIAL_PASSWORD, salt);
+  const hash = await hashPassword(password, salt);
   const now = Date.now();
   const user = {
-    username: TRIAL_ACCOUNT,
+    username: name,
     email: '',
     salt,
     hash,
@@ -398,21 +421,24 @@ async function ensureTrial(env) {
     trialStart: now,
     createdAt: now,
   };
-  await env.USERS.put('user:' + TRIAL_ACCOUNT, JSON.stringify(user));
+  await env.USERS.put('user:' + name, JSON.stringify(user));
   return user;
 }
 
-/** 确保管理员账户存在（首次访问时创建） */
+/** 确保管理员账户存在（首次访问时创建；账户名/密码来自密钥） */
 async function ensureAdmin(env) {
-  const existing = await env.USERS.get('user:admin', 'json');
+  const name = adminUsername(env);
+  const password = String(env.ADMIN_PASSWORD || '');
+  if (!name || !password) return null;
+
+  const existing = await env.USERS.get('user:' + name, 'json');
   if (existing) return existing;
 
-  const password = env.ADMIN_PASSWORD || 'admin@123';
   const salt = randomHex(16);
   const hash = await hashPassword(password, salt);
   const admin = {
-    username: 'admin',
-    email: (env.ADMIN_EMAIL || 'admin@zrfeng.top').toLowerCase(),
+    username: name,
+    email: adminEmail(env),
     salt,
     hash,
     isAdmin: true,
@@ -420,7 +446,7 @@ async function ensureAdmin(env) {
     verified: true,
     createdAt: Date.now(),
   };
-  await env.USERS.put('user:admin', JSON.stringify(admin));
+  await env.USERS.put('user:' + name, JSON.stringify(admin));
   return admin;
 }
 
@@ -571,7 +597,7 @@ async function handleRegister(env, request, ip) {
   if (!/^[a-z0-9_-]{3,20}$/.test(username)) {
     return json({ ok: false, message: '用户名需 3-20 位，仅字母数字下划线连字符' }, 400);
   }
-  if (RESERVED.has(username)) {
+  if (reservedNames(env).has(username)) {
     return json({ ok: false, message: '该用户名为系统保留，请换一个' }, 400);
   }
 
@@ -641,10 +667,10 @@ async function handleLogin(env, request, ip) {
     return json({ ok: false, message: '请输入账号和密码' }, 400);
   }
 
-  // admin 首次登录时自动建号
-  if (account === 'admin' || account === 'admin@zrfeng.top') await ensureAdmin(env);
-  // 试用账户 42 首次登录时自动建号
-  if (account === TRIAL_ACCOUNT) await ensureTrial(env);
+  // 管理员 / 试用账户首次登录时自动建号（账户名取自密钥，未配置则跳过）
+  if (account && account === adminUsername(env)) await ensureAdmin(env);
+  if (account && account === adminEmail(env)) await ensureAdmin(env);
+  if (account && account === trialUsername(env)) await ensureTrial(env);
 
   const user = await findByLogin(env, account);
   if (!user) return json({ ok: false, message: '账号或密码错误' }, 401);
@@ -1304,7 +1330,8 @@ async function handleChangeRequest(env, request) {
     if (!/^[a-z0-9_-]{3,20}$/.test(newName)) {
       return json({ ok: false, message: '用户名需 3-20 位，仅字母数字下划线连字符' }, 400);
     }
-    if (RESERVED.has(newName)) {
+    // 用运行时保留名（含密钥里的管理员 / 试用账户名），不能只用静态 RESERVED
+    if (reservedNames(env).has(newName)) {
       return json({ ok: false, message: '该用户名为系统保留，请换一个' }, 400);
     }
     if (newName === user.username) {
@@ -1461,7 +1488,11 @@ export default {
           secrets: {
             SESSION_SECRET: !!env.SESSION_SECRET,
             DOWNLOAD_LINKS: !!env.DOWNLOAD_LINKS,
+            ADMIN_USERNAME: !!env.ADMIN_USERNAME,
             ADMIN_PASSWORD: !!env.ADMIN_PASSWORD,
+            ADMIN_EMAIL: !!env.ADMIN_EMAIL,
+            TRIAL_ACCOUNT: !!env.TRIAL_ACCOUNT,
+            TRIAL_PASSWORD: !!env.TRIAL_PASSWORD,
             RESEND_API_KEY: !!env.RESEND_API_KEY,
             MAIL_FROM: !!env.MAIL_FROM,
             TURNSTILE_SECRET: !!env.TURNSTILE_SECRET,

@@ -503,8 +503,7 @@
     var un = esc(u.username);
     var out = '';
     if (u.role === 'user') {
-      if (u.isTrial) out += '<button class="mute" disabled>试用账户</button>';
-      else if (u.state === 'active') out += '<button class="warn" data-act="deactivate" data-u="' + un + '">取消激活</button>';
+      if (u.state === 'active') out += '<button class="warn" data-act="deactivate" data-u="' + un + '">取消激活</button>';
       else out += '<button data-act="activate" data-u="' + un + '">激活</button>';
       out += '<button data-act="extend" data-u="' + un + '">续 7 天</button>';
     }
