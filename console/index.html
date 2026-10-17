@@ -403,6 +403,15 @@
   var sentTo = '';
 
   function closeModal() { delMask.className = 'mask hidden'; }
+
+  // 兜底：点弹窗外的背景、或按 Esc，都能关掉弹窗。
+  // （每个弹窗本来都该有「关闭」按钮，这一层是防止再出现点不出去的情况）
+  delMask.addEventListener('click', function (e) {
+    if (e.target === delMask) closeModal();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && delMask.className.indexOf('hidden') === -1) closeModal();
+  });
   function setErr(t) { dmErr.textContent = t || ''; }
 
   function openDelete() {
@@ -662,9 +671,11 @@
       '</div>' +
       '<p class="small" id="rcHint">默认打码显示，点「显示完整」可以看全文。</p>';
     dmActs.innerHTML =
+      '<button class="mute" id="rcClose">关闭</button>' +
       '<button class="mute" id="rcToggle">显示完整</button>' +
       '<button id="rcCopy">复制</button>';
     delMask.className = 'mask';
+    document.getElementById('rcClose').onclick = closeModal;
 
     var shown = false;
     document.getElementById('rcToggle').onclick = function () {
