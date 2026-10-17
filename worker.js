@@ -67,6 +67,70 @@ const adminUsername = (env) => String(env.ADMIN_USERNAME || '').trim().toLowerCa
 const adminEmail = (env) => String(env.ADMIN_EMAIL || '').trim().toLowerCase();
 const trialUsername = (env) => String(env.TRIAL_ACCOUNT || '').trim().toLowerCase();
 
+/** 32 位随机字母数字（大小写混合），区分大小写 */
+function randomAlnum(n = RECOVER_RAND_LEN) {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const hex = randomHex(n + 16);
+  let out = '';
+  for (let i = 0; i + 1 < hex.length && out.length < n; i += 2) {
+    out += chars[parseInt(hex.substr(i, 2), 16) % chars.length];
+  }
+  return out;
+}
+
+/**
+ * 生成恢复代码：
+ *   key--用户名:邮箱:密码--32位随机   （账户没有邮箱时省略邮箱那一段）
+ *
+ * ⚠️ 代码里带着密码明文 —— 因为「在控制台里把它显示给用户看」就意味着
+ * 服务端必须能还原出密码。生成它的前提是调用方手里正好有密码明文
+ * （注册、改密码、初始化管理员/试用账户时）。
+ */
+function makeRecoveryCode(user, plainPassword) {
+  const head = user.email
+    ? user.username + ':' + user.email + ':' + plainPassword
+    : user.username + ':' + plainPassword;
+  return 'key--' + head + '--' + randomAlnum(RECOVER_RAND_LEN);
+}
+
+/**
+ * 从恢复代码里取出「用户名」和候选密码。
+ * 密码本身可能含冒号，所以按账户有没有邮箱分两种切法。
+ */
+function parseRecoveryCode(code) {
+  const m = String(code || '').trim().match(/^key--([\s\S]+)--([A-Za-z0-9]{32})$/);
+  if (!m) return null;
+  const parts = m[1].split(':');
+  if (parts.length < 2) return null;
+  return { username: parts[0].trim().toLowerCase(), rest: parts.slice(1), rand: m[2] };
+}
+
+/** 拿恢复代码去核对某个账户：返回 true 表示代码里的密码与该账户一致 */
+async function verifyRecoveryCode(user, parsed) {
+  if (!user || !parsed) return false;
+  if (user.username !== parsed.username) return false;
+  // 有邮箱时，第二段应当就是邮箱；否则整段都是密码
+  let pw = '';
+  if (user.email && parsed.rest.length >= 2 && parsed.rest[0].toLowerCase() === user.email) {
+    pw = parsed.rest.slice(1).join(':');
+  } else {
+    pw = parsed.rest.join(':');
+  }
+  if (!pw) return false;
+  const hash = await hashPassword(pw, user.salt);
+  return timingSafeEqual(hash, user.hash);
+}
+
+/** 换一个新密码：更新哈希、重置恢复代码、踢掉所有会话 */
+async function applyNewPassword(env, user, newPassword) {
+  user.salt = randomHex(16);
+  user.hash = await hashPassword(newPassword, user.salt);
+  user.recoveryCode = makeRecoveryCode(user, newPassword);
+  user.passwordChangedAt = Date.now();
+  await putUser(env, user);
+  return await deleteUserSessions(env, user.username, null);
+}
+
 /** 不允许注册的名字（含运行时的管理员 / 试用账户名） */
 function reservedNames(env) {
   const set = new Set(RESERVED);
@@ -468,6 +532,7 @@ async function ensureTrial(env) {
     verified: false,
     isTrial: true,
     trialStart: now,
+    recoveryCode: '',
     createdAt: now,
   };
   await env.USERS.put('user:' + name, JSON.stringify(user));
@@ -495,6 +560,7 @@ async function ensureAdmin(env) {
     verified: true,
     createdAt: Date.now(),
   };
+  admin.recoveryCode = makeRecoveryCode(admin, password);
   await env.USERS.put('user:' + name, JSON.stringify(admin));
   return admin;
 }
@@ -692,6 +758,7 @@ async function handleRegister(env, request, ip) {
     verified: true,
     createdAt: Date.now(),
   };
+  user.recoveryCode = makeRecoveryCode(user, password);
   await putUser(env, user);
   await env.USERS.delete('code:' + email);
 
@@ -1240,6 +1307,12 @@ async function handleAdminNoticesRead(env, request) {
 /* ========================== 维护时间 ========================== */
 
 /** 维护时段存放的 KV 键 */
+/** 找回密码：邮箱验证码有效期（秒） */
+const RECOVER_TTL = 10 * 60;
+
+/** 恢复代码里随机段的长度 */
+const RECOVER_RAND_LEN = 32;
+
 /** 维护期间「工作人员预览」通行证 Cookie 名 */
 const MAINT_PASS_COOKIE = 'maintpass';
 
@@ -1620,6 +1693,9 @@ async function handleChangeRequest(env, request) {
     if (pw.length > 128) return json({ ok: false, message: '密码过长' }, 400);
     rec.salt = randomHex(16);
     rec.hash = await hashPassword(pw, rec.salt);
+    // 临时留在确认码记录里（10 分钟后随记录一起过期），
+    // 用于确认成功后顺手刷新恢复代码 —— 只在这一个流程里短暂存在
+    rec.plain = pw;
   }
 
   // 冷却：同一账户 60 秒内只能发一次
@@ -1728,6 +1804,10 @@ async function handleChangeConfirm(env, request) {
   // 改密码：只踢掉其它设备，当前这台继续用
   user.salt = rec.salt;
   user.hash = rec.hash;
+  if (field === 'password' && rec.plain) {
+    // 手上有新密码明文，顺手把恢复代码刷新
+    user.recoveryCode = makeRecoveryCode(user, rec.plain);
+  }
   user.passwordChangedAt = Date.now();
   await putUser(env, user);
   await env.USERS.delete('changecode:' + user.username);
@@ -2011,6 +2091,127 @@ async function handleMaintUnlock(env, request) {
   return new Response(JSON.stringify({ ok: true, message: '已进入预览模式' }), { status: 200, headers });
 }
 
+/* ========================== 找回密码 ========================== */
+
+/** 新密码的基本校验 */
+function checkNewPassword(pw) {
+  if (!pw || pw.length < 6) return '密码至少 6 位';
+  if (pw.length > 128) return '密码过长';
+  return null;
+}
+
+/**
+ * 方式一：用「恢复代码」重设密码。
+ * 恢复代码形如 key--用户名:邮箱:密码--32位随机；代码里带着旧密码，
+ * 所以这里直接拿它去核对哈希即可 —— 代码本身不需要在服务端存一份。
+ */
+async function handleRecoverByCode(env, request) {
+  const body = await readJson(request);
+  const code = String(body.code || '').trim();
+  const newPassword = String(body.password || '');
+
+  const bad = checkNewPassword(newPassword);
+  if (bad) return json({ ok: false, message: bad }, 400);
+  if (!code) return json({ ok: false, message: '请输入恢复代码' }, 400);
+
+  const parsed = parseRecoveryCode(code);
+  if (!parsed) return json({ ok: false, message: '恢复代码格式不正确' }, 400);
+
+  const user = await getUser(env, parsed.username);
+  if (!user) return json({ ok: false, message: '恢复代码不正确' }, 401);
+  if (!(await verifyRecoveryCode(user, parsed))) {
+    return json({ ok: false, message: '恢复代码不正确' }, 401);
+  }
+
+  const kicked = await applyNewPassword(env, user, newPassword);
+  return json({
+    ok: true,
+    message: '密码已重设，请用新密码登录',
+    username: user.username,
+    kicked,
+  });
+}
+
+/**
+ * 方式二：用绑定邮箱收验证码重设密码。
+ * 账户要存在且绑定了邮箱；为了不泄露「某个账号是否存在」，
+ * 找不到时也回同样的提示。
+ */
+async function handleRecoverByEmailRequest(env, request, ip) {
+  const body = await readJson(request);
+  const human = await checkHuman(env, body, ip);
+  if (!human.ok) return json({ ok: false, message: human.message }, 400);
+
+  const account = String(body.account || '').trim().toLowerCase();
+  if (!account) return json({ ok: false, message: '请输入用户名或邮箱' }, 400);
+
+  const generic = { ok: true, message: '如果该账户存在且绑定了邮箱，验证码已发送，请查收' };
+  const user = await findByLogin(env, account);
+  if (!user || !user.email) return json(generic);
+
+  const ck = 'recovercooldown:' + user.username;
+  if (await env.USERS.get(ck)) {
+    return json({ ok: false, message: '验证码刚发过，请稍后再试' }, 429);
+  }
+
+  const code = String(Math.floor(100000 + Math.random() * 900000));
+  await env.USERS.put(
+    'recovercode:' + user.username,
+    JSON.stringify({ code, tries: 0, at: Date.now() }),
+    { expirationTtl: RECOVER_TTL }
+  );
+  await env.USERS.put(ck, '1', { expirationTtl: CODE_COOLDOWN });
+
+  const sent = await sendMail(
+    env,
+    user.email,
+    '【zrfeng.top】重设密码验证',
+    '<div style="font-family:system-ui,-apple-system,\'PingFang SC\',\'Microsoft YaHei\',sans-serif;padding:24px;background:#050807;color:#e8f5ee">' +
+      '<h2 style="color:#00ff8c;margin:0 0 12px">重设密码验证</h2>' +
+      '<p style="color:#a9c6b8;margin:0 0 8px">账户 <b style="color:#00ff8c">' + user.username + '</b> 正在申请重设密码。</p>' +
+      '<p style="color:#a9c6b8;margin:0 0 8px">验证码：</p>' +
+      '<p style="font-size:30px;letter-spacing:8px;font-weight:700;color:#00ff8c;margin:0 0 18px">' + code + '</p>' +
+      '<p style="color:#7fa893;font-size:13px;margin:0">10 分钟内有效。</p>' +
+      '<p style="color:#5c7a6b;font-size:12px;margin:16px 0 0">如果这不是你本人操作，请忽略本邮件，密码不会有任何变化。</p>' +
+      '</div>'
+  );
+  if (!sent.ok) return json({ ok: false, message: sent.message }, 502);
+  return json(generic);
+}
+
+/** 方式二第二步：验证码 + 新密码 */
+async function handleRecoverByEmailConfirm(env, request) {
+  const body = await readJson(request);
+  const account = String(body.account || '').trim().toLowerCase();
+  const code = String(body.code || '').trim();
+  const newPassword = String(body.password || '');
+
+  const bad = checkNewPassword(newPassword);
+  if (bad) return json({ ok: false, message: bad }, 400);
+  if (!/^\d{6}$/.test(code)) return json({ ok: false, message: '请输入 6 位验证码' }, 400);
+
+  const user = await findByLogin(env, account);
+  if (!user) return json({ ok: false, message: '验证码已过期，请重新获取' }, 400);
+
+  const key = 'recovercode:' + user.username;
+  const rec = await env.USERS.get(key, 'json');
+  if (!rec) return json({ ok: false, message: '验证码已过期，请重新获取' }, 400);
+  if (rec.tries >= 5) {
+    await env.USERS.delete(key);
+    return json({ ok: false, message: '尝试次数过多，请重新获取' }, 400);
+  }
+  if (!timingSafeEqual(code, String(rec.code))) {
+    rec.tries = (rec.tries || 0) + 1;
+    await env.USERS.put(key, JSON.stringify(rec), { expirationTtl: RECOVER_TTL });
+    return json({ ok: false, message: '验证码不正确' }, 401);
+  }
+
+  await env.USERS.delete(key);
+  await env.USERS.delete('recovercooldown:' + user.username);
+  const kicked = await applyNewPassword(env, user, newPassword);
+  return json({ ok: true, message: '密码已重设，请用新密码登录', username: user.username, kicked });
+}
+
 /* ========================== 新设备登录验证 ========================== */
 
 /**
@@ -2289,6 +2490,17 @@ export default {
         if (path === '/api/maintenance/unlock' && method === 'POST') {
           return await handleMaintUnlock(env, request);
         }
+
+        // 找回密码：恢复代码 / 邮箱验证码
+        if (path === '/api/recover/code' && method === 'POST') {
+          return await handleRecoverByCode(env, request);
+        }
+        if (path === '/api/recover/email/request' && method === 'POST') {
+          return await handleRecoverByEmailRequest(env, request, ip);
+        }
+        if (path === '/api/recover/email/confirm' && method === 'POST') {
+          return await handleRecoverByEmailConfirm(env, request);
+        }
         if (path === '/api/logout' && method === 'POST') {
           return await handleLogout(env, request);
         }
@@ -2306,6 +2518,8 @@ export default {
               // 用户改过邮箱或用户名后，快照就过期了。
               username: (u && u.username) || s.username,
               email: (u && u.email) || "",
+              // 只回给本人；控制台里显示，方便抄下来保存
+              recoveryCode: (u && u.recoveryCode) || "",
               isAdmin: !!(u && isAdminRole(roleOf(u))),
               verified: !!(u && u.verified),
               isTrial: !!(u && u.isTrial),

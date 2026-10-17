@@ -275,6 +275,10 @@
         '<div class="meta">账户还没有邮箱。绑定邮箱并验证后，账户即完成激活（只需验证新邮箱 + 密码）</div></div>' +
         '<button data-em="add">添加并激活</button></div>';
     }
+    sec += '<div class="row"><div class="info">' +
+      '<div class="name">恢复代码</div>' +
+      '<div class="meta">忘记密码时用它可以重设密码。格式：key--用户名:邮箱:密码--32位随机（区分大小写）</div></div>' +
+      '<button data-rc="show">' + (u.recoveryCode ? '查看' : '生成') + '</button></div>';
     if (u.canChangeEmail) {
       sec += '<div class="row"><div class="info">' +
         '<div class="name">更改邮箱</div>' +
@@ -291,6 +295,9 @@
     });
     meEl.querySelectorAll('button[data-em]').forEach(function (x) {
       x.onclick = function () { openEmail(x.dataset.em); };
+    });
+    meEl.querySelectorAll('button[data-rc]').forEach(function (x) {
+      x.onclick = function () { openRecoveryCode(); };
     });
   }
 
@@ -625,6 +632,59 @@
         if (j.ok) loadAdmin(); else btn.disabled = false;
       })
       .catch(function () { note('网络错误', false); btn.disabled = false; });
+  }
+
+  /* ===================== 恢复代码 ===================== */
+  function openRecoveryCode() {
+    setErr('');
+    var code = (ME && ME.user && ME.user.recoveryCode) || '';
+    dmTitle.textContent = '恢复代码';
+    dmStep.textContent = '请抄下来妥善保存';
+
+    if (!code) {
+      dmBody.innerHTML =
+        '<p>这个账户还没有恢复代码。</p>' +
+        '<p class="small">恢复代码是在<b>设置密码的时候</b>生成的。你的账户是在这个功能上线前建的，' +
+        '所以暂时没有 —— <b>去「修改密码」改一次密码</b>，就会自动生成一份。</p>';
+      dmActs.innerHTML = '<button id="rcClose">知道了</button>';
+      delMask.className = 'mask';
+      document.getElementById('rcClose').onclick = closeModal;
+      return;
+    }
+
+    dmBody.innerHTML =
+      '<p>忘记密码时，用它可以重设密码。</p>' +
+      '<p class="small">⚠️ 这条代码里<b>含有你的密码</b>，等于一把备用钥匙 —— 不要发给别人、不要截图外传。</p>' +
+      '<div id="rcBox" style="margin:14px 0;padding:12px;border-radius:10px;background:rgba(0,0,0,.45);' +
+      'border:1px solid rgba(0,255,140,.35);font-family:ui-monospace,monospace;font-size:12px;' +
+      'color:#cfe8dc;word-break:break-all;line-height:1.7;user-select:all">' +
+      esc(code.replace(/(key--.*?--)([A-Za-z0-9]{8,})/, function (m, a, b) { return a + b.slice(0, 6) + '••••••••'; })) +
+      '</div>' +
+      '<p class="small" id="rcHint">默认打码显示，点「显示完整」可以看全文。</p>';
+    dmActs.innerHTML =
+      '<button class="mute" id="rcToggle">显示完整</button>' +
+      '<button id="rcCopy">复制</button>';
+    delMask.className = 'mask';
+
+    var shown = false;
+    document.getElementById('rcToggle').onclick = function () {
+      shown = !shown;
+      document.getElementById('rcBox').textContent = shown ? code : code.replace(/(key--.*?--)([A-Za-z0-9]{8,})/, function (m, a, b) { return a + b.slice(0, 6) + '••••••••'; });
+      this.textContent = shown ? '打码显示' : '显示完整';
+    };
+    document.getElementById('rcCopy').onclick = function () {
+      var b = this;
+      navigator.clipboard.writeText(code).then(function () {
+        b.textContent = '已复制 ✓';
+        setTimeout(function () { b.textContent = '复制'; }, 1500);
+      }).catch(function () {
+        var box = document.getElementById('rcBox');
+        box.textContent = code;
+        var r = document.createRange(); r.selectNodeContents(box);
+        var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+        b.textContent = '请长按选中复制';
+      });
+    };
   }
 
   /* ===================== 添加邮箱 / 更改邮箱 ===================== */

@@ -257,10 +257,86 @@
       </div>
 
       <button class="submit" type="submit" id="btnLogin">登 录</button>
+
+      <div style="text-align:center;margin-top:12px">
+        <a href="#" id="forgotLink" style="font-size:13px;color:#7fa893;text-decoration:none">忘记密码？</a>
+      </div>
       <div class="msg" id="msgLogin"></div>
     </form>
 
     <!-- 注册表单 -->
+    <div id="formForgot" class="hide">
+      <div class="field">
+        <label>怎么找回？</label>
+        <div style="display:flex;gap:8px;margin-bottom:14px">
+          <button type="button" id="fmCode" class="tab on" style="flex:1">用恢复代码</button>
+          <button type="button" id="fmMail" class="tab" style="flex:1">用邮箱验证码</button>
+        </div>
+      </div>
+
+      <!-- 方式一：恢复代码 -->
+      <div id="paneCode">
+        <div class="field">
+          <label>恢复代码</label>
+          <input type="text" id="rcInput" placeholder="key--用户名:密码--32位随机" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="field">
+          <label>新密码</label>
+          <input type="password" id="rcNew" placeholder="至少 6 位" autocomplete="new-password">
+        </div>
+        <div class="field">
+          <label>再输一次新密码</label>
+          <input type="password" id="rcNew2" placeholder="确认新密码" autocomplete="new-password">
+        </div>
+        <button class="submit" type="button" id="rcSubmit">重设密码</button>
+        <div class="msg" id="msgForgotCode"></div>
+        <div style="font-size:12px;color:#5c7a6b;line-height:1.8;margin-top:10px">
+          恢复代码在「控制台 → 账户安全 → 恢复代码」里查看。它区分大小写，请完整复制。
+        </div>
+      </div>
+
+      <!-- 方式二：邮箱验证码 -->
+      <div id="paneMail" class="hide">
+        <div class="field">
+          <label>账号 / 邮箱</label>
+          <input type="text" id="fmAccount" placeholder="用户名或邮箱" autocomplete="username">
+        </div>
+        <div class="field">
+          <label>人机验证</label>
+          <div class="captcha-box" id="captchaBoxForgot">
+            <div class="captcha-row" id="mathForgot">
+              <span class="captcha-q" id="captchaQForgot">加载中…</span>
+              <input type="text" id="captchaAForgot" placeholder="答案" inputmode="numeric" autocomplete="off">
+              <button class="refresh" type="button" id="refreshForgot" title="换一题">↻</button>
+            </div>
+            <div id="turnstileForgot" class="hide"></div>
+          </div>
+        </div>
+        <button class="submit" type="button" id="fmSend" style="background:linear-gradient(135deg,#00c96e,#00a85c)">发送验证码</button>
+
+        <div id="fmMailStep2" class="hide" style="margin-top:16px">
+          <div class="field">
+            <label>邮箱验证码</label>
+            <input type="text" id="fmCodeInput" placeholder="6 位数字" inputmode="numeric" maxlength="6" autocomplete="off">
+          </div>
+          <div class="field">
+            <label>新密码</label>
+            <input type="password" id="fmNew" placeholder="至少 6 位" autocomplete="new-password">
+          </div>
+          <div class="field">
+            <label>再输一次新密码</label>
+            <input type="password" id="fmNew2" placeholder="确认新密码" autocomplete="new-password">
+          </div>
+          <button class="submit" type="button" id="fmConfirm">重设密码</button>
+        </div>
+        <div class="msg" id="msgForgotMail"></div>
+      </div>
+
+      <div style="text-align:center;margin-top:14px">
+        <a href="#" id="forgotBack" style="font-size:13px;color:#7fa893;text-decoration:none">← 返回登录</a>
+      </div>
+    </div>
+
     <form id="formReg" class="hide" autocomplete="on">
       <div class="field">
         <label>邮箱</label>
@@ -570,6 +646,133 @@
       if (btn) btn.disabled = false;
     }
   }
+
+  /* ---------- 忘记密码 ---------- */
+  var forgotCaptcha = { id: '', answer: '' };
+
+  function showForgot(on) {
+    $('formLogin').className = on ? 'hide' : '';
+    $('formReg').className = 'hide';
+    $('formForgot').className = on ? '' : 'hide';
+    $('tabLogin').className = 'tab' + (on ? '' : ' on');
+    $('tabReg').className = 'tab';
+    if (on) {
+      loadForgotCaptcha();
+      var el = $('rcInput');
+      if (el) el.focus();
+    }
+  }
+
+  function switchForgot(which) {
+    var isCode = which === 'code';
+    $('fmCode').className = 'tab' + (isCode ? ' on' : '');
+    $('fmMail').className = 'tab' + (isCode ? '' : ' on');
+    $('paneCode').className = isCode ? '' : 'hide';
+    $('paneMail').className = isCode ? 'hide' : '';
+  }
+
+  async function loadForgotCaptcha() {
+    if (cfg.turnstile) return;
+    try {
+      var r = await api('/api/captcha');
+      forgotCaptcha.id = r.data.id;
+      $('captchaQForgot').textContent = r.data.question;
+      $('captchaAForgot').value = '';
+    } catch (e) { /* 忽略 */ }
+  }
+
+  $('forgotLink').addEventListener('click', function (e) { e.preventDefault(); showForgot(true); });
+  $('forgotBack').addEventListener('click', function (e) { e.preventDefault(); showForgot(false); });
+  $('fmCode').addEventListener('click', function () { switchForgot('code'); });
+  $('fmMail').addEventListener('click', function () { switchForgot('mail'); });
+  $('refreshForgot').addEventListener('click', loadForgotCaptcha);
+
+  /* 方式一：恢复代码 */
+  $('rcSubmit').addEventListener('click', async function () {
+    var btn = this, msg = $('msgForgotCode');
+    hide(msg);
+    var code = $('rcInput').value.trim();
+    var p1 = $('rcNew').value, p2 = $('rcNew2').value;
+    if (!code) { show(msg, '请输入恢复代码', 'err'); return; }
+    if (p1.length < 6) { show(msg, '新密码至少 6 位', 'err'); return; }
+    if (p1 !== p2) { show(msg, '两次输入的新密码不一致', 'err'); return; }
+    btn.disabled = true;
+    try {
+      var r = await api('/api/recover/code', { method: 'POST', body: { code: code, password: p1 } });
+      if (r.data.ok) {
+        show(msg, '密码已重设！正在回到登录页…', 'ok');
+        setTimeout(function () {
+          showForgot(false);
+          $('loginAccount').value = r.data.username || $('loginAccount').value;
+          $('loginPassword').value = '';
+          $('loginPassword').focus();
+          btn.disabled = false;
+          $('rcInput').value = ''; $('rcNew').value = ''; $('rcNew2').value = '';
+        }, 1200);
+      } else {
+        show(msg, r.data.message || '重设失败', 'err');
+        btn.disabled = false;
+      }
+    } catch (e) { show(msg, '网络错误', 'err'); btn.disabled = false; }
+  });
+
+  /* 方式二：邮箱验证码 */
+  $('fmSend').addEventListener('click', async function () {
+    var btn = this, msg = $('msgForgotMail');
+    hide(msg);
+    var acc = $('fmAccount').value.trim();
+    if (!acc) { show(msg, '请输入用户名或邮箱', 'err'); return; }
+    var payload = { account: acc };
+    if (cfg.turnstile) payload.turnstileToken = window.turnstileAnswered || '';
+    else {
+      payload.captchaId = forgotCaptcha.id;
+      payload.captchaAnswer = $('captchaAForgot').value.trim();
+    }
+    btn.disabled = true;
+    try {
+      var r = await api('/api/recover/email/request', { method: 'POST', body: payload });
+      if (r.data.ok) {
+        show(msg, r.data.message || '验证码已发送', 'ok');
+        $('fmMailStep2').className = '';
+        var el = $('fmCodeInput');
+        if (el) el.focus();
+      } else {
+        show(msg, r.data.message || '发送失败', 'err');
+        if (!cfg.turnstile) loadForgotCaptcha();
+      }
+    } catch (e) { show(msg, '网络错误', 'err'); }
+    btn.disabled = false;
+  });
+
+  $('fmConfirm').addEventListener('click', async function () {
+    var btn = this, msg = $('msgForgotMail');
+    hide(msg);
+    var acc = $('fmAccount').value.trim();
+    var code = $('fmCodeInput').value.trim();
+    var p1 = $('fmNew').value, p2 = $('fmNew2').value;
+    if (!/^\d{6}$/.test(code)) { show(msg, '请输入 6 位验证码', 'err'); return; }
+    if (p1.length < 6) { show(msg, '新密码至少 6 位', 'err'); return; }
+    if (p1 !== p2) { show(msg, '两次输入的新密码不一致', 'err'); return; }
+    btn.disabled = true;
+    try {
+      var r = await api('/api/recover/email/confirm', { method: 'POST', body: { account: acc, code: code, password: p1 } });
+      if (r.data.ok) {
+        show(msg, '密码已重设！正在回到登录页…', 'ok');
+        setTimeout(function () {
+          showForgot(false);
+          $('loginAccount').value = r.data.username || acc;
+          $('loginPassword').value = '';
+          $('loginPassword').focus();
+          btn.disabled = false;
+          $('fmMailStep2').className = 'hide';
+          $('fmCodeInput').value = ''; $('fmNew').value = ''; $('fmNew2').value = '';
+        }, 1200);
+      } else {
+        show(msg, r.data.message || '重设失败', 'err');
+        btn.disabled = false;
+      }
+    } catch (e) { show(msg, '网络错误', 'err'); btn.disabled = false; }
+  });
 
   /* ---------- 注册 ---------- */
   $('formReg').addEventListener('submit', async function (e) {
