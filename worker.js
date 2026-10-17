@@ -1988,8 +1988,10 @@ export default {
             ok: true,
             loggedIn: true,
             user: {
-              username: s.username,
-              email: s.email,
+              // 用户名 / 邮箱都以实时记录为准：会话里存的是登录那一刻的快照，
+              // 用户改过邮箱或用户名后，快照就过期了。
+              username: (u && u.username) || s.username,
+              email: (u && u.email) || "",
               isAdmin: !!(u && isAdminRole(roleOf(u))),
               verified: !!(u && u.verified),
               isTrial: !!(u && u.isTrial),
@@ -2016,8 +2018,8 @@ export default {
           return json({
             ok: true,
             loggedIn: !!s,
-            username: s ? s.username : null,
-            isAdmin: !!(u && u.isAdmin),
+            username: u ? u.username : s ? s.username : null,
+            isAdmin: !!(u && isAdminRole(roleOf(u))),
             account: accountStatus(u),
             // 维护时段：所有页面据此决定是否弹出「正在维护服务」
             maintenance: maintenanceState(await getMaintenance(env), Date.now()),
