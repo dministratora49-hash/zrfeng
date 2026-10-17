@@ -1354,8 +1354,23 @@ async function handleAdminBan(env, request) {
     human = '已解封账户 ' + username;
   } else {
     // 起止时间：可只给结束时间（从现在开始），也可给未来开始时间
-    const until = Number(body.until) || 0;
-    const from = Number(body.from) || 0;
+      let from = Number(body.from) || 0;
+      let until = Number(body.until) || 0;
+
+      // 先按客户端原始值校验：结束时间必须晚于开始时间。
+      // 必须放在「时钟修正」之前，否则非法输入会被悄悄夹成 1 秒而不报错。
+      if (until && from && until <= from) {
+    return json({ ok: false, message: '封禁结束时间必须晚于开始时间' }, 400);
+      }
+
+      // 客户端时钟可能比服务端快/慢几秒。开始时间就在此刻附近时按服务端时间算，
+      // 否则用户点「立即封禁」会被误判成「已排期」。结束时间用「时长」推算，
+      // 不受时钟偏差影响；真正排到未来的封禁则原样保留。
+      const NEAR = 5 * 60 * 1000;
+      if (from && Math.abs(from - now) < NEAR) {
+        if (until) until = now + Math.max(1000, until - from);
+        from = now;
+      }
 
     if (until && until <= Math.max(from || now, now)) {
       return json({ ok: false, message: '封禁结束时间必须晚于开始时间' }, 400);
