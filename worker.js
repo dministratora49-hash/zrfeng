@@ -38,6 +38,15 @@ const CODE_TTL = 10 * 60;
 /** 同一邮箱发送验证码的最小间隔（秒） */
 const CODE_COOLDOWN = 60;
 
+/** 设备登录票据有效期（秒）：10 分钟 */
+const DEVLOGIN_TTL = 10 * 60;
+
+/** 每个账户最多记住几台设备 */
+const MAX_DEVICES = 20;
+
+/** 设备标记 Cookie 的有效期（秒）：约 400 天 */
+const DEVICE_COOKIE_TTL = 400 * 24 * 3600;
+
 /** 注销确认码有效期（秒）：10 分钟 */
 const DELCODE_TTL = 10 * 60;
 
@@ -736,6 +745,32 @@ async function handleLogin(env, request, ip) {
   const hash = await hashPassword(password, user.salt);
   if (!timingSafeEqual(hash, user.hash)) {
     return json({ ok: false, message: '账号或密码错误' }, 401);
+  }
+
+  // 新设备登录验证：账号有邮箱、且这台设备从没在该账户上成功登录过 → 先发邮件验证码
+  const deviceId = deviceIdOf(request) || randomHex(16);
+  if (user.email && !(await isKnownDevice(env, user, deviceId))) {
+    const ticket = randomHex(16);
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    await env.USERS.put(
+      'devlogin:' + ticket,
+      JSON.stringify({ username: user.username, deviceId, code, tries: 0, at: Date.now() }),
+      { expirationTtl: DEVLOGIN_TTL }
+    );
+    await env.USERS.put('devcooldown:' + ticket, '1', { expirationTtl: CODE_COOLDOWN });
+    const sent = await sendDeviceCode(env, user, code);
+    if (!sent.ok) return json({ ok: false, message: sent.message }, 502);
+    return json(
+      {
+        ok: false,
+        needDeviceVerify: true,
+        ticket,
+        message: '这是一台新设备，验证码已发送到 ' + maskEmail(user.email),
+        email: maskEmail(user.email),
+      },
+      200,
+      { 'Set-Cookie': deviceCookie(deviceId) }
+    );
   }
 
   const status = accountStatus(user);
@@ -1927,6 +1962,138 @@ async function handleAdminVerify(env, request) {
   return json({ ok: true, message: '验证通过' });
 }
 
+/* ========================== 新设备登录验证 ========================== */
+
+/** 从 Cookie 里取设备标记 */
+function deviceIdOf(request) {
+  const m = (request.headers.get('Cookie') || '').match(/(?:^|;\s*)device=([a-f0-9]{32})/);
+  return m ? m[1] : null;
+}
+
+/** 生成设备标记 Cookie */
+function deviceCookie(id) {
+  return `device=${id}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${DEVICE_COOKIE_TTL}`;
+}
+
+/** 这个设备之前在该账户上登录成功过吗 */
+async function isKnownDevice(env, user, deviceId) {
+  if (!deviceId) return false;
+  let list = [];
+  try {
+    list = (await env.USERS.get('devices:' + user.username, 'json')) || [];
+  } catch {
+    list = [];
+  }
+  return Array.isArray(list) && list.includes(deviceId);
+}
+
+/** 记住一台设备（最近使用的排前面） */
+async function rememberDevice(env, username, deviceId) {
+  if (!deviceId) return;
+  let list = [];
+  try {
+    list = (await env.USERS.get('devices:' + username, 'json')) || [];
+  } catch {
+    list = [];
+  }
+  if (!Array.isArray(list)) list = [];
+  const next = [deviceId, ...list.filter((x) => x !== deviceId)].slice(0, MAX_DEVICES);
+  await env.USERS.put('devices:' + username, JSON.stringify(next));
+}
+
+/** 发一封「新设备登录」验证码邮件 */
+async function sendDeviceCode(env, user, code) {
+  return await sendMail(
+    env,
+    user.email,
+    '【zrfeng.top】新设备登录验证',
+    '<div style="font-family:system-ui,-apple-system,\'PingFang SC\',\'Microsoft YaHei\',sans-serif;padding:24px;background:#050807;color:#e8f5ee">' +
+      '<h2 style="color:#00ff8c;margin:0 0 12px">新设备登录验证</h2>' +
+      '<p style="color:#a9c6b8;margin:0 0 8px">账户 <b style="color:#00ff8c">' + user.username + '</b> 正在一台<b>没有登录过</b>的设备上登录。</p>' +
+      '<p style="color:#a9c6b8;margin:0 0 16px">如果这是你本人，请输入下面的验证码完成登录；如果不是，请忽略本邮件并尽快修改密码。</p>' +
+      '<p style="font-size:30px;letter-spacing:8px;font-weight:700;color:#00ff8c;margin:0 0 18px">' + code + '</p>' +
+      '<p style="color:#7fa893;font-size:13px;margin:0">10 分钟内有效。</p>' +
+      '</div>'
+  );
+}
+
+/**
+ * 新设备登录第二步：凭票据 + 邮件验证码换取会话。
+ * 通过后把这台设备记进账户的已知设备列表，以后同一台设备就不用再验证。
+ */
+async function handleDeviceVerify(env, request) {
+  const body = await readJson(request);
+  const ticket = String(body.ticket || '').trim();
+  if (!/^[a-f0-9]{32}$/.test(ticket)) {
+    return json({ ok: false, message: '登录票据无效，请重新登录' }, 400);
+  }
+
+  const key = 'devlogin:' + ticket;
+  const rec = await env.USERS.get(key, 'json');
+  if (!rec) return json({ ok: false, message: '验证已过期，请重新登录' }, 400);
+
+  const user = await getUser(env, rec.username);
+  if (!user) return json({ ok: false, message: '账户不存在' }, 404);
+
+  // 重发验证码
+  if (body.resend) {
+    if (await env.USERS.get('devcooldown:' + ticket)) {
+      return json({ ok: false, message: '验证码刚发过，请稍后再试' }, 429);
+    }
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    rec.code = code;
+    rec.tries = 0;
+    await env.USERS.put(key, JSON.stringify(rec), { expirationTtl: DEVLOGIN_TTL });
+    await env.USERS.put('devcooldown:' + ticket, '1', { expirationTtl: CODE_COOLDOWN });
+    const sent = await sendDeviceCode(env, user, code);
+    if (!sent.ok) return json({ ok: false, message: sent.message }, 502);
+    return json({ ok: true, message: '验证码已重新发送到 ' + maskEmail(user.email) });
+  }
+
+  const code = String(body.code || '').trim();
+  if (!/^\d{6}$/.test(code)) return json({ ok: false, message: '请输入 6 位验证码' }, 400);
+
+  if (rec.tries >= 5) {
+    await env.USERS.delete(key);
+    return json({ ok: false, message: '尝试次数过多，请重新登录' }, 400);
+  }
+  if (!timingSafeEqual(code, String(rec.code || ''))) {
+    rec.tries = (rec.tries || 0) + 1;
+    await env.USERS.put(key, JSON.stringify(rec), { expirationTtl: DEVLOGIN_TTL });
+    return json({ ok: false, message: '验证码不正确' }, 401);
+  }
+
+  // 通过：记住设备 + 建会话
+  await rememberDevice(env, user.username, rec.deviceId);
+  await env.USERS.delete(key);
+  await env.USERS.delete('devcooldown:' + ticket);
+
+  const status = accountStatus(user);
+  const { cookie } = await createSession(env, user);
+  // 两个 Cookie 必须用 Headers.append 分开发 —— 用数组会被拼成一条，device 标记就丢了
+  const headers = new Headers({
+    'content-type': 'application/json; charset=utf-8',
+    'cache-control': 'no-store',
+  });
+  headers.append('Set-Cookie', cookie);
+  headers.append('Set-Cookie', deviceCookie(rec.deviceId));
+  return new Response(
+    JSON.stringify({
+      ok: true,
+      message: '验证通过，登录成功',
+      user: {
+        username: user.username,
+        email: user.email,
+        isAdmin: isAdminRole(roleOf(user)),
+        role: roleOf(user),
+        isSuper: roleOf(user) === 'super',
+      },
+      account: status,
+    }),
+    { status: 200, headers }
+  );
+}
+
 /* ========================== 主入口 ========================== */
 
 export default {
@@ -2038,6 +2205,10 @@ export default {
         if (path === '/api/login' && method === 'POST') {
           return await handleLogin(env, request, ip);
         }
+        // 新设备登录第二步：凭票据 + 邮件验证码
+        if (path === '/api/login/verify' && method === 'POST') {
+          return await handleDeviceVerify(env, request);
+        }
         if (path === '/api/logout' && method === 'POST') {
           return await handleLogout(env, request);
         }
@@ -2081,6 +2252,7 @@ export default {
         if (path === '/api/status' && method === 'GET') {
           const s = await getSession(env, request);
           const u = s ? await sessionUser(env, s) : null;
+          const devTouched = !deviceIdOf(request);
           return json({
             ok: true,
             loggedIn: !!s,
@@ -2089,7 +2261,7 @@ export default {
             account: accountStatus(u),
             // 维护时段：所有页面据此决定是否弹出「正在维护服务」
             maintenance: maintenanceState(await getMaintenance(env), Date.now()),
-          });
+          }, 200, devTouched ? { 'Set-Cookie': deviceCookie(randomHex(16)) } : undefined);
         }
         if (path === '/api/downloads' && method === 'GET') {
           return await handleDownloads(env, request);

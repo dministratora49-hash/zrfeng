@@ -454,6 +454,10 @@
     if (r.data.ok) {
       show(msg, '登录成功，正在跳转…', 'ok');
       setTimeout(function () { location.href = SITE + '/'; }, 700);
+    } else if (r.data.needDeviceVerify) {
+      // 新设备：账号密码已通过，还要输一次发到邮箱的验证码
+      show(msg, r.data.message || '这是一台新设备，请输入邮箱验证码', 'ok');
+      deviceStep(r.data.ticket, btn);
     } else {
       show(msg, r.data.message || '登录失败', 'err');
       btn.disabled = false;
@@ -461,6 +465,65 @@
       if (!cfg.turnstile) loadCaptcha('login');
     }
   });
+
+  /* ---------- 新设备登录验证 ---------- */
+  var devTicket = null;
+
+  function deviceStep(ticket, loginBtn) {
+    devTicket = ticket;
+    var wrap = document.createElement('div');
+    wrap.id = 'devBox';
+    wrap.style.cssText = 'margin-top:14px;padding:14px;border:1px solid rgba(0,255,140,.35);border-radius:12px;background:rgba(0,255,140,.05)';
+    wrap.innerHTML =
+      '<div style="font-size:13px;color:#a9c6b8;margin-bottom:8px">这台设备是第一次登录，请输入发送到你邮箱的 6 位验证码：</div>' +
+      '<input id="devCode" inputmode="numeric" maxlength="6" placeholder="000000" ' +
+      'style="width:100%;padding:11px 13px;border-radius:9px;border:1px solid rgba(0,255,140,.4);background:rgba(0,0,0,.45);color:#e8f5ee;font-size:18px;letter-spacing:7px;text-align:center;font-family:ui-monospace,monospace;margin-bottom:10px">' +
+      '<div style="display:flex;gap:10px">' +
+      '<button type="button" id="devResend" style="flex:1;padding:10px 0;border-radius:9px;border:1px solid rgba(0,255,140,.45);background:transparent;color:#00ff8c;font-size:13px;font-family:inherit;cursor:pointer">重新发送</button>' +
+      '<button type="button" id="devOk" style="flex:1;padding:10px 0;border-radius:9px;border:none;background:linear-gradient(135deg,#00ff8c,#00c96e);color:#04140c;font-weight:700;font-size:14px;font-family:inherit;cursor:pointer">验证并登录</button>' +
+      '</div>';
+    var host = loginBtn.closest('form') || loginBtn.parentNode;
+    host.appendChild(wrap);
+    if (loginBtn) { loginBtn.disabled = true; }
+    var input = document.getElementById('devCode');
+    if (input) input.focus();
+    document.getElementById('devOk').onclick = function () { doDeviceVerify(); };
+    document.getElementById('devResend').onclick = function () { resendDeviceCode(this); };
+    if (input) input.onkeydown = function (e) { if (e.key === 'Enter') doDeviceVerify(); };
+  }
+
+  async function doDeviceVerify() {
+    var msg = $('msgLogin');
+    var code = (document.getElementById('devCode') || {}).value || '';
+    if (!/^\d{6}$/.test(code.trim())) { if (msg) show(msg, '请输入 6 位验证码', 'err'); return; }
+    var btn = document.getElementById('devOk');
+    if (btn) btn.disabled = true;
+    try {
+      var r = await api('/api/login/verify', { method: 'POST', body: { ticket: devTicket, code: code.trim() } });
+      if (r.data.ok) {
+        if (msg) show(msg, '验证通过，正在跳转…', 'ok');
+        setTimeout(function () { location.href = SITE + '/'; }, 700);
+      } else {
+        if (msg) show(msg, r.data.message || '验证失败', 'err');
+        if (btn) btn.disabled = false;
+      }
+    } catch (e) {
+      if (msg) show(msg, '网络错误', 'err');
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async function resendDeviceCode(el) {
+    var msg = $('msgLogin');
+    el.disabled = true;
+    try {
+      var r = await api('/api/login/verify', { method: 'POST', body: { ticket: devTicket, resend: true } });
+      if (msg) show(msg, r.data.message || '已重新发送', r.data.ok ? 'ok' : 'err');
+    } catch (e) {
+      if (msg) show(msg, '网络错误', 'err');
+    }
+    setTimeout(function () { el.disabled = false; }, 3000);
+  }
 
   /* ---------- 注册 ---------- */
   $('formReg').addEventListener('submit', async function (e) {
