@@ -5,14 +5,14 @@
  *
  * ⚠️ 重要安全约定
  * 本文件会提交到**公开仓库**，任何人可见。因此：
- *   - 下载链接存放在环境变量（密钥）DOWNLOAD_LINKS 里，绝不写进本文件；
+ *   - 站内下载文件存在 KV（file:novel）里，绝不写进本文件；
  *   - 管理员密码存放在密钥 ADMIN_PASSWORD；
  *   - 邮件 API Key、会话签名密钥同理，全部走密钥。
  * 本文件里出现的任何明文密码/链接都等于公开。
  *
  * 需要的绑定与密钥（在 Cloudflare 控制台或 wrangler 里配置）：
  *   KV 命名空间绑定  USERS
- *   密钥 DOWNLOAD_LINKS     JSON 数组，形如 [{"name":"小飞机网盘","url":"...","pwd":""}]
+ *   KV 键    file:novel       站内直接下载的文件（base64，不放进公开仓库）
  *   密钥 ADMIN_USERNAME     主管理员账户名（不设则不自动建号）
  *   密钥 ADMIN_PASSWORD     主管理员密码
  *   密钥 ADMIN_EMAIL        （可选）主管理员邮箱，允许用邮箱登录
@@ -311,6 +311,40 @@ function canManageAccount(actor, target) {
 }
 
 /**
+ * 封禁状态：支持「起止时间」。
+ *
+ *   banUntil 为空  → 永久封禁
+ *   banFrom 在未来 → 还没开始，暂时不受影响
+ *   过了 banUntil  → 自动解封（不需要管理员手动操作）
+ *
+ * 用「时间点」而不是定时任务：安卓上没有 cron，Worker 也没有常驻进程，
+ * 所以每次请求现算，到点自然失效。
+ */
+/** 把时间戳格式化成「MM-DD HH:MM」（Worker 里没有本地化工具，手写） */
+function fmtShortTime(ts) {
+  if (!ts) return '—';
+  const d = new Date(Number(ts));
+  const p2 = (x) => (x < 10 ? '0' + x : '' + x);
+  return p2(d.getUTCMonth() + 1) + '-' + p2(d.getUTCDate()) + ' ' + p2(d.getUTCHours()) + ':' + p2(d.getUTCMinutes()) + ' UTC';
+}
+
+function banState(user, now) {
+  const t = Number(now) || Date.now();
+  if (!user || !user.banned) return { banned: false };
+  const from = Number(user.banFrom) || 0;
+  const until = Number(user.banUntil) || 0;
+  if (until && t >= until) return { banned: false, expired: true, until };
+  if (from && t < from) return { banned: false, pending: true, from, startsInMs: from - t };
+  return {
+    banned: true,
+    from: from || null,
+    until: until || null,
+    remainingMs: until ? Math.max(0, until - t) : null,
+    permanent: !until,
+  };
+}
+
+/**
  * 计算账户状态。前端状态栏完全依赖这个结果。
  *
  *   guest   —— 未登录           红点「登录以享受服务」
@@ -343,16 +377,22 @@ function accountStatus(user) {
   }
 
   // 被封禁：优先级仅次于管理员。仍然允许登录，目的是让他看到「You are banned」；
-  // 但下载会被服务端拦掉。
-  if (user.banned) {
+  // 但下载会被服务端拦掉。支持起止时间，到点自动解封。
+  const ban = banState(user, Date.now());
+  if (ban.banned) {
     return {
       state: 'banned',
       dot: 'red',
+      // 文案保持简洁；具体封禁时段由前端按**本地时间**显示（见 status.js）
       label: 'You are banned（账户已被封禁）',
       activated: false,
       days: null,
       remainingMs: null,
       banned: true,
+      banFrom: ban.from,
+      banUntil: ban.until,
+      banPermanent: !!ban.permanent,
+      banRemainingMs: ban.remainingMs,
       bannedAt: user.bannedAt || null,
       bannedBy: user.bannedBy || null,
     };
@@ -896,7 +936,7 @@ async function handleDeleteConfirm(env, request) {
 
 /**
  * 下载链接 —— 只有登录用户才能拿到。
- * 链接来自密钥 DOWNLOAD_LINKS，不在公开仓库里。
+ * 现在只有一份站内文件（《听潮》），直接从 KV 读取返回，不再有第三方网盘链接。
  */
 async function handleDownloads(env, request) {
   const session = await getSession(env, request);
@@ -921,21 +961,115 @@ async function handleDownloads(env, request) {
     );
   }
 
-  let links = [];
-  if (env.DOWNLOAD_LINKS) {
-    try {
-      links = JSON.parse(env.DOWNLOAD_LINKS);
-    } catch {
-      return json({ ok: false, message: '下载配置有误，请联系管理员' }, 500);
-    }
-  }
-  if (!Array.isArray(links)) links = [];
-
+  const rec = await readNovelFile(env);
   return json({
     ok: true,
-    links,
-    user: { username: session.username, isAdmin: !!session.isAdmin },
+    // 站内直接下载：不再有任何第三方网盘链接
+    file: {
+      name: rec ? rec.name : '',
+      size: rec ? Number(rec.size) || 0 : 0,
+      type: rec ? rec.type || '' : '',
+      available: !!rec,
+      url: '/api/novel/download',
+    },
     account: status,
+  });
+}
+
+/* ========================== 站内文件（《听潮》） ========================== */
+
+/** 站内文件的 KV 键 */
+const NOVEL_KEY = 'file:novel';
+
+/** 读取站内文件记录；没上传或数据损坏都返回 null */
+async function readNovelFile(env) {
+  try {
+    const rec = await env.USERS.get(NOVEL_KEY, 'json');
+    if (!rec || !rec.b64) return null;
+    return rec;
+  } catch {
+    return null;
+  }
+}
+
+/** 文件大小上限（base64 后仍要留在 KV 单值 25MB 以内） */
+const NOVEL_MAX_BYTES = 15 * 1024 * 1024;
+
+/**
+ * 上传 / 替换站内文件（仅管理员）。
+ * 存进 KV 而不是仓库 —— 仓库是公开的，放进去等于把小说公开发布。
+ */
+async function handleAdminUploadNovel(env, request) {
+  const guard = await requireAdmin(env, request);
+  if (guard.error) return guard.error;
+
+  const body = await readJson(request);
+  const name = String(body.name || '').trim() || 'download.docx';
+  const type = String(body.type || '').trim() || 'application/octet-stream';
+  const b64 = String(body.b64 || '').replace(/\s+/g, '');
+  if (!b64) return json({ ok: false, message: '缺少文件内容' }, 400);
+
+  // base64 长度 → 原始字节数的近似值
+  const size = Math.floor((b64.length * 3) / 4);
+  if (size > NOVEL_MAX_BYTES) {
+    return json({ ok: false, message: '文件过大（上限 ' + Math.round(NOVEL_MAX_BYTES / 1024 / 1024) + ' MB）' }, 400);
+  }
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(b64)) {
+    return json({ ok: false, message: '文件内容不是合法的 base64' }, 400);
+  }
+
+  const rec = { name, type, size, b64, uploadedAt: Date.now(), uploadedBy: guard.session.username };
+  await env.USERS.put(NOVEL_KEY, JSON.stringify(rec));
+
+  return json({ ok: true, message: '已更新站内文件：' + name, file: { name, type, size } });
+}
+
+/**
+ * 站内文件下载 —— 必须登录，且被封禁 / 试用到期的账户拿不到。
+ * 文件从 KV 取出后由本 Worker 直接返回，不经过任何第三方网盘。
+ */
+async function handleNovelDownload(env, request) {
+  const session = await getSession(env, request);
+  if (!session) {
+    return json({ ok: false, message: '请先登录后再下载', needLogin: true }, 401);
+  }
+
+  const user = await sessionUser(env, session);
+  const status = accountStatus(user);
+  if (status.state === 'blocked') {
+    return json(
+      { ok: false, message: '账户试用期已到，请联系管理员以激活账户', blocked: true, needLogin: false, account: status },
+      403
+    );
+  }
+  if (status.state === 'banned') {
+    return json(
+      { ok: false, message: '该账户已被封禁，请联系管理员', banned: true, needLogin: false, account: status },
+      403
+    );
+  }
+
+  const rec = await readNovelFile(env);
+  if (!rec) {
+    return json({ ok: false, message: '文件尚未上传，请联系管理员' }, 404);
+  }
+
+  // base64 → 字节
+  const bin = atob(rec.b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+
+  const name = rec.name || 'download.bin';
+  const ascii = name.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, '');
+  return new Response(bytes, {
+    status: 200,
+    headers: {
+      'content-type': rec.type || 'application/octet-stream',
+      'content-length': String(bytes.length),
+      // 中文文件名用 filename* 传，兼容各浏览器
+      'content-disposition': 'attachment; filename="' + ascii + '"; filename*=UTF-8\'\'' + encodeURIComponent(name),
+      'cache-control': 'no-store',
+    },
   });
 }
 
@@ -950,7 +1084,7 @@ async function requireAdmin(env, request) {
     return { error: json({ ok: false, message: '无权访问，仅管理员可用' }, 403) };
   }
   // 被同时标记为封禁的管理员也不能进后台，避免「封禁了却还能管理」
-  if (user.banned) {
+  if (banState(user, Date.now()).banned) {
     return { error: json({ ok: false, message: '该账户已被封禁' }, 403) };
   }
   return { session, user, role: roleOf(user) };
@@ -988,7 +1122,11 @@ async function handleAdminUsers(env, request) {
       label: st.label,
       days: st.days,
       role: roleOf(u),
-      banned: !!u.banned,
+      banned: banState(u, Date.now()).banned,
+      banFrom: u.banFrom || null,
+      banUntil: u.banUntil || null,
+      banPermanent: !!u.banned && !u.banUntil,
+      banRemainingMs: banState(u, Date.now()).remainingMs || null,
       bannedAt: u.bannedAt || null,
     });
   }
@@ -1203,23 +1341,52 @@ async function handleAdminBan(env, request) {
   const perm = canManageAccount(guard.user, user);
   if (!perm.ok) return perm.res;
 
-  user.banned = banned;
-  if (banned) {
-    user.bannedAt = Date.now();
-    user.bannedBy = guard.session.username;
-  } else {
+  const now = Date.now();
+  let human = '';
+
+  if (!banned) {
+    // 解封：清掉全部封禁字段
+    delete user.banned;
+    delete user.banFrom;
+    delete user.banUntil;
     delete user.bannedAt;
     delete user.bannedBy;
+    human = '已解封账户 ' + username;
+  } else {
+    // 起止时间：可只给结束时间（从现在开始），也可给未来开始时间
+    const until = Number(body.until) || 0;
+    const from = Number(body.from) || 0;
+
+    if (until && until <= Math.max(from || now, now)) {
+      return json({ ok: false, message: '封禁结束时间必须晚于开始时间' }, 400);
+    }
+
+    user.banned = true;
+    user.bannedAt = now;
+    user.bannedBy = guard.session.username;
+    if (from) user.banFrom = from; else delete user.banFrom;
+    if (until) user.banUntil = until; else delete user.banUntil;
+
+    const st = banState(user, now);
+    if (st.pending) {
+      human = '已排期：' + username + ' 将从 ' + fmtShortTime(from) + ' 起被封禁'
+        + (until ? '，至 ' + fmtShortTime(until) + ' 自动解封' : '');
+    } else if (until) {
+      human = '已封禁 ' + username + '，至 ' + fmtShortTime(until) + ' 自动解封';
+    } else {
+      human = '已永久封禁 ' + username;
+    }
   }
   await putUser(env, user);
 
-  // 封禁立刻生效：踢掉该账户所有会话，他重新登录就会看到提示
+  // 立即生效：踢掉该账户所有会话，他重新登录就会看到提示
+  const st2 = banState(user, now);
   let kicked = 0;
-  if (banned) kicked = await deleteUserSessions(env, username);
+  if (st2.banned) kicked = await deleteUserSessions(env, username);
 
   return json({
     ok: true,
-    message: banned ? '已封禁账户 ' + username : '已解封账户 ' + username,
+    message: human,
     username,
     kicked,
     account: accountStatus(user),
@@ -1250,7 +1417,7 @@ async function handleAdminRole(env, request) {
   if (tr === 'super') {
     return json({ ok: false, message: '主管理员权限不可更改' }, 400);
   }
-  if (makeSub && user.banned) {
+  if (makeSub && banState(user, Date.now()).banned) {
     return json({ ok: false, message: '该账户已被封禁，请先解封再设为管理员' }, 400);
   }
 
@@ -1298,7 +1465,9 @@ async function changeGuard(env, request) {
   if (!session) return { error: json({ ok: false, message: '请先登录', needLogin: true }, 401) };
   const user = await sessionUser(env, session);
   if (!user) return { error: json({ ok: false, message: '账户不存在' }, 404) };
-  if (user.banned) return { error: json({ ok: false, message: '该账户已被封禁' }, 403) };
+  if (banState(user, Date.now()).banned) {
+    return { error: json({ ok: false, message: '该账户已被封禁' }, 403) };
+  }
   if (!user.email) {
     return { error: json({ ok: false, message: '该账户没有绑定邮箱，无法通过邮箱验证' }, 400) };
   }
@@ -1487,7 +1656,6 @@ export default {
           kv: { bound: !!env.USERS, working: false, error: null },
           secrets: {
             SESSION_SECRET: !!env.SESSION_SECRET,
-            DOWNLOAD_LINKS: !!env.DOWNLOAD_LINKS,
             ADMIN_USERNAME: !!env.ADMIN_USERNAME,
             ADMIN_PASSWORD: !!env.ADMIN_PASSWORD,
             ADMIN_EMAIL: !!env.ADMIN_EMAIL,
@@ -1497,7 +1665,7 @@ export default {
             MAIL_FROM: !!env.MAIL_FROM,
             TURNSTILE_SECRET: !!env.TURNSTILE_SECRET,
           },
-          downloadLinks: { configured: false, count: 0, valid: false },
+
         };
 
         // 真正读写一次 KV，确认绑定可用（而不只是存在）
@@ -1516,27 +1684,24 @@ export default {
           report.kv.error = '未绑定 USERS，请检查 wrangler.toml 的 kv_namespaces';
         }
 
-        // 检查 DOWNLOAD_LINKS 是否是合法 JSON 数组
-        if (env.DOWNLOAD_LINKS) {
-          try {
-            const parsed = JSON.parse(env.DOWNLOAD_LINKS);
-            report.downloadLinks.valid = Array.isArray(parsed);
-            report.downloadLinks.count = Array.isArray(parsed) ? parsed.length : 0;
-            report.downloadLinks.configured = true;
-          } catch {
-            report.downloadLinks.configured = true;
-            report.downloadLinks.valid = false;
-          }
-        }
+        // 检查站内下载文件是否已上传
+        const novel = await readNovelFile(env);
+        report.novelFile = {
+          uploaded: !!novel,
+          name: novel ? novel.name : null,
+          size: novel ? Number(novel.size) || 0 : 0,
+        };
 
         // 整体是否可对外服务
-        report.ready = report.kv.working && !!env.SESSION_SECRET && report.downloadLinks.valid;
+        report.ready = report.kv.working && !!env.SESSION_SECRET;
+        if (!report.ready && report.novelFile.uploaded) report.ready = false;
 
         const missing = [];
         if (!report.kv.working) missing.push('KV 绑定(USERS)');
         if (!env.SESSION_SECRET) missing.push('SESSION_SECRET');
-        if (!report.downloadLinks.valid) missing.push('DOWNLOAD_LINKS');
         report.missing = missing;
+        // 文件没上传不影响站点运行，只作为提示
+        report.warnings = report.novelFile.uploaded ? [] : ['站内下载文件尚未上传'];
 
         return json(report);
       }
@@ -1607,8 +1772,8 @@ export default {
               // 能否自助注销：由服务端判定，前端只用来决定是否显示按钮
               canDelete: !!(u && !u.isAdmin && !u.isTrial && u.email),
               // 能否在控制台自助修改用户名 / 密码（都需要邮箱验证码）
-              canChangeUsername: !!(u && roleOf(u) !== 'super' && u.email && !u.banned),
-              canChangePassword: !!(u && u.email && !u.banned),
+              canChangeUsername: !!(u && roleOf(u) !== 'super' && u.email && !banState(u, Date.now()).banned),
+              canChangePassword: !!(u && u.email && !banState(u, Date.now()).banned),
             },
             account: accountStatus(u),
           });
@@ -1629,6 +1794,13 @@ export default {
         }
         if (path === '/api/downloads' && method === 'GET') {
           return await handleDownloads(env, request);
+        }
+        // 站内文件直接下载（仍需登录）
+        if (path === '/api/novel/download' && method === 'GET') {
+          return await handleNovelDownload(env, request);
+        }
+        if (path === '/api/admin/novel' && method === 'POST') {
+          return await handleAdminUploadNovel(env, request);
         }
 
         // 自助注销：第一步验密码并发邮件，第二步凭确认码真正删除

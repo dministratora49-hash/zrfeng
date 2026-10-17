@@ -184,8 +184,15 @@
 
   function showBanned(acc) {
     if (document.getElementById(BAN_ID)) return;
+    // 用**本地时间**显示封禁时段（服务端只给时间戳），支持「期限封禁」与「永久封禁」
     var meta = '';
-    if (acc && acc.bannedAt) meta = '<p class="bn-meta">封禁时间：' + fmtClock(acc.bannedAt) + '</p>';
+    if (acc && acc.banPermanent) {
+      meta = '<p class="bn-meta">永久封禁</p>';
+    } else if (acc && acc.banUntil) {
+      meta = '<p class="bn-meta">封禁至 ' + fmtClock(acc.banUntil) + '（到期自动解封）</p>';
+    } else if (acc && acc.bannedAt) {
+      meta = '<p class="bn-meta">封禁时间：' + fmtClock(acc.bannedAt) + '</p>';
+    }
     var mask = document.createElement('div');
     mask.id = BAN_ID;
     mask.innerHTML =

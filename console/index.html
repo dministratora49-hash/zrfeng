@@ -143,6 +143,18 @@
   .modal .acts button { flex: 1; padding: 10px 0; font-size: 13px; }
   .modal .err { color: #ff7b7b; font-size: 12px; min-height: 17px; margin-bottom: 6px; }
   .step-hint { font-size: 11px; color: #a08f8f; margin-bottom: 12px; }
+  .modal .m-field { margin-bottom: 10px; }
+  .modal .m-field label { color: #a08f8f; }
+  .modal .m-field input {
+    width: 100%; padding: 10px 12px; border-radius: 9px; font-size: 14px; font-family: inherit;
+    border: 1px solid rgba(255,77,77,.4); background: rgba(0,0,0,.45); color: #f0e8e8;
+  }
+  .modal .m-field input:focus { outline: none; border-color: rgba(255,77,77,.85); }
+  .modal .m-quick { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 0; }
+  .modal .m-quick button {
+    flex: 1; min-width: 62px; font-size: 11px; padding: 6px 8px;
+    border-color: rgba(255,77,77,.35); background: transparent; color: #e0a0a0;
+  }
 
   @media (max-width: 520px) {
     .stats { grid-template-columns: repeat(2, 1fr); }
@@ -518,9 +530,12 @@
     return out;
   }
 
+  var USERS = [];
+
   function renderUsers(data) {
     var s = data.stats || {};
     var iAmSuper = amSuper();
+    USERS = data.users || [];
     var html =
       '<div class="stats">' +
       '<div class="stat"><b>' + (s.total || 0) + '</b><span>账户总数</span></div>' +
@@ -536,6 +551,11 @@
     } else {
       data.users.forEach(function (u) {
         var meta = (u.email || '（无邮箱）') + ' · 注册于 ' + fmtDate(u.createdAt);
+        if (u.banned) {
+          meta += u.banUntil
+            ? ' · 封禁至 ' + fmtTime(u.banUntil) + '（到点自动解封）'
+            : ' · 永久封禁';
+        }
         html += '<div class="row"><div class="info">' +
           '<div class="name">' + esc(u.username) + tagOf(u) + '</div>' +
           '<div class="meta">' + esc(meta) + '</div></div>' +
@@ -559,6 +579,14 @@
   function act(btn) {
     var action = btn.dataset.act;
     var username = btn.dataset.u;
+
+    // 封禁需要先选起止时间，弹窗里再提交
+    if (action === 'ban') {
+      var target = USERS.filter(function (x) { return x.username === username; })[0];
+      openBan(target || { username: username });
+      return;
+    }
+
     var url, body;
     if (action === 'extend') {
       url = '/api/admin/extend';
@@ -582,6 +610,75 @@
         if (j.ok) loadAdmin(); else btn.disabled = false;
       })
       .catch(function () { note('网络错误', false); btn.disabled = false; });
+  }
+
+  /* ===================== 管理员：封禁（可设起止时间） ===================== */
+  var banTarget = null;
+
+  function toLocalMinute(ts) {
+    var d = new Date(ts);
+    return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate()) +
+      'T' + p2(d.getHours()) + ':' + p2(d.getMinutes());
+  }
+  function parseLocalMinute(v) { return v ? new Date(v).getTime() : NaN; }
+
+  function openBan(u) {
+    banTarget = u;
+    setErr('');
+    dmTitle.textContent = '封禁账户';
+    dmStep.textContent = u.username;
+    var untilVal = u.banUntil ? toLocalMinute(u.banUntil) : '';
+    dmBody.innerHTML =
+      '<p>封禁后该账户无法下载，登录后会在所有页面看到 <b>You are banned</b>。</p>' +
+      '<p class="small">「结束时间」留空就是<b>永久封禁</b>；填了就到期自动解封，不需要你再操作。</p>' +
+      '<div class="m-field"><label>开始时间</label>' +
+      '<input type="datetime-local" id="banFrom" value="' + toLocalMinute(Date.now()) + '"></div>' +
+      '<div class="m-field"><label>结束时间（留空 = 永久）</label>' +
+      '<input type="datetime-local" id="banUntil" value="' + untilVal + '"></div>' +
+      '<div class="m-quick">' +
+      '<button data-banq="1440">1 天</button>' +
+      '<button data-banq="10080">7 天</button>' +
+      '<button data-banq="43200">30 天</button>' +
+      '<button data-banq="0">永久</button>' +
+      '</div>';
+    dmActs.innerHTML =
+      '<button class="mute" id="banCancel">取消</button>' +
+      '<button class="warn" id="banOk">确认封禁</button>';
+    delMask.className = 'mask';
+    document.getElementById('banCancel').onclick = closeModal;
+    document.getElementById('banOk').onclick = doBan;
+    dmBody.querySelectorAll('button[data-banq]').forEach(function (b) {
+      b.onclick = function () {
+        var mins = Number(b.dataset.banq);
+        var el = document.getElementById('banUntil');
+        el.value = mins > 0 ? toLocalMinute(Date.now() + mins * 60000) : '';
+      };
+    });
+  }
+
+  function doBan() {
+    if (!banTarget) return;
+    var from = parseLocalMinute(document.getElementById('banFrom').value);
+    var untilRaw = document.getElementById('banUntil').value;
+    var until = untilRaw ? parseLocalMinute(untilRaw) : 0;
+    if (!isFinite(from)) { setErr('请选择开始时间'); return; }
+    if (until && until <= Math.max(from, Date.now())) { setErr('结束时间必须晚于开始时间'); return; }
+
+    var btn = document.getElementById('banOk');
+    btn.disabled = true;
+    setErr('');
+    fetch('/api/admin/ban', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username: banTarget.username, banned: true, from: from, until: until || 0 }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j.ok) { setErr(j.message || '封禁失败'); btn.disabled = false; return; }
+        closeModal();
+        note(j.message, true);
+        loadAdmin();
+      })
+      .catch(function () { setErr('网络错误'); btn.disabled = false; });
   }
 
   /* ===================== 管理员：维护时间 ===================== */

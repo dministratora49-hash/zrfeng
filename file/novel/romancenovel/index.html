@@ -177,50 +177,6 @@
     margin-bottom: 20px;
   }
 
-  .client {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    padding: 16px;
-    font-size: 16px;
-    letter-spacing: 1px;
-    color: #00ff8c;
-    text-decoration: none;
-    border: 1px solid rgba(0, 255, 140, 0.4);
-    border-radius: 12px;
-    background: rgba(0, 255, 140, 0.06);
-    transition: background 0.25s, border-color 0.25s, box-shadow 0.25s;
-  }
-  .client + .client { margin-top: 12px; }
-  /* 带提取密码的渠道：名称靠左，密码标签靠右 */
-  .client.with-pwd { justify-content: space-between; gap: 8px; }
-  .client .pwd {
-    margin-left: auto;
-    padding: 3px 10px;
-    font-size: 12px;
-    letter-spacing: 0;
-    color: #7fa893;
-    border: 1px solid rgba(0, 255, 140, 0.25);
-    border-radius: 20px;
-    white-space: nowrap;
-    user-select: all;
-    -webkit-user-select: all;
-  }
-  .client:hover {
-    background: rgba(0, 255, 140, 0.14);
-    border-color: #00ff8c;
-    box-shadow: 0 0 22px rgba(0, 255, 140, 0.3);
-  }
-
-  /* 加载中 / 未登录提示 */
-  .loading {
-    padding: 22px 10px;
-    text-align: center;
-    font-size: 13px;
-    color: #7fa893;
-    letter-spacing: 1px;
-  }
   .need-login {
     padding: 20px 14px;
     text-align: center;
@@ -247,6 +203,23 @@
     transition: box-shadow 0.25s;
   }
   .need-login .nl-btn:hover { box-shadow: 0 0 20px rgba(0, 255, 140, 0.45); }
+
+  /* 站内直接下载卡片 */
+  .file-card {
+    display: flex; flex-direction: column; gap: 10px;
+    padding: 18px 16px; border-radius: 14px;
+    border: 1px solid rgba(0, 255, 140, 0.35);
+    background: rgba(10, 18, 14, 0.85);
+  }
+  .file-card .fc-name { font-size: 15px; color: #e8f5ee; word-break: break-all; }
+  .file-card .fc-meta { font-size: 12px; color: #7fa893; }
+  .file-card .fc-btn {
+    display: block; text-align: center; padding: 12px 0; border-radius: 10px;
+    background: linear-gradient(135deg, #00ff8c, #00c96e); color: #04140c;
+    font-weight: 700; text-decoration: none; font-size: 15px;
+    box-shadow: 0 0 22px rgba(0, 255, 140, 0.3);
+  }
+  .file-card .fc-btn:hover { box-shadow: 0 0 30px rgba(0, 255, 140, 0.5); }
 
   .close {
     display: inline-block;
@@ -308,13 +281,12 @@
     <div>© 2026 zrfeng.top — All Rights Reserved</div>
   </div>
 
-  <!-- 下载弹窗 -->
+  <!-- 下载弹窗：站内直接下载（服务端校验登录，源码里没有任何下载地址） -->
   <div class="mask" id="mask">
     <div class="modal">
-      <div class="head">选择下载方式</div>
-      <!-- 下载链接由服务端在登录校验后下发，源码中不出现 -->
-      <div id="clientList">
-        <div class="loading">正在获取下载方式…</div>
+      <div class="head">下载《听潮》</div>
+      <div id="dlBody">
+        <div class="loading">正在检查下载权限…</div>
       </div>
       <button class="close" id="closeBtn" type="button">关闭</button>
     </div>
@@ -326,20 +298,11 @@
   var mask = document.getElementById('mask');
   var dlBtn = document.getElementById('dlBtn');
   var closeBtn = document.getElementById('closeBtn');
-  var listEl = document.getElementById('clientList');
+  var listEl = document.getElementById('dlBody');
   var loaded = false;
 
   function open() { mask.classList.add('on'); if (!loaded) load(); }
   function close() { mask.classList.remove('on'); }
-
-  /* 未登录：引导去登录页 */
-  function needLogin(msg) {
-    listEl.innerHTML =
-      '<div class="need-login">' +
-        '<div class="nl-text">' + (msg || '请先登录后再下载') + '</div>' +
-        '<a class="nl-btn" href="' + SITE + '/login/">前往登录 / 注册</a>' +
-      '</div>';
-  }
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -347,38 +310,67 @@
     });
   }
 
-  function render(links) {
-    if (!links || !links.length) {
-      listEl.innerHTML = '<div class="loading">暂无可用的下载方式</div>';
-      return;
-    }
-    listEl.innerHTML = links.map(function (l) {
-      var cls = l.pwd ? 'client with-pwd' : 'client';
-      var inner = '<span>☁ ' + esc(l.name) + '</span>';
-      if (l.pwd) inner += '<span class="pwd">密码：' + esc(l.pwd) + '</span>';
-      return '<a class="' + cls + '" href="' + esc(l.url) + '" target="_blank" rel="noopener">' + inner + '</a>';
-    }).join('');
+  function fmtSize(n) {
+    n = Number(n) || 0;
+    if (n >= 1048576) return (n / 1048576).toFixed(1) + ' MB';
+    if (n >= 1024) return Math.round(n / 1024) + ' KB';
+    return n + ' B';
+  }
+
+  /** 未登录 / 无权限时的引导块 */
+  function notice(text, withLogin) {
+    listEl.innerHTML =
+      '<div class="need-login">' +
+        '<div class="nl-text">' + esc(text) + '</div>' +
+        (withLogin ? '<a class="nl-btn" href="' + SITE + '/login/">前往登录 / 注册</a>' : '') +
+      '</div>';
+  }
+
+  /** 有权限：给出直接下载入口 */
+  function renderDownload(file) {
+    listEl.innerHTML =
+      '<div class="file-card">' +
+        '<div class="fc-name">📖 ' + esc(file.name || '《听潮》') + '</div>' +
+        '<div class="fc-meta">' + (file.size ? fmtSize(file.size) + ' · ' : '') + '需要登录 · 站内直接下载</div>' +
+        '<a class="fc-btn" href="' + SITE + '/api/novel/download" rel="noopener">直接下载</a>' +
+      '</div>';
   }
 
   async function load() {
-    listEl.innerHTML = '<div class="loading">正在获取下载方式…</div>';
+    listEl.innerHTML = '<div class="loading">正在检查下载权限…</div>';
     try {
       var res = await fetch(SITE + '/api/downloads', {
         credentials: 'same-origin',
         headers: { accept: 'application/json' }
       });
       var data = await res.json();
+
       if (res.status === 401 || data.needLogin) {
         loaded = false;
-        needLogin(data.message);
+        notice(data.message || '登录后即可直接下载', true);
+        return;
+      }
+      if (data.banned) {
+        loaded = true;
+        notice(data.message || '该账户已被封禁，请联系管理员', false);
+        return;
+      }
+      if (data.blocked) {
+        loaded = true;
+        notice(data.message || '账户试用期已到，请联系管理员以激活账户', false);
         return;
       }
       if (!data.ok) throw new Error(data.message || '加载失败');
+
       loaded = true;
-      render(data.links);
+      if (!data.file || !data.file.available) {
+        notice('文件尚未上传，请联系管理员', false);
+        return;
+      }
+      renderDownload(data.file);
     } catch (e) {
       listEl.innerHTML =
-        '<div class="need-login"><div class="nl-text">下载方式加载失败，请稍后重试</div>' +
+        '<div class="need-login"><div class="nl-text">加载失败，请稍后重试</div>' +
         '<a class="nl-btn" href="' + SITE + '/login/">前往登录</a></div>';
     }
   }
