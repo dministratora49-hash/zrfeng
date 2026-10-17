@@ -1652,6 +1652,218 @@ async function handleChangeConfirm(env, request) {
   });
 }
 
+/* ========================== 邮箱：添加 / 更改 ========================== */
+
+/** 邮箱验证码有效期（秒） */
+const EMAILCODE_TTL = 10 * 60;
+
+/** 邮箱相关操作的通用前置校验 */
+async function emailGuard(env, request) {
+  const session = await getSession(env, request);
+  if (!session) return { error: json({ ok: false, message: '请先登录', needLogin: true }, 401) };
+  const user = await sessionUser(env, session);
+  if (!user) return { error: json({ ok: false, message: '账户不存在' }, 404) };
+  if (banState(user, Date.now()).banned) {
+    return { error: json({ ok: false, message: '该账户已被封禁' }, 403) };
+  }
+  return { session, user };
+}
+
+/** 这个邮箱能不能被该账户使用 */
+async function emailAvailable(env, email, user) {
+  if (await isEmailRetired(env, email)) {
+    return { ok: false, message: '该邮箱已注销，不可使用' };
+  }
+  const owner = await env.USERS.get('email:' + email);
+  if (owner && owner !== user.username) {
+    return { ok: false, message: '该邮箱已被其他账户使用' };
+  }
+  if (user.email && user.email === email) {
+    return { ok: false, message: '新邮箱与当前邮箱相同' };
+  }
+  return { ok: true };
+}
+
+/**
+ * 邮箱操作第一步：发验证码。
+ *
+ *   action=add,    step=new —— 账户还没有邮箱时「添加邮箱」：
+ *                              要**新邮箱 + 密码**，验证通过即激活账户。
+ *   action=change, step=old —— 已有邮箱时「更改邮箱」：先验证**旧邮箱**。
+ *   action=change, step=new —— 旧邮箱验证通过后，再验证**新邮箱**。
+ */
+async function handleEmailRequest(env, request) {
+  const g = await emailGuard(env, request);
+  if (g.error) return g.error;
+  const { user } = g;
+
+  const body = await readJson(request);
+  const action = String(body.action || '');
+  const step = String(body.step || '');
+
+
+  let rec = null;
+  let to = '';
+
+  if (action === 'add') {
+    if (user.email) return json({ ok: false, message: '该账户已有邮箱，请使用「更改邮箱」' }, 400);
+    if (step !== 'new') return json({ ok: false, message: '参数不正确' }, 400);
+
+    const pw = String(body.password || '');
+    if (!pw) return json({ ok: false, message: '请输入密码' }, 400);
+    const hash = await hashPassword(pw, user.salt);
+    if (!timingSafeEqual(hash, user.hash)) {
+      return json({ ok: false, message: '密码不正确' }, 401);
+    }
+
+    const v = validateEmail(body.email);
+    if (!v.ok) return json({ ok: false, message: v.message }, 400);
+    const av = await emailAvailable(env, v.email, user);
+    if (!av.ok) return json({ ok: false, message: av.message }, 400);
+
+    rec = { action: 'add', stage: 'new', newEmail: v.email };
+    to = v.email;
+  } else if (action === 'change') {
+    if (!user.email) return json({ ok: false, message: '该账户还没有邮箱，请使用「添加邮箱」' }, 400);
+
+    if (step === 'old') {
+      rec = { action: 'change', stage: 'old' };
+      to = user.email;
+    } else if (step === 'new') {
+      const prev = await env.USERS.get('emailcode:' + user.username, 'json');
+      if (!prev || prev.action !== 'change' || !prev.oldVerified) {
+        return json({ ok: false, message: '请先验证当前邮箱' }, 400);
+      }
+      const v = validateEmail(body.email);
+      if (!v.ok) return json({ ok: false, message: v.message }, 400);
+      const av = await emailAvailable(env, v.email, user);
+      if (!av.ok) return json({ ok: false, message: av.message }, 400);
+
+      rec = { action: 'change', stage: 'new', oldVerified: true, newEmail: v.email };
+      to = v.email;
+    } else {
+      return json({ ok: false, message: '参数不正确' }, 400);
+    }
+  } else {
+    return json({ ok: false, message: '不支持的邮箱操作' }, 400);
+  }
+
+  // 限流放在各项校验之后：这样「还没验证旧邮箱」之类的真实原因才不会被 429 掩盖
+  const ck = 'emailcooldown:' + user.username;
+  if (await env.USERS.get(ck)) {
+    return json({ ok: false, message: '验证码刚发过，请稍后再试或查看邮箱' }, 429);
+  }
+
+  const code = String(Math.floor(100000 + Math.random() * 900000));
+  rec.code = code;
+  rec.tries = 0;
+  await env.USERS.put('emailcode:' + user.username, JSON.stringify(rec), { expirationTtl: EMAILCODE_TTL });
+  await env.USERS.put(ck, '1', { expirationTtl: CODE_COOLDOWN });
+
+  const isOld = rec.stage === 'old';
+  const title = isOld ? '验证当前邮箱' : action === 'add' ? '添加邮箱' : '验证新邮箱';
+  const tip = isOld
+    ? '有人正在为你的账户更换绑定邮箱。'
+    : action === 'add'
+      ? '把这个邮箱绑定到你的账户后，账户即完成激活。'
+      : '这是要绑定的新邮箱。';
+
+  const sent = await sendMail(
+    env,
+    to,
+    '【zrfeng.top】' + title + '确认',
+    '<div style="font-family:system-ui,-apple-system,\'PingFang SC\',\'Microsoft YaHei\',sans-serif;padding:24px;background:#050807;color:#e8f5ee">' +
+      '<h2 style="color:#00ff8c;margin:0 0 12px">' + title + '确认</h2>' +
+      '<p style="color:#a9c6b8;margin:0 0 8px">账户 <b style="color:#00ff8c">' + user.username + '</b></p>' +
+      '<p style="color:#a9c6b8;margin:0 0 16px">' + tip + '</p>' +
+      '<p style="color:#a9c6b8;margin:0 0 8px">确认码：</p>' +
+      '<p style="font-size:30px;letter-spacing:8px;font-weight:700;color:#00ff8c;margin:0 0 18px">' + code + '</p>' +
+      '<p style="color:#7fa893;font-size:13px;margin:0">10 分钟内有效。</p>' +
+      '<p style="color:#5c7a6b;font-size:12px;margin:16px 0 0">如果不是你本人操作，请忽略本邮件，邮箱不会有任何变化。</p>' +
+      '</div>'
+  );
+  if (!sent.ok) return json({ ok: false, message: sent.message }, 502);
+
+  return json({
+    ok: true,
+    message: '确认码已发送到 ' + maskEmail(to),
+    needCode: true,
+    action,
+    step: rec.stage,
+  });
+}
+
+/**
+ * 邮箱操作第二步：校验验证码。
+ * 「更改邮箱」会先用旧邮箱的码走到 ready，再让前端去要新邮箱。
+ */
+async function handleEmailConfirm(env, request) {
+  const g = await emailGuard(env, request);
+  if (g.error) return g.error;
+  const { user } = g;
+
+  const body = await readJson(request);
+  const action = String(body.action || '');
+  const code = String(body.code || '').trim();
+  if (action !== 'add' && action !== 'change') {
+    return json({ ok: false, message: '不支持的邮箱操作' }, 400);
+  }
+  if (!/^\d{6}$/.test(code)) return json({ ok: false, message: '请输入 6 位验证码' }, 400);
+
+  const key = 'emailcode:' + user.username;
+  const rec = await env.USERS.get(key, 'json');
+  if (!rec || rec.action !== action) {
+    return json({ ok: false, message: '验证码已过期，请重新获取' }, 400);
+  }
+  if (rec.tries >= 5) {
+    await env.USERS.delete(key);
+    return json({ ok: false, message: '尝试次数过多，请重新获取验证码' }, 400);
+  }
+  if (String(code) !== String(rec.code)) {
+    rec.tries = (rec.tries || 0) + 1;
+    await env.USERS.put(key, JSON.stringify(rec), { expirationTtl: EMAILCODE_TTL });
+    return json({ ok: false, message: '验证码不正确' }, 400);
+  }
+
+  // 旧邮箱验证通过 → 进入「输入新邮箱」阶段
+  if (rec.stage === 'old') {
+    rec.stage = 'ready';
+    rec.oldVerified = true;
+    delete rec.code;
+    await env.USERS.put(key, JSON.stringify(rec), { expirationTtl: EMAILCODE_TTL });
+    // 清掉冷却，让用户能立刻给新邮箱发码
+    await env.USERS.delete('emailcooldown:' + user.username);
+    return json({
+      ok: true,
+      needNewEmail: true,
+      message: '当前邮箱已验证，请输入新的邮箱地址',
+    });
+  }
+
+  // 正式生效
+  const newEmail = rec.newEmail;
+  const av = await emailAvailable(env, newEmail, user);
+  if (!av.ok) return json({ ok: false, message: av.message }, 409);
+
+  const oldEmail = user.email;
+  if (oldEmail && oldEmail !== newEmail) await env.USERS.delete('email:' + oldEmail);
+
+  user.email = newEmail;
+  user.verified = true; // 邮箱验证通过 = 账户已激活
+  user.emailChangedAt = Date.now();
+  await putUser(env, user);
+  await env.USERS.delete(key);
+  await env.USERS.delete('emailcooldown:' + user.username);
+
+  const wasAdd = rec.action === 'add';
+  return json({
+    ok: true,
+    message: wasAdd ? '邮箱已添加，账户已激活' : '邮箱已更新',
+    email: newEmail,
+    account: accountStatus(user),
+  });
+}
+
 /* ========================== 主入口 ========================== */
 
 export default {
@@ -1789,6 +2001,10 @@ export default {
               // 能否在控制台自助修改用户名 / 密码（都需要邮箱验证码）
               canChangeUsername: !!(u && roleOf(u) !== 'super' && u.email && !banState(u, Date.now()).banned),
               canChangePassword: !!(u && u.email && !banState(u, Date.now()).banned),
+              // 没有邮箱的账户可以「添加邮箱」来激活自己
+              canAddEmail: !!(u && !u.email && !banState(u, Date.now()).banned),
+              // 已有邮箱的账户可以「更改邮箱」（先验旧、再验新）
+              canChangeEmail: !!(u && u.email && !banState(u, Date.now()).banned),
             },
             account: accountStatus(u),
           });
@@ -1832,6 +2048,14 @@ export default {
         }
         if (path === '/api/account/change/confirm' && method === 'POST') {
           return await handleChangeConfirm(env, request);
+        }
+
+        // 邮箱：添加（激活账户）/ 更改（先验旧邮箱，再验新邮箱）
+        if (path === '/api/account/email/request' && method === 'POST') {
+          return await handleEmailRequest(env, request);
+        }
+        if (path === '/api/account/email/confirm' && method === 'POST') {
+          return await handleEmailConfirm(env, request);
         }
 
         // 管理员控制台

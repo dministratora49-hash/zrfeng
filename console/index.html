@@ -269,6 +269,18 @@
         '<div class="meta">需要邮箱验证码；改后其它设备会被登出</div></div>' +
         '<button data-ch="password">修改</button></div>';
     }
+    if (u.canAddEmail) {
+      sec += '<div class="row"><div class="info">' +
+        '<div class="name">添加邮箱</div>' +
+        '<div class="meta">账户还没有邮箱。绑定邮箱并验证后，账户即完成激活（只需验证新邮箱 + 密码）</div></div>' +
+        '<button data-em="add">添加并激活</button></div>';
+    }
+    if (u.canChangeEmail) {
+      sec += '<div class="row"><div class="info">' +
+        '<div class="name">更改邮箱</div>' +
+        '<div class="meta">当前：' + esc(u.email || '') + '。需要先验证当前邮箱，再验证新邮箱</div></div>' +
+        '<button data-em="change">更改</button></div>';
+    }
     if (sec) html += '<div class="card"><h2>账户安全</h2>' + sec + '</div>';
     meEl.innerHTML = html;
 
@@ -276,6 +288,9 @@
     if (b) b.onclick = openDelete;
     meEl.querySelectorAll('button[data-ch]').forEach(function (x) {
       x.onclick = function () { openChange(x.dataset.ch); };
+    });
+    meEl.querySelectorAll('button[data-em]').forEach(function (x) {
+      x.onclick = function () { openEmail(x.dataset.em); };
     });
   }
 
@@ -610,6 +625,153 @@
         if (j.ok) loadAdmin(); else btn.disabled = false;
       })
       .catch(function () { note('网络错误', false); btn.disabled = false; });
+  }
+
+  /* ===================== 添加邮箱 / 更改邮箱 ===================== */
+  var emailAction = null;
+
+  function openEmail(action) {
+    emailAction = action;
+    setErr('');
+    if (action === 'add') return openEmailAdd();
+    return openEmailChangeOld();
+  }
+
+  /** 添加邮箱（账户还没有邮箱）：验证新邮箱 + 密码 → 激活 */
+  function openEmailAdd() {
+    dmTitle.textContent = '添加邮箱并激活';
+    dmStep.textContent = '第 1 / 2 步 · 新邮箱 + 密码';
+    dmBody.innerHTML =
+      '<p>绑定邮箱并通过验证后，账户即<b>完成激活</b>（状态栏变绿）。</p>' +
+      '<p class="small">只需验证新邮箱；为了确认是你本人，还要输入当前密码。</p>' +
+      '<input type="email" id="emMail" placeholder="要绑定的邮箱" autocomplete="email">' +
+      '<input type="password" id="emPwd" placeholder="当前密码" autocomplete="current-password">';
+    dmActs.innerHTML =
+      '<button class="mute" id="emCancel">取消</button>' +
+      '<button id="emSend">发送验证码</button>';
+    delMask.className = 'mask';
+    document.getElementById('emCancel').onclick = closeModal;
+    document.getElementById('emSend').onclick = sendEmailCode;
+    var m = document.getElementById('emMail');
+    if (m) m.focus();
+  }
+
+  /** 更改邮箱 · 第 1 步：先验证当前（旧）邮箱 */
+  function openEmailChangeOld() {
+    dmTitle.textContent = '更改邮箱';
+    dmStep.textContent = '第 1 / 2 步 · 验证当前邮箱';
+    dmBody.innerHTML =
+      '<p>为了安全，改邮箱要<b>先验证当前邮箱</b>，再验证新邮箱。</p>' +
+      '<p class="small">点下面的按钮，我们会把验证码发到你现在绑定的邮箱。</p>';
+    dmActs.innerHTML =
+      '<button class="mute" id="emCancel">取消</button>' +
+      '<button id="emSendOld">发送验证码到当前邮箱</button>';
+    delMask.className = 'mask';
+    document.getElementById('emCancel').onclick = closeModal;
+    document.getElementById('emSendOld').onclick = function () {
+      var b = document.getElementById('emSendOld');
+      b.disabled = true;
+      setErr('');
+      emailPost({ action: 'change', step: 'old' }, function (j) {
+        emailCodeStep('change', j.message || '', '旧邮箱验证码', '确认并继续');
+      }, function () { b.disabled = false; });
+    };
+  }
+
+  function sendEmailCode() {
+    var mail = (document.getElementById('emMail') || {}).value || '';
+    var pwd = (document.getElementById('emPwd') || {}).value || '';
+    if (!mail.trim()) { setErr('请输入邮箱'); return; }
+    if (!pwd) { setErr('请输入密码'); return; }
+    var b = document.getElementById('emSend');
+    b.disabled = true;
+    setErr('');
+    emailPost(
+      { action: emailAction, step: 'new', email: mail.trim(), password: pwd },
+      function (j) { emailCodeStep(emailAction, j.message || '', emailAction === 'add' ? '新邮箱验证码' : '新邮箱验证码', emailAction === 'add' ? '确认并激活' : '确认更改'); },
+      function () { b.disabled = false; }
+    );
+  }
+
+  /** 通用的「输入验证码」步骤 */
+  function emailCodeStep(action, sentMsg, label, okText) {
+    setErr('');
+    dmStep.textContent = '第 2 / 2 步 · ' + label;
+    dmBody.innerHTML =
+      '<p>' + esc(sentMsg) + '</p>' +
+      '<p class="small">10 分钟内有效。如果没收到，请查看垃圾箱。</p>' +
+      '<input type="text" class="code" id="emCode" inputmode="numeric" maxlength="6" placeholder="000000">';
+    dmActs.innerHTML =
+      '<button class="mute" id="emBack">返回</button>' +
+      '<button id="emOk">' + esc(okText) + '</button>';
+    document.getElementById('emBack').onclick = function () { openEmail(action); };
+    document.getElementById('emOk').onclick = function () { confirmEmail(action, this); };
+    var c = document.getElementById('emCode');
+    if (c) { c.focus(); c.onkeydown = function (e) { if (e.key === 'Enter') confirmEmail(action, null); }; }
+  }
+
+  function emailPost(body, onOk, onErr) {
+    fetch('/api/account/email/request', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j.ok) { setErr(j.message || '发送失败'); if (onErr) onErr(); return; }
+        onOk(j);
+      })
+      .catch(function () { setErr('网络错误'); if (onErr) onErr(); });
+  }
+
+  function confirmEmail(action, btn) {
+    var code = ((document.getElementById('emCode') || {}).value || '').trim();
+    if (!/^\d{6}$/.test(code)) { setErr('请输入 6 位验证码'); return; }
+    if (btn) btn.disabled = true;
+    setErr('');
+    fetch('/api/account/email/confirm', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: action, code: code }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j.ok) { setErr(j.message || '验证失败'); if (btn) btn.disabled = false; return; }
+
+        // 旧邮箱通过 → 继续输入新邮箱
+        if (j.needNewEmail) {
+          dmTitle.textContent = '更改邮箱';
+          dmStep.textContent = '第 2 / 2 步 · 输入新邮箱';
+          dmBody.innerHTML =
+            '<p>' + esc(j.message || '当前邮箱已验证') + '</p>' +
+            '<p class="small">验证码会发到这个新邮箱，验证通过后才会真正更换。</p>' +
+            '<input type="email" id="emMail" placeholder="新的邮箱地址" autocomplete="email">' +
+            '<input type="hidden" id="emPwd" value="x">';
+          dmActs.innerHTML =
+            '<button class="mute" id="emBack">返回</button>' +
+            '<button id="emSend">发送验证码到新邮箱</button>';
+          document.getElementById('emBack').onclick = function () { openEmailChangeOld(); };
+          document.getElementById('emSend').onclick = function () {
+            var mail = (document.getElementById('emMail') || {}).value || '';
+            if (!mail.trim()) { setErr('请输入新邮箱'); return; }
+            var b = document.getElementById('emSend');
+            b.disabled = true;
+            setErr('');
+            emailPost({ action: 'change', step: 'new', email: mail.trim() },
+              function (j2) { emailCodeStep('change', j2.message || '', '新邮箱验证码', '确认更改'); },
+              function () { b.disabled = false; });
+          };
+          var m = document.getElementById('emMail');
+          if (m) m.focus();
+          return;
+        }
+
+        // 完成
+        dmTitle.textContent = '完成';
+        dmStep.textContent = '';
+        dmBody.innerHTML = '<p>' + esc(j.message || '已完成') + '</p>';
+        dmActs.innerHTML = '<button id="emDone">好</button>';
+        document.getElementById('emDone').onclick = function () { closeModal(); loadMe(); };
+        setTimeout(function () { closeModal(); loadMe(); }, 1800);
+      })
+      .catch(function () { setErr('网络错误'); if (btn) btn.disabled = false; });
   }
 
   /* ===================== 管理员：封禁（可设起止时间） ===================== */
