@@ -67,22 +67,6 @@ const adminUsername = (env) => String(env.ADMIN_USERNAME || '').trim().toLowerCa
 const adminEmail = (env) => String(env.ADMIN_EMAIL || '').trim().toLowerCase();
 const trialUsername = (env) => String(env.TRIAL_ACCOUNT || '').trim().toLowerCase();
 
-/**
- * 主管理员的二次身份验证。
- * 问题与答案都从 Cloudflare 密钥读取 —— 答案绝不写进代码，
- * 因为 worker.js 是公开仓库的一部分。
- */
-const adminVerifyAnswer = (env) => String(env.ADMIN_VERIFY_ANSWER || '').trim();
-const adminVerifyQuestion = (env) =>
-  String(env.ADMIN_VERIFY_QUESTION || '').trim() || '请回答管理员验证问题';
-
-/** 这个会话是否需要（且尚未通过）管理员二次验证 */
-function needAdminVerify(env, user, session) {
-  if (!user || roleOf(user) !== 'super') return false;
-  if (!adminVerifyAnswer(env)) return false; // 没配答案就不启用
-  return !(session && session.adminVerified === true);
-}
-
 /** 不允许注册的名字（含运行时的管理员 / 试用账户名） */
 function reservedNames(env) {
   const set = new Set(RESERVED);
@@ -525,8 +509,6 @@ async function createSession(env, user) {
       username: user.username,
       email: user.email,
       isAdmin: !!user.isAdmin,
-        // 主管理员需要额外回答问题（若密钥里配了答案）；这里先记成「未通过」
-        adminVerified: !needAdminVerify(env, user, null),
       expires: Date.now() + SESSION_TTL * 1000,
     }),
     { expirationTtl: SESSION_TTL }
@@ -1159,20 +1141,6 @@ async function requireAdmin(env, request) {
   if (banState(user, Date.now()).banned) {
     return { error: json({ ok: false, message: '该账户已被封禁' }, 403) };
   }
-  // 主管理员二次验证：配了答案就必须先答对，否则所有管理接口一律拒绝
-  if (needAdminVerify(env, user, session)) {
-    return {
-      error: json(
-        {
-          ok: false,
-          needAdminVerify: true,
-          message: '请先完成管理员身份验证',
-          question: adminVerifyQuestion(env),
-        },
-        403
-      ),
-    };
-  }
   return { session, user, role: roleOf(user) };
 }
 
@@ -1272,6 +1240,9 @@ async function handleAdminNoticesRead(env, request) {
 /* ========================== 维护时间 ========================== */
 
 /** 维护时段存放的 KV 键 */
+/** 维护期间「工作人员预览」通行证 Cookie 名 */
+const MAINT_PASS_COOKIE = 'maintpass';
+
 const MAINT_KEY = 'config:maintenance';
 
 /** 维护时段最长允许 30 天，防止误填出一个「永久维护」 */
@@ -1287,7 +1258,22 @@ async function getMaintenance(env) {
   }
   if (!m || typeof m.start !== 'number' || typeof m.end !== 'number') return null;
   if (!(m.end > m.start)) return null;
-  return { start: m.start, end: m.end, setBy: m.setBy || null, setAt: m.setAt || null };
+  // 维护结束后**整条配置连同访问密钥一起销毁**（密钥只在这一轮维护里有效）
+  if (Date.now() >= m.end) {
+    try {
+      await env.USERS.delete(MAINT_KEY);
+    } catch {
+      /* 忽略 */
+    }
+    return null;
+  }
+  return {
+    start: m.start,
+    end: m.end,
+    key: typeof m.key === 'string' && m.key ? m.key : null,
+    setBy: m.setBy || null,
+    setAt: m.setAt || null,
+  };
 }
 
 /**
@@ -1298,7 +1284,7 @@ async function getMaintenance(env) {
  */
 function maintenanceState(m, now) {
   if (!m) {
-    return { set: false, active: false, start: null, end: null, remainingMs: null, startsInMs: null, ended: false };
+    return { set: false, active: false, start: null, end: null, remainingMs: null, startsInMs: null, ended: false, keySet: false };
   }
   const active = now >= m.start && now < m.end;
   return {
@@ -1311,6 +1297,8 @@ function maintenanceState(m, now) {
     ended: now >= m.end,
     setBy: m.setBy,
     setAt: m.setAt,
+    // 只告诉前端「设了密钥」，密钥本身永远不下发
+    keySet: !!(m.key && String(m.key).length),
   };
 }
 
@@ -1340,7 +1328,22 @@ async function handleAdminMaintenance(env, request) {
     return json({ ok: false, message: '维护时段最长 30 天' }, 400);
   }
 
+  // 访问密钥：给工作人员在维护期间预览站点用；留空则不设
+  const rawKey = body.key === undefined ? null : String(body.key).trim();
+  let key = null;
+  if (rawKey) {
+    if (rawKey.length < 4 || rawKey.length > 64) {
+      return json({ ok: false, message: '访问密钥长度需在 4–64 个字符之间' }, 400);
+    }
+    key = rawKey;
+  } else if (body.keepKey) {
+    // 只改时间段、不填密钥 → 沿用原来的
+    const old = await getMaintenance(env);
+    key = old && old.key ? old.key : null;
+  }
+
   const m = { start, end, setBy: guard.session.username, setAt: now };
+  if (key) m.key = key;
   await env.USERS.put(MAINT_KEY, JSON.stringify(m));
 
   const st = maintenanceState(m, now);
@@ -1950,35 +1953,62 @@ async function handleEmailConfirm(env, request) {
   });
 }
 
+/* ========================== 维护期间：工作人员预览 ========================== */
+
+/** 从 Cookie 里取维护通行证 */
+function maintPassOf(request) {
+  const m = (request.headers.get('Cookie') || '').match(/(?:^|;\s*)maintpass=([a-f0-9]{32})/);
+  return m ? m[1] : null;
+}
+
 /**
- * 管理员二次身份验证：回答密钥里配置的问题。
- * 通过后把当前会话标记为已通过，之后管理接口才放行。
+ * 这次请求是否持有有效的维护通行证。
+ * 只在维护进行中有效，且必须在 KV 里对得上 —— 维护一结束整条配置就被删了，
+ * 通行证自然失效。
  */
-async function handleAdminVerify(env, request) {
-  const session = await getSession(env, request);
-  if (!session) return json({ ok: false, message: '请先登录', needLogin: true }, 401);
-
-  const user = await sessionUser(env, session);
-  if (!user || roleOf(user) !== 'super') {
-    return json({ ok: false, message: '只有主管理员需要此验证' }, 403);
+async function maintUnlocked(env, request, m) {
+  if (!m || !m.key) return false;
+  const token = maintPassOf(request);
+  if (!token) return false;
+  try {
+    const rec = await env.USERS.get('maintpass:' + token, 'json');
+    return !!(rec && rec.until && Date.now() < rec.until);
+  } catch {
+    return false;
   }
+}
 
-  const expected = adminVerifyAnswer(env);
-  if (!expected) return json({ ok: true, message: '未配置验证问题，无需验证' });
+/**
+ * 工作人员用「本次维护访问密钥」换取通行证。
+ * 密钥由管理员在控制台随时自定义，维护结束自动销毁。
+ */
+async function handleMaintUnlock(env, request) {
+  const now = Date.now();
+  const m = await getMaintenance(env);
+  if (!m || !(now >= m.start && now < m.end)) {
+    return json({ ok: false, message: '当前不在维护时段' }, 400);
+  }
+  if (!m.key) return json({ ok: false, message: '本次维护没有设置访问密钥' }, 400);
 
   const body = await readJson(request);
-  const answer = String(body.answer || '').trim();
-  if (!answer) return json({ ok: false, message: '请输入答案' }, 400);
-  if (!timingSafeEqual(answer, expected)) {
-    return json({ ok: false, message: '答案不正确' }, 401);
+  const input = String(body.key || '').trim();
+  if (!input) return json({ ok: false, message: '请输入访问密钥' }, 400);
+  if (!timingSafeEqual(input, String(m.key))) {
+    return json({ ok: false, message: '密钥不正确' }, 403);
   }
 
-  session.adminVerified = true;
-  const m = (request.headers.get('Cookie') || '').match(/(?:^|;\s*)session=([a-f0-9]{64})/);
-  if (m) {
-    await env.USERS.put('session:' + m[1], JSON.stringify(session), { expirationTtl: SESSION_TTL });
-  }
-  return json({ ok: true, message: '验证通过' });
+  const token = randomHex(16);
+  const ttl = Math.max(60, Math.ceil((m.end - now) / 1000));
+  await env.USERS.put('maintpass:' + token, JSON.stringify({ until: m.end, at: now }), {
+    expirationTtl: ttl,
+  });
+
+  const headers = new Headers({ 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+  headers.append(
+    'Set-Cookie',
+    `maintpass=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${ttl}`
+  );
+  return new Response(JSON.stringify({ ok: true, message: '已进入预览模式' }), { status: 200, headers });
 }
 
 /* ========================== 新设备登录验证 ========================== */
@@ -2255,6 +2285,10 @@ export default {
         if (path === '/api/login/verify' && method === 'POST') {
           return await handleDeviceVerify(env, request);
         }
+        // 维护期间：工作人员凭访问密钥进入预览模式
+        if (path === '/api/maintenance/unlock' && method === 'POST') {
+          return await handleMaintUnlock(env, request);
+        }
         if (path === '/api/logout' && method === 'POST') {
           return await handleLogout(env, request);
         }
@@ -2284,9 +2318,6 @@ export default {
               canChangeUsername: !!(u && roleOf(u) !== 'super' && u.email && !banState(u, Date.now()).banned),
               canChangePassword: !!(u && u.email && !banState(u, Date.now()).banned),
               // 没有邮箱的账户可以「添加邮箱」来激活自己
-              // 主管理员是否需要先回答二次验证问题（问题文案来自密钥，前端只负责显示）
-              needAdminVerify: needAdminVerify(env, u, s),
-              adminVerifyQuestion: needAdminVerify(env, u, s) ? adminVerifyQuestion(env) : null,
               canAddEmail: !!(u && !u.email && !banState(u, Date.now()).banned),
               // 已有邮箱的账户可以「更改邮箱」（先验旧、再验新）
               canChangeEmail: !!(u && u.email && !banState(u, Date.now()).banned),
@@ -2306,7 +2337,15 @@ export default {
             isAdmin: !!(u && isAdminRole(roleOf(u))),
             account: accountStatus(u),
             // 维护时段：所有页面据此决定是否弹出「正在维护服务」
-            maintenance: maintenanceState(await getMaintenance(env), Date.now()),
+            // 持有工作人员通行证的人看到的是「未在维护」，可以直接预览
+            maintenance: await (async () => {
+              const mm = await getMaintenance(env);
+              const st = maintenanceState(mm, Date.now());
+              if (st.active && (await maintUnlocked(env, request, mm))) {
+                return Object.assign({}, st, { active: false, unlocked: true, keySet: true });
+              }
+              return st;
+            })(),
           }, 200, devTouched ? { 'Set-Cookie': deviceCookie(randomHex(16)) } : undefined);
         }
         if (path === '/api/downloads' && method === 'GET') {
@@ -2353,10 +2392,6 @@ export default {
         }
         if (path === '/api/admin/extend' && method === 'POST') {
           return await handleAdminExtend(env, request);
-        }
-        // 管理员二次身份验证
-        if (path === '/api/admin/verify' && method === 'POST') {
-          return await handleAdminVerify(env, request);
         }
         if (path === '/api/admin/notices/read' && method === 'POST') {
           return await handleAdminNoticesRead(env, request);

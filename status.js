@@ -102,6 +102,14 @@
     'color:#ffc55c;}' +
     '#' + MAINT_ID + ' .mt-acts a:active,#' + MAINT_ID + ' .mt-acts button:active{opacity:.7;}' +
     '#' + MAINT_ID + ' .mt-note{font-size:11px;color:#8a8060;margin-top:12px;}' +
+    '#' + MAINT_ID + ' .mt-staff{margin-top:14px;padding-top:12px;border-top:1px dashed rgba(255,176,32,.3);}' +
+    '#' + MAINT_ID + ' .mt-staff summary{font-size:12px;color:#8a8060;cursor:pointer;}' +
+    '#' + MAINT_ID + ' .mt-staff input{width:100%;margin:10px 0 8px;padding:9px 11px;border-radius:8px;' +
+    'border:1px solid rgba(255,176,32,.35);background:rgba(0,0,0,.42);color:#e8f5ee;font-size:13px;font-family:inherit;}' +
+    '#' + MAINT_ID + ' .mt-staff button{width:100%;padding:9px 0;border-radius:8px;' +
+    'border:1px solid rgba(255,176,32,.5);background:rgba(255,176,32,.14);color:#ffb020;' +
+    'font-size:13px;font-family:inherit;cursor:pointer;}' +
+    '#' + MAINT_ID + ' .mt-staff-msg{font-size:11px;min-height:15px;margin-top:7px;}' +
     /* 封禁弹窗：与「试用期已到」同款红色卡片，只换文案 */
     '#' + BAN_ID + '{position:fixed;inset:0;z-index:100002;background:rgba(0,0,0,.78);' +
     'display:flex;align-items:center;justify-content:center;padding:20px;' +
@@ -257,6 +265,12 @@
       (st && st.start && endAt ? '<p class="mt-range">维护时段：' + fmtClock(st.start) + ' → ' + fmtClock(endAt) + '</p>' : '') +
       '<div class="mt-acts"><button type="button" id="dsh-mt-admin">管理员关闭</button></div>' +
       '<div class="mt-note" id="dsh-mt-note">管理员可进入控制台关闭维护</div>' +
+      (st && st.keySet
+        ? '<details class="mt-staff"><summary>工作人员预览入口</summary>' +
+          '<input id="dsh-mt-key" type="password" placeholder="本次维护访问密钥" autocomplete="off">' +
+          '<button type="button" id="dsh-mt-enter">进入预览</button>' +
+          '<div class="mt-staff-msg" id="dsh-mt-smsg"></div></details>'
+        : '') +
       '</div>';
     document.body.appendChild(mask);
 
@@ -275,6 +289,39 @@
           n.style.color = '#ff7b7b';
         }
       };
+    }
+
+    // 工作人员预览：凭本次维护的访问密钥换取通行证，然后就能正常浏览站点
+    var enter = document.getElementById('dsh-mt-enter');
+    if (enter) {
+      var kEl = document.getElementById('dsh-mt-key');
+      var sMsg = document.getElementById('dsh-mt-smsg');
+      var go = function () {
+        var v = kEl ? kEl.value.trim() : '';
+        if (!v) { if (sMsg) { sMsg.textContent = '请输入访问密钥'; sMsg.style.color = '#ff7b7b'; } return; }
+        enter.disabled = true;
+        fetch('/api/maintenance/unlock', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ key: v }),
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (j) {
+            if (!j.ok) {
+              if (sMsg) { sMsg.textContent = j.message || '密钥不正确'; sMsg.style.color = '#ff7b7b'; }
+              enter.disabled = false;
+              return;
+            }
+            if (sMsg) { sMsg.textContent = '已进入预览模式，正在刷新…'; sMsg.style.color = '#00ff8c'; }
+            setTimeout(function () { location.reload(); }, 500);
+          })
+          .catch(function () {
+            if (sMsg) { sMsg.textContent = '网络错误'; sMsg.style.color = '#ff7b7b'; }
+            enter.disabled = false;
+          });
+      };
+      enter.onclick = go;
+      if (kEl) kEl.onkeydown = function (e) { if (e.key === 'Enter') go(); };
     }
 
     updateMaintLeft(endAt);
@@ -428,7 +475,6 @@
     } else {
       hideBanned();
     }
-
     // 维护时段：到点自动弹出 / 到点自动关闭
     applyMaintenance(data && data.maintenance, !!(data && data.isAdmin));
 

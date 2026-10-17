@@ -774,48 +774,6 @@
       .catch(function () { setErr('网络错误'); if (btn) btn.disabled = false; });
   }
 
-  /* ===================== 管理员二次身份验证 ===================== */
-  var verifyAsked = false;
-
-  /** 问题文案由服务端下发（存放在 Cloudflare 密钥里，不进仓库） */
-  function askAdminVerify(question) {
-    if (verifyAsked) return;
-    verifyAsked = true;
-    setErr('');
-    dmTitle.textContent = '管理员身份验证';
-    dmStep.textContent = '请回答问题以继续';
-    dmBody.innerHTML =
-      '<p>' + esc(question || '请回答管理员验证问题') + '</p>' +
-      '<p class="small">这是主管理员的额外保护；答错不会影响登录，但进不了管理功能。</p>' +
-      '<input type="text" id="avAns" placeholder="你的答案" autocomplete="off">';
-    dmActs.innerHTML = '<button id="avOk">验证</button>';
-    delMask.className = 'mask';
-    document.getElementById('avOk').onclick = doAdminVerify;
-    var el = document.getElementById('avAns');
-    if (el) { el.focus(); el.onkeydown = function (e) { if (e.key === 'Enter') doAdminVerify(); }; }
-  }
-
-  function doAdminVerify() {
-    var ans = ((document.getElementById('avAns') || {}).value || '').trim();
-    if (!ans) { setErr('请输入答案'); return; }
-    var b = document.getElementById('avOk');
-    b.disabled = true;
-    setErr('');
-    fetch('/api/admin/verify', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ answer: ans }),
-    })
-      .then(function (r) { return r.json(); })
-      .then(function (j) {
-        if (!j.ok) { setErr(j.message || '验证失败'); b.disabled = false; return; }
-        closeModal();
-        verifyAsked = false;
-        loadMe();
-        loadAdmin();
-      })
-      .catch(function () { setErr('网络错误'); b.disabled = false; });
-  }
-
   /* ===================== 管理员：封禁（可设起止时间） ===================== */
   var banTarget = null;
 
@@ -904,6 +862,13 @@
       '<input type="datetime-local" id="mStart" value="' + (m.set ? toLocalInput(m.start) : '') + '"></div>' +
       '<div class="m-field"><label>结束时间（到这个点，自动关闭维护弹窗）</label>' +
       '<input type="datetime-local" id="mEnd" value="' + (m.set ? toLocalInput(m.end) : '') + '"></div>' +
+      '<div class="m-field"><label>本次维护访问密钥（给工作人员在维护期间预览用，可随时改；留空 = 不设）</label>' +
+      '<input type="text" id="mKey" placeholder="' + (m.keySet ? '已设置 · 留空则沿用原密钥' : '例如 zrfeng-staff-2026') + '" autocomplete="off"></div>' +
+      '<div class="m-stat" style="margin:6px 0 12px">' +
+      (m.keySet
+        ? '访问密钥：<b>已设置</b>（维护结束后自动销毁，密钥本身不会回显）'
+        : '访问密钥：<b>未设置</b>（不设的话，维护期间谁都进不去）') +
+      '</div>' +
       '<div class="m-quick">' +
       '<button data-quick="30">立即开始 · 30 分钟</button>' +
       '<button data-quick="60">立即开始 · 1 小时</button>' +
@@ -922,7 +887,9 @@
       var e = fromLocalInput(document.getElementById('mEnd').value);
       if (!isFinite(s) || !isFinite(e)) { mNote('请选择开始和结束时间', false); return; }
       if (e <= s) { mNote('结束时间必须晚于开始时间', false); return; }
-      saveMaint({ start: s, end: e }, this);
+      var keyEl = document.getElementById('mKey');
+      var keyVal = keyEl ? keyEl.value.trim() : '';
+      saveMaint({ start: s, end: e, key: keyVal, keepKey: !keyVal }, this);
     };
     document.getElementById('mClear').onclick = function () {
       saveMaint({ clear: true }, this);
@@ -931,7 +898,9 @@
       b.onclick = function () {
         var mins = Number(b.dataset.quick);
         var s = Date.now();
-        saveMaint({ start: s, end: s + mins * 60000 }, b);
+        var kEl = document.getElementById('mKey');
+        var kv = kEl ? kEl.value.trim() : '';
+        saveMaint({ start: s, end: s + mins * 60000, key: kv, keepKey: !kv }, b);
       };
     });
   }
@@ -964,8 +933,6 @@
         if (!j.ok) {
           noticesEl.innerHTML = '';
           maintEl.innerHTML = '';
-          // 主管理员需要先回答问题
-          if (j.needAdminVerify) { app.innerHTML = ''; askAdminVerify(j.question || ''); return; }
           app.innerHTML = '';
           return;
         }
