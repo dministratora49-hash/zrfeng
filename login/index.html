@@ -222,20 +222,6 @@
     h1 { font-size: 22px; }
   }
 
-  /* ===== 硬控等待：微软开机那种旋转点点 ===== */
-  #hardMask { position: fixed; inset: 0; z-index: 99999;
-    background: rgba(3, 7, 5, .97); display: flex; align-items: center; justify-content: center;
-    -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
-  #hardMask.hide { display: none; }
-  .hw-box { text-align: center; }
-  .hw-ring { width: 78px; height: 78px; animation: hwSpin 7s linear infinite; }
-  .hw-ring circle { fill: #00ff8c; opacity: .1; animation: hwDot 1.8s ease-in-out infinite; }
-  @keyframes hwDot { 0%, 100% { opacity: .1; } 22% { opacity: 1; } }
-  @keyframes hwSpin { to { transform: rotate(360deg); } }
-  .hw-text { margin-top: 22px; font-size: 14px; color: #9fd8bb; letter-spacing: 1px; }
-  .hw-count { margin-top: 8px; font-size: 30px; font-weight: 700; color: #00ff8c;
-    font-family: ui-monospace, monospace; letter-spacing: 2px; }
-  .hw-tip { margin-top: 10px; font-size: 11px; color: #5c7a6b; line-height: 1.8; }
 </style>
 </head>
 <body>
@@ -280,23 +266,6 @@
     </form>
 
     <!-- 注册表单 -->
-    <!-- 输入恢复代码后的硬控等待 -->
-    <div id="hardMask" class="hide">
-      <div class="hw-box">
-        <svg class="hw-ring" viewBox="0 0 80 80">
-          <circle cx="40" cy="11" r="4.4" style="animation-delay:0s"></circle>
-          <circle cx="65.1" cy="25.5" r="4.4" style="animation-delay:.3s"></circle>
-          <circle cx="65.1" cy="54.5" r="4.4" style="animation-delay:.6s"></circle>
-          <circle cx="40" cy="69" r="4.4" style="animation-delay:.9s"></circle>
-          <circle cx="14.9" cy="54.5" r="4.4" style="animation-delay:1.2s"></circle>
-          <circle cx="14.9" cy="25.5" r="4.4" style="animation-delay:1.5s"></circle>
-        </svg>
-        <div class="hw-text">正在核验恢复代码</div>
-        <div class="hw-count" id="hwCount">30</div>
-        <div class="hw-tip">请保持页面打开，不要退出</div>
-      </div>
-    </div>
-
     <div id="formForgot" class="hide">
       <div class="field">
         <label>怎么找回？</label>
@@ -682,31 +651,6 @@
   /* ---------- 忘记密码 ---------- */
   var forgotCaptcha = { id: '', answer: '' };
 
-  /** 已经硬控过的代码内容；同一个值不重复锁 */
-  var lockedCode = '';
-
-  /** 硬控等待：锁住界面 seconds 秒，期间不放行任何操作 */
-  function hardWait(seconds) {
-    var mask = $('hardMask');
-    var count = $('hwCount');
-    var left = seconds;
-    if (count) count.textContent = String(left);
-    mask.className = '';
-    // 收起键盘 / 失焦
-    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
-    return new Promise(function (resolve) {
-      var timer = setInterval(function () {
-        left -= 1;
-        if (count) count.textContent = String(left > 0 ? left : 0);
-        if (left <= 0) {
-          clearInterval(timer);
-          mask.className = 'hide';
-          resolve();
-        }
-      }, 1000);
-    });
-  }
-
   function showForgot(on) {
     $('formLogin').className = on ? 'hide' : '';
     $('formReg').className = 'hide';
@@ -738,18 +682,6 @@
     } catch (e) { /* 忽略 */ }
   }
 
-  // 恢复代码输完、手离开输入框（点别处 / 收起键盘）就立刻硬控 30 秒 ——
-  // 此时密码还没输，先把人按住，再放行去填密码。
-  $('rcInput').addEventListener('blur', function () {
-    var v = this.value.trim();
-    if (!v || v === lockedCode) return;
-    lockedCode = v;
-    hardWait(30).then(function () {
-      var np = $('rcNew');
-      if (np && $('formForgot').className.indexOf('hide') === -1) np.focus();
-    });
-  });
-
   $('forgotLink').addEventListener('click', function (e) { e.preventDefault(); showForgot(true); });
   $('forgotBack').addEventListener('click', function (e) { e.preventDefault(); showForgot(false); });
   $('fmCode').addEventListener('click', function () { switchForgot('code'); });
@@ -766,12 +698,6 @@
     if (p1.length < 6) { show(msg, '新密码至少 6 位', 'err'); return; }
     if (p1 !== p2) { show(msg, '两次输入的新密码不一致', 'err'); return; }
     btn.disabled = true;
-    hide(msg);
-    // 兜底：如果刚才没触发过失焦（比如从没离开过输入框），这里补一次
-    if (code !== lockedCode) {
-      lockedCode = code;
-      await hardWait(30);
-    }
     try {
       var r = await api('/api/recover/code', { method: 'POST', body: { code: code, password: p1 } });
       if (r.data.ok) {

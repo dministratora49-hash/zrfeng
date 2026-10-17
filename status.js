@@ -353,6 +353,20 @@
   }
 
   /** 根据服务端下发的维护状态，决定弹或不弹 */
+  /**
+   * 是否正处在「联系我们」页面。
+   * 这个页面必须**绝对干净** —— 封禁、维护、未激活……什么都不显示，
+   * 否则被封禁的人连联系管理员都做不到。
+   */
+  function onContactPage() {
+    try {
+      return typeof location !== 'undefined' && !!location.pathname &&
+        (location.pathname.indexOf('/contact') === 0);
+    } catch (e) {
+      return false;
+    }
+  }
+
   /** 是否正处在控制台页面（管理员在这里不弹维护窗，否则会挡住自己） */
   function onConsolePage() {
     try {
@@ -369,7 +383,7 @@
 
     var skipForAdmin = isAdmin && onConsolePage();
 
-    if (active && !skipForAdmin) {
+    if (active && !skipForAdmin && !onContactPage()) {
       showMaintenance(st, isAdmin);
     } else {
       hideMaintenance();
@@ -385,6 +399,18 @@
   }
 
   function render(data) {
+    // 「联系我们」页：什么都不显示 —— 连状态栏带各种弹窗全部清掉后直接返回。
+    // 封禁 / 维护 / 未激活都绝不能挡在这里，否则用户没法联系管理员。
+    if (onContactPage()) {
+      var ob = document.getElementById(BAR_ID);
+      if (ob) ob.remove();
+      hideBanned();
+      hideBlocked();
+      hideMaintenance();
+      stopCountdown();
+      return;
+    }
+
     var acc = (data && data.account) || { state: 'guest', dot: 'red', label: '登录以享受服务', activated: false };
     stopCountdown();
 
