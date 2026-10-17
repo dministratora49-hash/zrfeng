@@ -747,8 +747,27 @@ async function handleLogin(env, request, ip) {
     return json({ ok: false, message: '账号或密码错误' }, 401);
   }
 
-  // 新设备登录验证：账号有邮箱、且这台设备从没在该账户上成功登录过 → 先发邮件验证码
+  // 新设备登录验证：这台设备从没在该账户上成功登录过 → 需要额外确认身份
   const deviceId = deviceIdOf(request) || randomHex(16);
+  if (!(await isKnownDevice(env, user, deviceId)) && !user.email) {
+    // 没有邮箱 → 收不到验证码，改用「管理员给的密钥」
+    const ticket = randomHex(16);
+    await env.USERS.put(
+      'devlogin:' + ticket,
+      JSON.stringify({ username: user.username, deviceId, mode: 'key', tries: 0, at: Date.now() }),
+      { expirationTtl: DEVLOGIN_TTL }
+    );
+    return json(
+      {
+        ok: false,
+        needDeviceKey: true,
+        ticket,
+        message: '我们无法认证你的身份，请输入管理员给你的密钥，以帮助我们确认身份',
+      },
+      200,
+      { 'Set-Cookie': deviceCookie(deviceId) }
+    );
+  }
   if (user.email && !(await isKnownDevice(env, user, deviceId))) {
     const ticket = randomHex(16);
     const code = String(Math.floor(100000 + Math.random() * 900000));
@@ -1964,6 +1983,20 @@ async function handleAdminVerify(env, request) {
 
 /* ========================== 新设备登录验证 ========================== */
 
+/**
+ * 「管理员给的密钥」表：{ "账户名": "密钥" }。
+ * 存在 Cloudflare 密钥 DEVICE_KEYS 里，代码里一个字都不留。
+ * 用于**没有邮箱**的账户（收不到验证码）在新设备上确认身份。
+ */
+function deviceKeys(env) {
+  try {
+    const j = JSON.parse(env.DEVICE_KEYS || '{}');
+    return j && typeof j === 'object' ? j : {};
+  } catch {
+    return {};
+  }
+}
+
 /** 从 Cookie 里取设备标记 */
 function deviceIdOf(request) {
   const m = (request.headers.get('Cookie') || '').match(/(?:^|;\s*)device=([a-f0-9]{32})/);
@@ -2050,17 +2083,30 @@ async function handleDeviceVerify(env, request) {
     return json({ ok: true, message: '验证码已重新发送到 ' + maskEmail(user.email) });
   }
 
-  const code = String(body.code || '').trim();
-  if (!/^\d{6}$/.test(code)) return json({ ok: false, message: '请输入 6 位验证码' }, 400);
-
   if (rec.tries >= 5) {
     await env.USERS.delete(key);
     return json({ ok: false, message: '尝试次数过多，请重新登录' }, 400);
   }
-  if (!timingSafeEqual(code, String(rec.code || ''))) {
-    rec.tries = (rec.tries || 0) + 1;
-    await env.USERS.put(key, JSON.stringify(rec), { expirationTtl: DEVLOGIN_TTL });
-    return json({ ok: false, message: '验证码不正确' }, 401);
+
+  // 无邮箱账户：核对「管理员给的密钥」
+  if (rec.mode === 'key') {
+    const input = String(body.key || body.code || '').trim();
+    if (!input) return json({ ok: false, message: '请输入密钥' }, 400);
+    const expected = String(deviceKeys(env)[rec.username] || '');
+    const pass = expected && timingSafeEqual(input, expected);
+    if (!pass) {
+      rec.tries = (rec.tries || 0) + 1;
+      await env.USERS.put(key, JSON.stringify(rec), { expirationTtl: DEVLOGIN_TTL });
+      return json({ ok: false, message: '你无权访问' }, 403);
+    }
+  } else {
+    const code = String(body.code || '').trim();
+    if (!/^\d{6}$/.test(code)) return json({ ok: false, message: '请输入 6 位验证码' }, 400);
+    if (!timingSafeEqual(code, String(rec.code || ''))) {
+      rec.tries = (rec.tries || 0) + 1;
+      await env.USERS.put(key, JSON.stringify(rec), { expirationTtl: DEVLOGIN_TTL });
+      return json({ ok: false, message: '验证码不正确' }, 401);
+    }
   }
 
   // 通过：记住设备 + 建会话

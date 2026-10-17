@@ -454,6 +454,10 @@
     if (r.data.ok) {
       show(msg, '登录成功，正在跳转…', 'ok');
       setTimeout(function () { location.href = SITE + '/'; }, 700);
+    } else if (r.data.needDeviceKey) {
+      // 没有邮箱的账户：改用「管理员给的密钥」确认身份
+      show(msg, r.data.message || '我们无法认证你的身份，请输入管理员给你的密钥', 'err');
+      deviceKeyStep(r.data.ticket, btn);
     } else if (r.data.needDeviceVerify) {
       // 新设备：账号密码已通过，还要输一次发到邮箱的验证码
       show(msg, r.data.message || '这是一台新设备，请输入邮箱验证码', 'ok');
@@ -523,6 +527,48 @@
       if (msg) show(msg, '网络错误', 'err');
     }
     setTimeout(function () { el.disabled = false; }, 3000);
+  }
+
+  /* ---------- 无邮箱账户：管理员密钥 ---------- */
+  function deviceKeyStep(ticket, loginBtn) {
+    devTicket = ticket;
+    var wrap = document.createElement('div');
+    wrap.id = 'devKeyBox';
+    wrap.style.cssText = 'margin-top:14px;padding:14px;border:1px solid rgba(255,120,120,.4);border-radius:12px;background:rgba(255,80,80,.05)';
+    wrap.innerHTML =
+      '<div style="font-size:13px;color:#e0b0b0;margin-bottom:10px;line-height:1.7">' +
+        '这个账户没有绑定邮箱，无法发送验证码。<br>请输入<b>管理员给你的密钥</b>以确认身份：' +
+      '</div>' +
+      '<input id="devKey" placeholder="管理员给你的密钥" autocomplete="off" ' +
+      'style="width:100%;padding:11px 13px;border-radius:9px;border:1px solid rgba(255,120,120,.45);background:rgba(0,0,0,.45);color:#e8f5ee;font-size:15px;margin-bottom:10px">' +
+      '<button type="button" id="devKeyOk" style="width:100%;padding:11px 0;border-radius:9px;border:none;background:linear-gradient(135deg,#00ff8c,#00c96e);color:#04140c;font-weight:700;font-size:14px;font-family:inherit;cursor:pointer">确认身份</button>';
+    var host = loginBtn.closest('form') || loginBtn.parentNode;
+    host.appendChild(wrap);
+    if (loginBtn) loginBtn.disabled = true;
+    var input = document.getElementById('devKey');
+    if (input) { input.focus(); input.onkeydown = function (e) { if (e.key === 'Enter') doDeviceKey(); }; }
+    document.getElementById('devKeyOk').onclick = function () { doDeviceKey(); };
+  }
+
+  async function doDeviceKey() {
+    var msg = $('msgLogin');
+    var key = ((document.getElementById('devKey') || {}).value || '').trim();
+    if (!key) { if (msg) show(msg, '请输入密钥', 'err'); return; }
+    var btn = document.getElementById('devKeyOk');
+    if (btn) btn.disabled = true;
+    try {
+      var r = await api('/api/login/verify', { method: 'POST', body: { ticket: devTicket, key: key } });
+      if (r.data.ok) {
+        if (msg) show(msg, '身份确认，正在跳转…', 'ok');
+        setTimeout(function () { location.href = SITE + '/'; }, 700);
+      } else {
+        if (msg) show(msg, r.data.message || '你无权访问', 'err');
+        if (btn) btn.disabled = false;
+      }
+    } catch (e) {
+      if (msg) show(msg, '网络错误', 'err');
+      if (btn) btn.disabled = false;
+    }
   }
 
   /* ---------- 注册 ---------- */
