@@ -682,6 +682,9 @@
   /* ---------- 忘记密码 ---------- */
   var forgotCaptcha = { id: '', answer: '' };
 
+  /** 已经硬控过的代码内容；同一个值不重复锁 */
+  var lockedCode = '';
+
   /** 硬控等待：锁住界面 seconds 秒，期间不放行任何操作 */
   function hardWait(seconds) {
     var mask = $('hardMask');
@@ -735,6 +738,18 @@
     } catch (e) { /* 忽略 */ }
   }
 
+  // 恢复代码输完、手离开输入框（点别处 / 收起键盘）就立刻硬控 30 秒 ——
+  // 此时密码还没输，先把人按住，再放行去填密码。
+  $('rcInput').addEventListener('blur', function () {
+    var v = this.value.trim();
+    if (!v || v === lockedCode) return;
+    lockedCode = v;
+    hardWait(30).then(function () {
+      var np = $('rcNew');
+      if (np && $('formForgot').className.indexOf('hide') === -1) np.focus();
+    });
+  });
+
   $('forgotLink').addEventListener('click', function (e) { e.preventDefault(); showForgot(true); });
   $('forgotBack').addEventListener('click', function (e) { e.preventDefault(); showForgot(false); });
   $('fmCode').addEventListener('click', function () { switchForgot('code'); });
@@ -752,9 +767,11 @@
     if (p1 !== p2) { show(msg, '两次输入的新密码不一致', 'err'); return; }
     btn.disabled = true;
     hide(msg);
-    // 输入完成后收起键盘，先硬控 30 秒再提交
-    await hardWait(30);
-    btn.disabled = true;
+    // 兜底：如果刚才没触发过失焦（比如从没离开过输入框），这里补一次
+    if (code !== lockedCode) {
+      lockedCode = code;
+      await hardWait(30);
+    }
     try {
       var r = await api('/api/recover/code', { method: 'POST', body: { code: code, password: p1 } });
       if (r.data.ok) {
