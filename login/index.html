@@ -221,6 +221,21 @@
     .card { padding: 26px 18px; }
     h1 { font-size: 22px; }
   }
+
+  /* ===== 硬控等待：微软开机那种旋转点点 ===== */
+  #hardMask { position: fixed; inset: 0; z-index: 99999;
+    background: rgba(3, 7, 5, .97); display: flex; align-items: center; justify-content: center;
+    -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
+  #hardMask.hide { display: none; }
+  .hw-box { text-align: center; }
+  .hw-ring { width: 78px; height: 78px; animation: hwSpin 7s linear infinite; }
+  .hw-ring circle { fill: #00ff8c; opacity: .1; animation: hwDot 1.8s ease-in-out infinite; }
+  @keyframes hwDot { 0%, 100% { opacity: .1; } 22% { opacity: 1; } }
+  @keyframes hwSpin { to { transform: rotate(360deg); } }
+  .hw-text { margin-top: 22px; font-size: 14px; color: #9fd8bb; letter-spacing: 1px; }
+  .hw-count { margin-top: 8px; font-size: 30px; font-weight: 700; color: #00ff8c;
+    font-family: ui-monospace, monospace; letter-spacing: 2px; }
+  .hw-tip { margin-top: 10px; font-size: 11px; color: #5c7a6b; line-height: 1.8; }
 </style>
 </head>
 <body>
@@ -265,6 +280,23 @@
     </form>
 
     <!-- 注册表单 -->
+    <!-- 输入恢复代码后的硬控等待 -->
+    <div id="hardMask" class="hide">
+      <div class="hw-box">
+        <svg class="hw-ring" viewBox="0 0 80 80">
+          <circle cx="40" cy="11" r="4.4" style="animation-delay:0s"></circle>
+          <circle cx="65.1" cy="25.5" r="4.4" style="animation-delay:.3s"></circle>
+          <circle cx="65.1" cy="54.5" r="4.4" style="animation-delay:.6s"></circle>
+          <circle cx="40" cy="69" r="4.4" style="animation-delay:.9s"></circle>
+          <circle cx="14.9" cy="54.5" r="4.4" style="animation-delay:1.2s"></circle>
+          <circle cx="14.9" cy="25.5" r="4.4" style="animation-delay:1.5s"></circle>
+        </svg>
+        <div class="hw-text">正在核验恢复代码</div>
+        <div class="hw-count" id="hwCount">30</div>
+        <div class="hw-tip">请保持页面打开，不要退出</div>
+      </div>
+    </div>
+
     <div id="formForgot" class="hide">
       <div class="field">
         <label>怎么找回？</label>
@@ -650,6 +682,28 @@
   /* ---------- 忘记密码 ---------- */
   var forgotCaptcha = { id: '', answer: '' };
 
+  /** 硬控等待：锁住界面 seconds 秒，期间不放行任何操作 */
+  function hardWait(seconds) {
+    var mask = $('hardMask');
+    var count = $('hwCount');
+    var left = seconds;
+    if (count) count.textContent = String(left);
+    mask.className = '';
+    // 收起键盘 / 失焦
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    return new Promise(function (resolve) {
+      var timer = setInterval(function () {
+        left -= 1;
+        if (count) count.textContent = String(left > 0 ? left : 0);
+        if (left <= 0) {
+          clearInterval(timer);
+          mask.className = 'hide';
+          resolve();
+        }
+      }, 1000);
+    });
+  }
+
   function showForgot(on) {
     $('formLogin').className = on ? 'hide' : '';
     $('formReg').className = 'hide';
@@ -696,6 +750,10 @@
     if (!code) { show(msg, '请输入恢复代码', 'err'); return; }
     if (p1.length < 6) { show(msg, '新密码至少 6 位', 'err'); return; }
     if (p1 !== p2) { show(msg, '两次输入的新密码不一致', 'err'); return; }
+    btn.disabled = true;
+    hide(msg);
+    // 输入完成后收起键盘，先硬控 30 秒再提交
+    await hardWait(30);
     btn.disabled = true;
     try {
       var r = await api('/api/recover/code', { method: 'POST', body: { code: code, password: p1 } });
