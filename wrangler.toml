@@ -27,7 +27,7 @@ id = "fa1730e5c959430c82fc69708b68dba9"
 # 请在 Cloudflare 后台「变量和机密」里逐条添加：
 #
 #      SESSION_SECRET     必填，任意长随机串（签名会话与验证码）
-#      DOWNLOAD_LINKS     必填，JSON 数组，7 个网盘链接放这里
+#      （站内下载文件不在这里配，由管理员用 /api/admin/novel 上传到 KV）
 #      ADMIN_USERNAME     主管理员账户名（不设则不自动建号）
 #      ADMIN_PASSWORD     主管理员密码
 #      ADMIN_EMAIL        （可选）主管理员邮箱，可用邮箱登录
