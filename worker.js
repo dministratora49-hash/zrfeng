@@ -58,6 +58,22 @@ const adminUsername = (env) => String(env.ADMIN_USERNAME || '').trim().toLowerCa
 const adminEmail = (env) => String(env.ADMIN_EMAIL || '').trim().toLowerCase();
 const trialUsername = (env) => String(env.TRIAL_ACCOUNT || '').trim().toLowerCase();
 
+/**
+ * 主管理员的二次身份验证。
+ * 问题与答案都从 Cloudflare 密钥读取 —— 答案绝不写进代码，
+ * 因为 worker.js 是公开仓库的一部分。
+ */
+const adminVerifyAnswer = (env) => String(env.ADMIN_VERIFY_ANSWER || '').trim();
+const adminVerifyQuestion = (env) =>
+  String(env.ADMIN_VERIFY_QUESTION || '').trim() || '请回答管理员验证问题';
+
+/** 这个会话是否需要（且尚未通过）管理员二次验证 */
+function needAdminVerify(env, user, session) {
+  if (!user || roleOf(user) !== 'super') return false;
+  if (!adminVerifyAnswer(env)) return false; // 没配答案就不启用
+  return !(session && session.adminVerified === true);
+}
+
 /** 不允许注册的名字（含运行时的管理员 / 试用账户名） */
 function reservedNames(env) {
   const set = new Set(RESERVED);
@@ -500,6 +516,8 @@ async function createSession(env, user) {
       username: user.username,
       email: user.email,
       isAdmin: !!user.isAdmin,
+        // 主管理员需要额外回答问题（若密钥里配了答案）；这里先记成「未通过」
+        adminVerified: !needAdminVerify(env, user, null),
       expires: Date.now() + SESSION_TTL * 1000,
     }),
     { expirationTtl: SESSION_TTL }
@@ -1086,6 +1104,20 @@ async function requireAdmin(env, request) {
   // 被同时标记为封禁的管理员也不能进后台，避免「封禁了却还能管理」
   if (banState(user, Date.now()).banned) {
     return { error: json({ ok: false, message: '该账户已被封禁' }, 403) };
+  }
+  // 主管理员二次验证：配了答案就必须先答对，否则所有管理接口一律拒绝
+  if (needAdminVerify(env, user, session)) {
+    return {
+      error: json(
+        {
+          ok: false,
+          needAdminVerify: true,
+          message: '请先完成管理员身份验证',
+          question: adminVerifyQuestion(env),
+        },
+        403
+      ),
+    };
   }
   return { session, user, role: roleOf(user) };
 }
@@ -1864,6 +1896,37 @@ async function handleEmailConfirm(env, request) {
   });
 }
 
+/**
+ * 管理员二次身份验证：回答密钥里配置的问题。
+ * 通过后把当前会话标记为已通过，之后管理接口才放行。
+ */
+async function handleAdminVerify(env, request) {
+  const session = await getSession(env, request);
+  if (!session) return json({ ok: false, message: '请先登录', needLogin: true }, 401);
+
+  const user = await sessionUser(env, session);
+  if (!user || roleOf(user) !== 'super') {
+    return json({ ok: false, message: '只有主管理员需要此验证' }, 403);
+  }
+
+  const expected = adminVerifyAnswer(env);
+  if (!expected) return json({ ok: true, message: '未配置验证问题，无需验证' });
+
+  const body = await readJson(request);
+  const answer = String(body.answer || '').trim();
+  if (!answer) return json({ ok: false, message: '请输入答案' }, 400);
+  if (!timingSafeEqual(answer, expected)) {
+    return json({ ok: false, message: '答案不正确' }, 401);
+  }
+
+  session.adminVerified = true;
+  const m = (request.headers.get('Cookie') || '').match(/(?:^|;\s*)session=([a-f0-9]{64})/);
+  if (m) {
+    await env.USERS.put('session:' + m[1], JSON.stringify(session), { expirationTtl: SESSION_TTL });
+  }
+  return json({ ok: true, message: '验证通过' });
+}
+
 /* ========================== 主入口 ========================== */
 
 export default {
@@ -2004,6 +2067,9 @@ export default {
               canChangeUsername: !!(u && roleOf(u) !== 'super' && u.email && !banState(u, Date.now()).banned),
               canChangePassword: !!(u && u.email && !banState(u, Date.now()).banned),
               // 没有邮箱的账户可以「添加邮箱」来激活自己
+              // 主管理员是否需要先回答二次验证问题（问题文案来自密钥，前端只负责显示）
+              needAdminVerify: needAdminVerify(env, u, s),
+              adminVerifyQuestion: needAdminVerify(env, u, s) ? adminVerifyQuestion(env) : null,
               canAddEmail: !!(u && !u.email && !banState(u, Date.now()).banned),
               // 已有邮箱的账户可以「更改邮箱」（先验旧、再验新）
               canChangeEmail: !!(u && u.email && !banState(u, Date.now()).banned),
@@ -2069,6 +2135,10 @@ export default {
         }
         if (path === '/api/admin/extend' && method === 'POST') {
           return await handleAdminExtend(env, request);
+        }
+        // 管理员二次身份验证
+        if (path === '/api/admin/verify' && method === 'POST') {
+          return await handleAdminVerify(env, request);
         }
         if (path === '/api/admin/notices/read' && method === 'POST') {
           return await handleAdminNoticesRead(env, request);
