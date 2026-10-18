@@ -150,6 +150,93 @@
     background: rgba(0, 255, 140, 0.14);
   }
 
+  /* ===== 提交工单 ===== */
+  .sec-title.gap { margin-top: 38px; }
+
+  .ticket {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 18px 20px 20px;
+    text-align: left;
+    border: 1px solid rgba(0, 255, 140, 0.35);
+    border-radius: 16px;
+    background: rgba(10, 18, 14, 0.85);
+    box-shadow: 0 0 16px rgba(0, 255, 140, 0.1);
+  }
+
+  .tk-input {
+    width: 100%;
+    padding: 12px 14px;
+    font-size: 14px;
+    font-family: inherit;
+    line-height: 1.6;
+    color: #e8f5ee;
+    background: rgba(5, 8, 7, 0.92);
+    border: 1px solid rgba(0, 255, 140, 0.25);
+    border-radius: 10px;
+    outline: none;
+    resize: vertical;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .tk-input::placeholder { color: #4a6a58; }
+  .tk-input:focus {
+    border-color: #00ff8c;
+    box-shadow: 0 0 14px rgba(0, 255, 140, 0.22);
+  }
+  .tk-area { min-height: 132px; }
+
+  .tk-send {
+    padding: 12px 20px;
+    font-size: 14px;
+    font-family: inherit;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: #050807;
+    border: none;
+    border-radius: 10px;
+    background: linear-gradient(90deg, #00ff8c, #00d97a);
+    cursor: pointer;
+    transition: opacity 0.2s, box-shadow 0.2s;
+  }
+  .tk-send:hover { box-shadow: 0 0 22px rgba(0, 255, 140, 0.45); }
+  .tk-send:disabled { opacity: 0.55; cursor: default; box-shadow: none; }
+
+  .tk-msg {
+    display: none;
+    padding: 10px 14px;
+    font-size: 13px;
+    line-height: 1.7;
+    border-radius: 10px;
+    word-break: break-word;
+  }
+  .tk-msg.show { display: block; }
+  .tk-msg.ok {
+    color: #00ff8c;
+    border: 1px solid rgba(0, 255, 140, 0.4);
+    background: rgba(0, 255, 140, 0.08);
+  }
+  .tk-msg.bad {
+    color: #ff8a80;
+    border: 1px solid rgba(255, 92, 92, 0.4);
+    background: rgba(255, 92, 92, 0.08);
+  }
+
+  .tk-tip {
+    font-size: 12px;
+    line-height: 1.9;
+    color: #6c8c7c;
+  }
+
+  /* 机器人陷阱：正常用户永远看不到这个框 */
+  .tk-hp {
+    position: absolute;
+    left: -9999px;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+  }
+
   /* ===== 返回按钮 ===== */
   .back {
     position: relative;
@@ -223,6 +310,30 @@
       </div>
     </div>
 
+    <div class="sec-title gap">提交工单</div>
+
+    <div class="ticket">
+      <input class="tk-input" id="tkTitle" type="text" maxlength="80" autocomplete="off"
+             placeholder="标题（至少 3 个字）">
+      <textarea class="tk-input tk-area" id="tkBody" maxlength="2000"
+                placeholder="正文（至少 10 个字）—— 请把问题或想法写清楚一点"></textarea>
+      <input class="tk-input" id="tkContact" type="text" maxlength="100" autocomplete="off"
+             placeholder="联系方式（选填，方便我回复你）">
+
+      <!-- 机器人陷阱：正常用户看不见这个框，也不会去填 -->
+      <div class="tk-hp" aria-hidden="true">
+        <label for="tkSite">你的个人网站</label>
+        <input id="tkSite" name="website" type="text" tabindex="-1" autocomplete="off">
+      </div>
+
+      <button class="tk-send" id="tkSend" type="button">提交工单</button>
+      <div class="tk-msg" id="tkMsg"></div>
+      <div class="tk-tip">
+        标题至少 3 个字，正文至少 10 个字。<br>
+        标题或正文里全是数字 / 标点的话，会被当成垃圾工单直接销毁（不保存、不留记录）。
+      </div>
+    </div>
+
     <div class="back">
       <a href="https://www.zrfeng.top/guide">← 返回导航站</a>
     </div>
@@ -274,6 +385,96 @@
       btn.textContent = '请长按复制';
       setTimeout(function () { btn.textContent = '复制'; }, 1800);
     }
+  });
+})();
+</script>
+
+<script>
+/* ===================== 提交工单 =====================
+ * 判定规则和服务端完全一致：本地先拦一次，省一趟网络往返；
+ * 服务端还会再判一次（前端可以被绕过，以服务端为准）。
+ */
+(function () {
+  var titleEl = document.getElementById('tkTitle');
+  var bodyEl = document.getElementById('tkBody');
+  var contactEl = document.getElementById('tkContact');
+  var siteEl = document.getElementById('tkSite');
+  var sendBtn = document.getElementById('tkSend');
+  var msgEl = document.getElementById('tkMsg');
+  if (!sendBtn || !msgEl) return;
+
+  var TITLE_MIN = 3;
+  var BODY_MIN = 10;
+
+  /** 脚本开始跑的时间：配合服务端判断「是不是机器人秒填秒交」 */
+  var START = Date.now();
+
+  /** 字数：去掉空白后按码点算 */
+  function charCount(s) {
+    return Array.from(String(s == null ? '' : s).replace(/\s+/gu, '')).length;
+  }
+
+  /** 里面有没有实际文字（汉字 / 字母 / 假名……） */
+  function hasWord(s) {
+    return /\p{L}/u.test(String(s == null ? '' : s));
+  }
+
+  function show(text, ok) {
+    msgEl.textContent = text;
+    msgEl.className = 'tk-msg show ' + (ok ? 'ok' : 'bad');
+  }
+
+  function localSpam(t, b) {
+    if (charCount(t) < TITLE_MIN) {
+      return '标题至少要 ' + TITLE_MIN + ' 个字，这条已按垃圾工单销毁，补充后可以重新提交。';
+    }
+    if (charCount(b) < BODY_MIN) {
+      return '正文至少要 ' + BODY_MIN + ' 个字，这条已按垃圾工单销毁，补充后可以重新提交。';
+    }
+    if (!hasWord(t) || !hasWord(b)) {
+      return '标题或正文里没有实际文字（全是数字或标点），这条已按垃圾工单销毁。';
+    }
+    return '';
+  }
+
+  sendBtn.addEventListener('click', function () {
+    var t = titleEl.value.trim();
+    var b = bodyEl.value.trim();
+    var c = contactEl.value.trim();
+
+    if (!t && !b) { show('请填写标题和正文内容', false); return; }
+
+    var spam = localSpam(t, b);
+    if (spam) { show(spam, false); return; }
+
+    sendBtn.disabled = true;
+    show('正在提交…', true);
+
+    fetch('/api/ticket', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        title: t,
+        body: b,
+        contact: c,
+        site: siteEl ? siteEl.value : '',
+        elapsedMs: Date.now() - START,
+      }),
+    })
+      .then(function (r) { return r.json().catch(function () { return {}; }); })
+      .then(function (j) {
+        if (j && j.ok) {
+          titleEl.value = '';
+          bodyEl.value = '';
+          contactEl.value = '';
+          show(j.message || '工单已提交，我会尽快查看。', true);
+        } else {
+          // 内容太短 / 全是数字标点：服务端已把这条销毁，文字留在框里让人改
+          show((j && j.message) || '提交失败，请稍后再试', false);
+        }
+      })
+      .catch(function () { show('网络错误，请稍后再试', false); })
+      .then(function () { sendBtn.disabled = false; });
   });
 })();
 </script>

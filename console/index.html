@@ -118,6 +118,29 @@
   .m-quick button { font-size: 11px; padding: 5px 10px; border-color: rgba(255,170,0,0.3); background: transparent; color: #c9b48a; }
   .m-now { font-size: 11px; color: #8a8060; margin-top: 10px; }
 
+  /* 工单卡片 */
+  .tk-new {
+    display: inline-block; padding: 1px 8px; border-radius: 20px; font-size: 11px;
+    margin-left: 6px; vertical-align: middle;
+    background: rgba(0,200,255,0.15); color: #4dd2ff; border: 1px solid rgba(0,200,255,0.45);
+  }
+  .tk-meta { font-size: 11px; color: #7fa893; line-height: 1.9; margin-bottom: 12px; }
+  .tk-list { display: flex; flex-direction: column; gap: 10px; }
+  .tk-item {
+    padding: 12px 13px; border-radius: 12px;
+    border: 1px solid rgba(0,255,140,0.18); background: rgba(5,8,7,0.6);
+  }
+  .tk-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .tk-title { font-size: 14px; color: #e8f5ee; word-break: break-all; }
+  .tk-time { font-size: 11px; color: #7fa893; white-space: nowrap; }
+  .tk-who { font-size: 11px; color: #7fa893; margin-top: 3px; word-break: break-all; }
+  .tk-body {
+    margin: 8px 0 10px; font-size: 13px; line-height: 1.8; color: #cfe8dc;
+    white-space: pre-wrap; word-break: break-word; max-height: 220px; overflow: auto;
+  }
+  .tk-acts { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+  .tk-acts button { flex: 1; min-width: 120px; }
+
   /* 弹窗 */
   .mask {
     position: fixed; inset: 0; z-index: 100000; background: rgba(0,0,0,.78);
@@ -563,7 +586,79 @@
 
   var USERS = [];
 
-  function renderUsers(data) {
+  /* ===================== 管理员：工单 ===================== */
+  /**
+   * 工单卡片。「联系我们」页提交的工单存两份都没有——只在 KV 里，
+   * 垃圾工单在服务端就地销毁，所以这里只会看到正常工单。
+   */
+  function renderTicketCard(tk) {
+    if (!tk || !tk.ok) return '';
+
+    var h = '<div class="card"><h2>工单' +
+      (tk.unread ? '<span class="tk-new">' + tk.unread + ' 条新</span>' : '') +
+      '</h2>' +
+      '<div class="tk-meta">在库 ' + (tk.count || 0) + ' 条 · 今天收到 ' + (tk.today || 0) +
+      ' / ' + (tk.dailyMax || 0) + ' 条 · 最多保留 ' + (tk.maxKeep || 0) + ' 条<br>' +
+      '（标题不足 3 字、正文不足 10 字，或内容全是数字 / 标点的，已在服务端当场销毁，不落库）' +
+      '</div>';
+
+    if (!tk.tickets || !tk.tickets.length) {
+      return h + '<div class="center">还没有收到工单</div></div>';
+    }
+
+    h += '<div class="tk-list">';
+    tk.tickets.forEach(function (t) {
+      var who = t.account ? '账户 ' + esc(t.account) : '未登录访客';
+      if (t.contact) who += ' · 联系方式 ' + esc(t.contact);
+      h += '<div class="tk-item">' +
+        '<div class="tk-head"><span class="tk-title">' + esc(t.title) + '</span>' +
+        '<span class="tk-time">' + fmtTime(t.at) + '</span></div>' +
+        '<div class="tk-who">' + who + '</div>' +
+        '<div class="tk-body">' + esc(t.body) + '</div>' +
+        '<button class="warn" data-tk="' + esc(t.id) + '">删除</button>' +
+        '</div>';
+    });
+    h += '</div>';
+
+    h += '<div class="tk-acts">' +
+      (tk.unread ? '<button id="tkRead">标记已读</button>' : '') +
+      '<button class="warn" id="tkClear">清空全部</button>' +
+      '</div></div>';
+    return h;
+  }
+
+  /** 工单相关的写操作：做完重新拉一次列表 */
+  function ticketPost(url, body, btn) {
+    if (btn) btn.disabled = true;
+    fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) { if (j && j.ok) loadAdmin(); else if (btn) btn.disabled = false; })
+      .catch(function () { if (btn) btn.disabled = false; });
+  }
+
+  function wireTickets() {
+    var readBtn = document.getElementById('tkRead');
+    if (readBtn) readBtn.onclick = function () { ticketPost('/api/admin/tickets/read', {}, readBtn); };
+
+    var clearBtn = document.getElementById('tkClear');
+    if (clearBtn) clearBtn.onclick = function () {
+      if (typeof confirm === 'function' && !confirm('确定清空全部工单吗？清空后无法恢复。')) return;
+      ticketPost('/api/admin/tickets/delete', { all: true }, clearBtn);
+    };
+
+    app.querySelectorAll('button[data-tk]').forEach(function (b) {
+      b.onclick = function () {
+        if (typeof confirm === 'function' && !confirm('确定删除这条工单吗？')) return;
+        ticketPost('/api/admin/tickets/delete', { id: b.dataset.tk }, b);
+      };
+    });
+  }
+
+  function renderUsers(data, tk) {
     var s = data.stats || {};
     var iAmSuper = amSuper();
     USERS = data.users || [];
@@ -575,6 +670,7 @@
       '<div class="stat"><b style="color:#ff5c5c">' + (s.blocked || 0) + '</b><span>已到期</span></div>' +
       '<div class="stat"><b style="color:#ff4444">' + (s.banned || 0) + '</b><span>已封禁</span></div>' +
       '</div>' +
+      renderTicketCard(tk) +
       '<div class="card"><h2>账户管理</h2>';
 
     if (!data.users.length) {
@@ -598,6 +694,7 @@
     app.innerHTML = html;
 
     app.querySelectorAll('button[data-act]').forEach(function (b) { b.onclick = function () { act(b); }; });
+    wireTickets();
   }
 
   function note(text, ok) {
@@ -998,9 +1095,17 @@
   }
 
   function loadAdmin() {
-    return fetch('/api/admin/users', { cache: 'no-store' })
-      .then(function (r) { return r.json(); })
-      .then(function (j) {
+    // 账户列表和工单一起拉（工单列表单独一个接口，互不影响）
+    return Promise.all([
+      fetch('/api/admin/users', { cache: 'no-store' })
+        .then(function (r) { return r.json(); })
+        .catch(function () { return { ok: false }; }),
+      fetch('/api/admin/tickets', { cache: 'no-store' })
+        .then(function (r) { return r.json(); })
+        .catch(function () { return { ok: false }; }),
+    ])
+      .then(function (res) {
+        var j = res[0], tk = res[1];
         if (!j.ok) {
           noticesEl.innerHTML = '';
           maintEl.innerHTML = '';
@@ -1009,7 +1114,7 @@
         }
         renderNotices(j.notices);
         renderMaintenance(j.maintenance);
-        renderUsers(j);
+        renderUsers(j, tk);
       })
       .catch(function () { /* 静默 */ });
   }

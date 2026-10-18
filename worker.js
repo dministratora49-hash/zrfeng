@@ -1,7 +1,7 @@
 /**
  * zrfeng.top 后端（Cloudflare Worker）
  * ---------------------------------------------------------------------------
- * 提供：注册、登录、邮箱验证码、人机验证、下载门控。
+ * 提供：注册、登录、邮箱验证码、人机验证、下载门控、意见工单。
  *
  * ⚠️ 重要安全约定
  * 本文件会提交到**公开仓库**，任何人可见。因此：
@@ -58,6 +58,39 @@ const PBKDF2_ITERATIONS = 15000;
 
 /** 保留用户名，不允许注册（admin / 试用账户名另外由密钥决定，见 reservedNames） */
 const RESERVED = new Set(['administrator', 'root', 'system', 'zrfeng']);
+
+/* -------- 意见工单（「联系我们」页的提交工单） -------- */
+
+/** 标题最少字数：少于这个数直接当垃圾工单销毁 */
+const TICKET_TITLE_MIN = 3;
+
+/** 正文最少字数：少于这个数直接当垃圾工单销毁 */
+const TICKET_BODY_MIN = 10;
+
+/** 标题 / 正文的硬上限，防止有人塞进一整本书 */
+const TICKET_TITLE_MAX = 80;
+const TICKET_BODY_MAX = 2000;
+
+/** 联系方式最多多少字 */
+const TICKET_CONTACT_MAX = 100;
+
+/** 同一个 IP 两次提交工单的最小间隔（秒） */
+const TICKET_COOLDOWN = 60;
+
+/** 一天最多收多少条有效工单（保护 KV 免费额度：免费版每天只有 1000 次写） */
+const TICKET_DAILY_MAX = 50;
+
+/** KV 里最多保留多少条工单，超出的从最旧的开始删 */
+const TICKET_MAX_KEEP = 100;
+
+/** 工单在 KV 里的键前缀（键是 ticket:<15 位时间戳>-<随机>，字典序即时间序） */
+const TICKET_PREFIX = 'ticket:';
+
+/** 工单节奏限制的键前缀（故意和 TICKET_PREFIX 不构成包含关系，免得被一起列出来） */
+const TICKET_CD_PREFIX = 'ticketcd:';
+
+/** 管理员上次查看工单的时间（用于「有 N 条新工单」） */
+const TICKET_READ_KEY = 'ticketsread';
 
 /**
  * 管理员与试用账户的账户名 / 密码全部来自 Cloudflare 密钥，
@@ -1192,6 +1225,264 @@ async function handleNovelDownload(env, request) {
       'cache-control': 'no-store',
     },
   });
+}
+
+/* ========================== 意见工单 ========================== */
+
+/** 按「码点」截断，免得把一个 emoji 切成半个 */
+function capText(s, n) {
+  return Array.from(String(s == null ? '' : s)).slice(0, n).join('');
+}
+
+/** 工单里的「字数」：先去掉所有空白，再按码点算（一个 emoji 算一个字） */
+function ticketLen(s) {
+  return Array.from(String(s == null ? '' : s).replace(/\s+/gu, '')).length;
+}
+
+/**
+ * 里面有没有「文字」——汉字、字母、假名、谚文都算。
+ * 纯数字、纯标点、纯符号（包括纯 emoji）一律返回 false。
+ */
+function ticketHasWord(s) {
+  return /\p{L}/u.test(String(s == null ? '' : s));
+}
+
+/**
+ * 判定垃圾工单。返回 null 表示正常工单；否则返回 { code, message }。
+ * 命中任意一条就算垃圾工单（用户要求）：
+ *   title_short  标题少于 3 个字
+ *   body_short   正文少于 10 个字
+ *   no_text      标题或正文里一个文字都没有（全是数字 / 标点 / 符号）
+ */
+function ticketSpam(title, body) {
+  if (ticketLen(title) < TICKET_TITLE_MIN) {
+    return {
+      code: 'title_short',
+      message: '标题至少要 ' + TICKET_TITLE_MIN + ' 个字，这条已按垃圾工单销毁，补充后可以重新提交。',
+    };
+  }
+  if (ticketLen(body) < TICKET_BODY_MIN) {
+    return {
+      code: 'body_short',
+      message: '正文至少要 ' + TICKET_BODY_MIN + ' 个字，这条已按垃圾工单销毁，补充后可以重新提交。',
+    };
+  }
+  if (!ticketHasWord(title) || !ticketHasWord(body)) {
+    return {
+      code: 'no_text',
+      message: '标题或正文里没有实际文字（全是数字或标点），这条已按垃圾工单销毁。',
+    };
+  }
+  return null;
+}
+
+/** 工单算在哪一天（按东八区，凌晨 0 点换日） */
+function ticketDayKey(ts) {
+  return new Date(Number(ts) + 8 * 3600000).toISOString().slice(0, 10);
+}
+
+/**
+ * 取出工单，新的在前。
+ * 键是 ticket:<15 位补零时间戳>-<随机 hex>，字典序倒排就是时间倒序。
+ */
+async function listTickets(env, limit = TICKET_MAX_KEEP) {
+  let keys = [];
+  try {
+    const r = await env.USERS.list({ prefix: TICKET_PREFIX, limit });
+    keys = (r && r.keys) || [];
+  } catch {
+    return [];
+  }
+  keys.sort((a, b) => (a.name < b.name ? 1 : a.name > b.name ? -1 : 0));
+  const out = [];
+  for (const k of keys) {
+    let t = null;
+    try {
+      t = await env.USERS.get(k.name, 'json');
+    } catch {
+      t = null;
+    }
+    if (!t || typeof t !== 'object') continue;
+    out.push(Object.assign({ id: k.name.slice(TICKET_PREFIX.length) }, t));
+  }
+  return out;
+}
+
+/**
+ * 提交工单。**不需要登录** —— 被封禁、未激活的人正是靠这里联系管理员，
+ * 所以「联系我们」页不弹任何遮罩、这个接口也不要求会话。
+ */
+async function handleTicketSubmit(env, request, ip) {
+  const body = await readJson(request);
+
+  // 机器人陷阱：这个输入框对正常用户是隐藏的（没人会去填）。
+  // 但浏览器的自动填充偶尔会去填隐藏字段，所以再加一条「时间闸」：
+  // 只有「填了陷阱」而且「打开页面后 3 秒内就提交」（或者干脆没报耗时）才算机器人。
+  // 人正常打字怎么也要几秒，所以真实用户不会被误伤。
+  const elapsed = Number(body.elapsedMs);
+  const trapFilled = !!String(body.site || body.website || '').trim();
+  if (trapFilled && (!Number.isFinite(elapsed) || elapsed < 3000)) {
+    return json({ ok: true, message: '工单已提交，我会尽快查看。' });
+  }
+
+  const title = capText(String(body.title || '').trim(), TICKET_TITLE_MAX + 1);
+  const text = capText(String(body.body || body.content || '').trim(), TICKET_BODY_MAX + 1);
+  const contact = capText(String(body.contact || '').trim(), TICKET_CONTACT_MAX + 1);
+
+  // 两个都是空的：这是「忘了填」，按普通表单提示处理，不算垃圾工单
+  if (!title && !text) {
+    return json({ ok: false, message: '请填写标题和正文内容' }, 400);
+  }
+
+  // 垃圾工单：就地销毁 —— 不写 KV、不留记录、不占任何计数。
+  // 先判垃圾再谈写库，机器人刷垃圾也烧不掉 KV 的免费写入额度。
+  const spam = ticketSpam(title, text);
+  if (spam) {
+    return json({ ok: false, spam: true, code: spam.code, message: spam.message }, 400);
+  }
+
+  if (Array.from(title).length > TICKET_TITLE_MAX) {
+    return json({ ok: false, message: '标题太长了，最多 ' + TICKET_TITLE_MAX + ' 个字' }, 400);
+  }
+  if (Array.from(text).length > TICKET_BODY_MAX) {
+    return json({ ok: false, message: '正文太长了，最多 ' + TICKET_BODY_MAX + ' 个字' }, 400);
+  }
+
+  const now = Date.now();
+  const today = ticketDayKey(now);
+  const existing = await listTickets(env, TICKET_MAX_KEEP + 50);
+
+  // 保护 KV 免费额度：每天最多收 TICKET_DAILY_MAX 条
+  const todayCount = existing.filter((t) => ticketDayKey(t.at) === today).length;
+  if (todayCount >= TICKET_DAILY_MAX) {
+    return json(
+      { ok: false, message: '今天收到的工单太多了，请明天再来（每日上限 ' + TICKET_DAILY_MAX + ' 条）' },
+      429
+    );
+  }
+
+  // 同一个 IP 一分钟只能提交一条，挡住连点
+  const cdKey = TICKET_CD_PREFIX + (ip || 'unknown');
+  try {
+    if (await env.USERS.get(cdKey)) {
+      return json({ ok: false, message: '提交得太频繁了，请等一分钟再试' }, 429);
+    }
+  } catch {
+    /* 读不到就不拦 */
+  }
+
+  // 登录用户自动带上账户名，管理员一看就知道是谁提的
+  let account = '';
+  try {
+    const s = await getSession(env, request);
+    if (s) {
+      const u = await sessionUser(env, s);
+      account = (u && u.username) || s.username || '';
+    }
+  } catch {
+    account = '';
+  }
+
+  // 键是 ticket:<15 位时间戳>-<随机>，靠字典序倒排来排「新的在前」。
+  // 同一毫秒收到的两条会撞时间戳、只能靠随机段比大小，顺序就不稳定了；
+  // 这里顺手在已有列表上取最大值 +1ms，让键严格递增（不多花一次 KV 读）。
+  const lastAt = existing.reduce((mx, x) => Math.max(mx, Number(x.at) || 0), 0);
+  const at = Math.max(now, lastAt + 1);
+
+  const id = String(at).padStart(15, '0') + '-' + randomHex(3);
+  try {
+    await env.USERS.put(TICKET_PREFIX + id, JSON.stringify({ title, body: text, contact, account, at }));
+    await env.USERS.put(cdKey, String(now), { expirationTtl: TICKET_COOLDOWN });
+  } catch {
+    return json({ ok: false, message: '工单没能保存，请稍后再试' }, 500);
+  }
+
+  // 只留最近 TICKET_MAX_KEEP 条，超出的从最旧的删
+  const keep = [id].concat(existing.map((t) => t.id));
+  for (const old of keep.slice(TICKET_MAX_KEEP)) {
+    try {
+      await env.USERS.delete(TICKET_PREFIX + old);
+    } catch {
+      /* 忽略 */
+    }
+  }
+
+  return json({ ok: true, message: '工单已提交，我会尽快查看。', id });
+}
+
+/** 管理员工单列表 */
+async function handleAdminTickets(env, request) {
+  const guard = await requireAdmin(env, request);
+  if (guard.error) return guard.error;
+
+  const all = await listTickets(env, 500);
+  let lastRead = 0;
+  try {
+    lastRead = Number(await env.USERS.get(TICKET_READ_KEY)) || 0;
+  } catch {
+    lastRead = 0;
+  }
+  const now = Date.now();
+  return json({
+    ok: true,
+    count: all.length,
+    today: all.filter((t) => ticketDayKey(t.at) === ticketDayKey(now)).length,
+    dailyMax: TICKET_DAILY_MAX,
+    maxKeep: TICKET_MAX_KEEP,
+    unread: all.filter((t) => Number(t.at) > lastRead).length,
+    lastReadAt: lastRead || null,
+    tickets: all.slice(0, 50).map((t) => ({
+      id: t.id,
+      title: String(t.title || ''),
+      body: String(t.body || ''),
+      contact: String(t.contact || ''),
+      account: String(t.account || ''),
+      at: Number(t.at) || 0,
+    })),
+  });
+}
+
+/** 管理员点「已读」：记下时间，下次就能算出有几条新工单 */
+async function handleAdminTicketsRead(env, request) {
+  const guard = await requireAdmin(env, request);
+  if (guard.error) return guard.error;
+  const now = Date.now();
+  try {
+    await env.USERS.put(TICKET_READ_KEY, String(now));
+  } catch {
+    /* 忽略 */
+  }
+  return json({ ok: true, message: '已标记为已读', lastReadAt: now });
+}
+
+/** 管理员删除工单：带 id 删一条，带 all:true 全部清空 */
+async function handleAdminTicketsDelete(env, request) {
+  const guard = await requireAdmin(env, request);
+  if (guard.error) return guard.error;
+
+  const body = await readJson(request);
+
+  if (body.all) {
+    const all = await listTickets(env, 1000);
+    let n = 0;
+    for (const t of all) {
+      try {
+        await env.USERS.delete(TICKET_PREFIX + t.id);
+        n++;
+      } catch {
+        /* 忽略 */
+      }
+    }
+    return json({ ok: true, message: '已清空 ' + n + ' 条工单', deleted: n });
+  }
+
+  const id = String(body.id || '').trim();
+  // 严格校验编号，只可能删到 ticket: 前缀下的键，删不到别的东西
+  if (!/^\d{15}-[0-9a-f]{6}$/.test(id)) {
+    return json({ ok: false, message: '工单编号不正确' }, 400);
+  }
+  await env.USERS.delete(TICKET_PREFIX + id);
+  return json({ ok: true, message: '已删除该工单', deleted: 1 });
 }
 
 /* ========================== 管理员控制台 ========================== */
@@ -2501,6 +2792,10 @@ export default {
         if (path === '/api/recover/email/confirm' && method === 'POST') {
           return await handleRecoverByEmailConfirm(env, request);
         }
+        // 提交工单：不需要登录（被封禁的人就是靠这里联系管理员）
+        if (path === '/api/ticket' && method === 'POST') {
+          return await handleTicketSubmit(env, request, ip);
+        }
         if (path === '/api/logout' && method === 'POST') {
           return await handleLogout(env, request);
         }
@@ -2609,6 +2904,16 @@ export default {
         }
         if (path === '/api/admin/notices/read' && method === 'POST') {
           return await handleAdminNoticesRead(env, request);
+        }
+        // 工单：管理员查看 / 标记已读 / 删除
+        if (path === '/api/admin/tickets' && method === 'GET') {
+          return await handleAdminTickets(env, request);
+        }
+        if (path === '/api/admin/tickets/read' && method === 'POST') {
+          return await handleAdminTicketsRead(env, request);
+        }
+        if (path === '/api/admin/tickets/delete' && method === 'POST') {
+          return await handleAdminTicketsDelete(env, request);
         }
         if (path === '/api/admin/maintenance' && method === 'POST') {
           return await handleAdminMaintenance(env, request);
