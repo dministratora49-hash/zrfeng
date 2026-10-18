@@ -1703,7 +1703,15 @@ async function handleNotices(env, request) {
 /** 我的通知 + 我的工单（含回复）：登录按账户，未登录按设备 */
 async function handleMyNotifications(env, request) {
   const now = Date.now();
-  const device = deviceIdOf(request);
+
+  // 没有设备 cookie 就现场发一个：/notice/ 页自己的请求和 status.js 的 /api/status
+  // 是同时发出的，谁先到不确定 —— 不补发的话，第一次打开通知板块会被当成「没有身份」。
+  let device = deviceIdOf(request);
+  let mintedDevice = null;
+  if (!device) {
+    mintedDevice = randomHex(16);
+    device = mintedDevice;
+  }
 
   let account = '';
   let isAdmin = false;
@@ -1763,7 +1771,7 @@ async function handleMyNotifications(env, request) {
       };
     }),
     serverNow: now,
-  });
+  }, 200, mintedDevice ? { 'Set-Cookie': deviceCookie(mintedDevice) } : undefined);
 }
 
 /** 用户回复自己的工单（历史工单也能继续聊） */
