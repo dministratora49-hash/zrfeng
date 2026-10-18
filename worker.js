@@ -2926,13 +2926,14 @@ export default {
             username: u ? u.username : s ? s.username : null,
             isAdmin: !!(u && isAdminRole(roleOf(u))),
             account: accountStatus(u),
-            // 维护时段：所有页面据此决定是否弹出「正在维护服务」
-            // 持有工作人员通行证的人看到的是「未在维护」，可以直接预览
+            // 维护时段：所有页面据此决定是否弹出「正在维护服务」。
+            // 持有工作人员通行证的人：维护照实下发（导航页的 Offline 灯要靠它），
+            // 但加 unlocked: true —— 弹窗看到它就不弹。
             maintenance: await (async () => {
               const mm = await getMaintenance(env);
               const st = maintenanceState(mm, Date.now());
               if (st.active && (await maintUnlocked(env, request, mm))) {
-                return Object.assign({}, st, { active: false, unlocked: true, keySet: true });
+                return Object.assign({}, st, { unlocked: true });
               }
               return st;
             })(),

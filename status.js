@@ -406,6 +406,7 @@
    * 当前这一页要不要弹维护窗。
    *   pages 为空 → 全站维护（和以前的行为完全一样）
    *   pages 有值 → 只有勾选的那几个页面弹
+   *   拿着工作人员通行证（unlocked）→ 永远不弹，但导航页的 Offline 灯照常显示
    */
   function maintHits(st) {
     if (!st || !st.active) return false;
@@ -452,8 +453,10 @@
     maintCur = win;
 
     var skipForAdmin = isAdmin && onConsolePage();
+    // 拿着工作人员通行证：不弹（但导航页的 Offline 灯不受影响，那边看的是真实维护状态）
+    var unlocked = !!(st && st.unlocked);
 
-    if (maintHits(st) && !skipForAdmin) {
+    if (maintHits(st) && !skipForAdmin && !unlocked) {
       showMaintenance(st, isAdmin);
     } else {
       hideMaintenance();
