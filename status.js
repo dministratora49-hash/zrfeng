@@ -376,14 +376,84 @@
     }
   }
 
+  /**
+   * 路径 → 页面 id。
+   * ⚠️ 必须和 worker.js 里的 MAINT_PAGES 保持一致（那边是唯一的主人，
+   *    这里只是浏览器端的一份镜像，用来判断「当前这一页在不在维护范围里」）。
+   * 前缀匹配。「联系我们」故意不在这里 —— 它永远不弹任何弹窗。
+   */
+  var PAGE_PATHS = [
+    ['/aboutme', 'aboutme'],
+    ['/time', 'time'],
+    ['/guide', 'guide'],
+    ['/sponsorship', 'sponsorship'],
+    ['/file', 'file'],
+    ['/login', 'login'],
+    ['/console', 'console'],
+  ];
+
+  function pageIdOf(path) {
+    var p = String(path || '/');
+    for (var i = 0; i < PAGE_PATHS.length; i++) {
+      var pre = PAGE_PATHS[i][0];
+      if (p === pre || p === pre + '.html' || p.indexOf(pre + '/') === 0) return PAGE_PATHS[i][1];
+    }
+    if (p === '/' || p === '/index.html' || p === '') return 'home';
+    return null;
+  }
+
+  /**
+   * 当前这一页要不要弹维护窗。
+   *   pages 为空 → 全站维护（和以前的行为完全一样）
+   *   pages 有值 → 只有勾选的那几个页面弹
+   */
+  function maintHits(st) {
+    if (!st || !st.active) return false;
+    // 「联系我们」必须绝对干净：被封禁的人要靠它联系管理员
+    if (onContactPage()) return false;
+    var list = st.pages;
+    if (!list || !list.length) return true;
+    var id = pageIdOf(location.pathname);
+    return !!id && list.indexOf(id) >= 0;
+  }
+
+  /**
+   * 给带 data-page 的入口标上 Online / Offline（导航页靠它显示每个页面的状态）。
+   * 维护中且这一页在范围内 → Offline；否则恢复这个入口原本的文字
+   * （普通入口是 Online，控制台那个是「需登录」）。
+   */
+  function applyPageStatus(st) {
+    var boxes;
+    try {
+      boxes = document.querySelectorAll('[data-page]');
+    } catch (e) {
+      return;
+    }
+    if (!boxes || !boxes.length) return;
+
+    var live = !!(st && st.active);
+    var list = (st && st.pages) || [];
+    var all = live && !list.length;
+
+    for (var i = 0; i < boxes.length; i++) {
+      var el = boxes[i];
+      var id = el.getAttribute('data-page');
+      var down = all || (live && list.indexOf(id) >= 0);
+      el.setAttribute('data-down', down ? '1' : '0');
+      var s = el.querySelector('.status');
+      if (!s) continue;
+      var txt = down ? 'Offline' : el.getAttribute('data-default') || 'Online';
+      s.innerHTML = '<span class="dot"></span>' + txt;
+    }
+  }
+
   function applyMaintenance(st, isAdmin) {
-    var active = !!(st && st.active);
     var win = st && st.set ? { start: st.start, end: st.end } : null;
     maintCur = win;
 
     var skipForAdmin = isAdmin && onConsolePage();
 
-    if (active && !skipForAdmin && !onContactPage()) {
+    if (maintHits(st) && !skipForAdmin) {
       showMaintenance(st, isAdmin);
     } else {
       hideMaintenance();
@@ -501,8 +571,10 @@
     } else {
       hideBanned();
     }
-    // 维护时段：到点自动弹出 / 到点自动关闭
+    // 维护时段：到点自动弹出 / 到点自动关闭（页面维护时只有勾选的页面会弹）
     applyMaintenance(data && data.maintenance, !!(data && data.isAdmin));
+    // 导航页：被维护的页面显示 Offline，其余显示 Online（或它原本的文字）
+    applyPageStatus(data && data.maintenance);
 
     // 启动每秒倒计时
     if (cdEl && acc.remainingMs > 0) {

@@ -112,6 +112,18 @@
     color: #f0e8d8; font-size: 14px; font-family: inherit;
   }
   .m-field input:focus { outline: none; border-color: rgba(255,170,0,0.8); }
+  /* 页面维护勾选框 */
+  .m-pages { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
+  .m-page {
+    display: flex; align-items: center; gap: 7px; cursor: pointer;
+    padding: 8px 11px; border-radius: 10px; font-size: 12px;
+    border: 1px solid rgba(255,170,0,0.28); background: rgba(0,0,0,0.35); color: #b9a888;
+  }
+  .m-page.on { border-color: rgba(255,170,0,0.85); background: rgba(255,170,0,0.14); color: #ffcc66; }
+  .m-page input { width: 15px; height: 15px; accent-color: #ffb020; margin: 0; }
+  .m-page em { font-style: normal; font-size: 10px; color: #8a8060; }
+  .m-page.on em { color: #c9a75c; }
+  .m-hint { font-size: 11px; color: #8a8060; line-height: 1.8; margin-top: 8px; }
   .m-acts { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
   .m-acts button { flex: 1; min-width: 110px; border-color: rgba(255,170,0,0.5); background: rgba(255,170,0,0.1); color: #ffc55c; }
   .m-quick { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 14px; }
@@ -140,6 +152,12 @@
   }
   .tk-acts { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
   .tk-acts button { flex: 1; min-width: 120px; }
+  /* 匿名工单：标出来，并且整条压暗一点（它排在最后） */
+  .tk-item-anon { opacity: 0.78; border-style: dashed; }
+  .tk-anon-tag {
+    display: inline-block; padding: 1px 7px; border-radius: 20px; font-size: 10px;
+    background: rgba(255,176,32,0.14); color: #ffb020; border: 1px solid rgba(255,176,32,0.4);
+  }
 
   /* 弹窗 */
   .mask {
@@ -211,6 +229,8 @@
   var who = document.getElementById('who');
   var noticesEl = document.getElementById('notices');
   var maintEl = document.getElementById('maint');
+  /** 服务端下发的「可维护页面」表，渲染勾选框和中文名都用它 */
+  var maintPageList = [];
   var meEl = document.getElementById('me');
   var app = document.getElementById('app');
 
@@ -598,7 +618,8 @@
       (tk.unread ? '<span class="tk-new">' + tk.unread + ' 条新</span>' : '') +
       '</h2>' +
       '<div class="tk-meta">在库 ' + (tk.count || 0) + ' 条 · 今天收到 ' + (tk.today || 0) +
-      ' / ' + (tk.dailyMax || 0) + ' 条 · 最多保留 ' + (tk.maxKeep || 0) + ' 条<br>' +
+      ' / ' + (tk.dailyMax || 0) + ' 条 · 最多保留 ' + (tk.maxKeep || 0) + ' 条' +
+      (tk.anonymousCount ? ' · 其中匿名 ' + tk.anonymousCount + ' 条（排在最后）' : '') + '<br>' +
       '（标题不足 3 字、正文不足 10 字，或内容全是数字 / 标点的，已在服务端当场销毁，不落库）' +
       '</div>';
 
@@ -608,9 +629,17 @@
 
     h += '<div class="tk-list">';
     tk.tickets.forEach(function (t) {
-      var who = t.account ? '账户 ' + esc(t.account) : '未登录访客';
+      // 三种署名：已登录 → 用户名；没登录 → 未登录用户；勾了匿名 → 已匿名（不显示用户名）
+      var who;
+      if (t.anonymous) {
+        who = '<span class="tk-anon-tag">已匿名</span>';
+      } else if (t.account) {
+        who = '账户 ' + esc(t.account);
+      } else {
+        who = '未登录用户';
+      }
       if (t.contact) who += ' · 联系方式 ' + esc(t.contact);
-      h += '<div class="tk-item">' +
+      h += '<div class="tk-item' + (t.anonymous ? ' tk-item-anon' : '') + '">' +
         '<div class="tk-head"><span class="tk-title">' + esc(t.title) + '</span>' +
         '<span class="tk-time">' + fmtTime(t.at) + '</span></div>' +
         '<div class="tk-who">' + who + '</div>' +
@@ -1015,26 +1044,47 @@
   function renderMaintenance(m) {
     if (!m) m = { set: false, active: false };
     var now = Date.now();
+    var list = m.pageList || [];
+    maintPageList = list;
+
     var status, color;
     if (!m.set) { status = '未设置（站点正常开放）'; color = '#7fa893'; }
-    else if (m.active) { status = '维护中 —— 所有页面正在弹出维护提示'; color = '#ffb020'; }
+    else if (m.active) {
+      status = '维护中 —— ' + (m.pages && m.pages.length ? '仅这些页面：' + pageNames(m.pages) : '全站所有页面');
+      color = '#ffb020';
+    }
     else if (now < m.start) { status = '已排期，将于 ' + fmtClock(m.start) + ' 自动开始'; color = '#ffcc00'; }
     else { status = '已结束'; color = '#7fa893'; }
+
+    var checked = {};
+    (m.pages || []).forEach(function (id) { checked[id] = true; });
 
     maintEl.innerHTML =
       '<div class="maint"><h2>维护时间</h2>' +
       '<div class="m-stat">当前状态：<b style="color:' + color + '">' + esc(status) + '</b>' +
       (m.set ? '<br>维护时段：' + fmtClock(m.start) + ' → ' + fmtClock(m.end) : '') +
       '</div>' +
-      '<div class="m-field"><label>开始时间（到这个点，所有页面弹出维护弹窗）</label>' +
+      '<div class="m-field"><label>开始时间（到这个点，按下面勾选的范围开始弹维护弹窗）</label>' +
       '<input type="datetime-local" id="mStart" value="' + (m.set ? toLocalInput(m.start) : '') + '"></div>' +
       '<div class="m-field"><label>结束时间（到这个点，自动关闭维护弹窗）</label>' +
       '<input type="datetime-local" id="mEnd" value="' + (m.set ? toLocalInput(m.end) : '') + '"></div>' +
+      '<div class="m-field"><label>页面维护（勾哪个页面，维护时那个页面就进不去；一个都不勾 = 全站维护）</label>' +
+      '<div class="m-pages" id="mPages">' +
+      list.map(function (p) {
+        return '<label class="m-page' + (checked[p.id] ? ' on' : '') + '">' +
+          '<input type="checkbox" data-page="' + esc(p.id) + '"' + (checked[p.id] ? ' checked' : '') + '>' +
+          '<span>' + esc(p.name) + '</span>' +
+          '<em>' + esc(p.path) + '</em></label>';
+      }).join('') +
+      '</div>' +
+      '<div class="m-hint">勾了的页面会弹维护弹窗、并且在导航页上显示 Offline；没勾的页面照常访问。' +
+      '<br>「联系我们」不在这个列表里 —— 它永远保持可用，被封禁的人要靠它联系你。</div>' +
+      '</div>' +
       '<div class="m-field"><label>本次维护访问密钥（给工作人员在维护期间预览用，可随时改；留空 = 不设）</label>' +
       '<input type="text" id="mKey" placeholder="' + (m.keySet ? '已设置 · 留空则沿用原密钥' : '例如 zrfeng-staff-2026') + '" autocomplete="off"></div>' +
       '<div class="m-stat" style="margin:6px 0 12px">' +
       (m.keySet
-        ? '访问密钥：<b>已设置</b>（维护结束后自动销毁，密钥本身不会回显）'
+        ? '访问密钥：<b>已设置</b>（维护结束后自动销毁，密钥本身不会回显；维护期间拿它就能进任何页面预览）'
         : '访问密钥：<b>未设置</b>（不设的话，维护期间谁都进不去）') +
       '</div>' +
       '<div class="m-quick">' +
@@ -1050,6 +1100,26 @@
       '<div class="m-now">本机当前时间：' + new Date().toLocaleString('zh-CN') + '</div>' +
       '</div>';
 
+    // 勾上高亮，手机上看得清哪几个被勾了
+    var pageBox = document.getElementById('mPages');
+    if (pageBox) {
+      pageBox.addEventListener('change', function (e) {
+        var cb = e.target;
+        if (!cb || cb.type !== 'checkbox') return;
+        var lab = cb.parentNode;
+        if (lab) lab.className = 'm-page' + (cb.checked ? ' on' : '');
+      });
+    }
+
+    /** 收集当前勾选的页面 id */
+    function pickedPages() {
+      var out = [];
+      maintEl.querySelectorAll('#mPages input[type=checkbox]').forEach(function (cb) {
+        if (cb.checked) out.push(cb.getAttribute('data-page'));
+      });
+      return out;
+    }
+
     document.getElementById('mSave').onclick = function () {
       var s = fromLocalInput(document.getElementById('mStart').value);
       var e = fromLocalInput(document.getElementById('mEnd').value);
@@ -1057,7 +1127,7 @@
       if (e <= s) { mNote('结束时间必须晚于开始时间', false); return; }
       var keyEl = document.getElementById('mKey');
       var keyVal = keyEl ? keyEl.value.trim() : '';
-      saveMaint({ start: s, end: e, key: keyVal, keepKey: !keyVal }, this);
+      saveMaint({ start: s, end: e, key: keyVal, keepKey: !keyVal, pages: pickedPages() }, this);
     };
     document.getElementById('mClear').onclick = function () {
       saveMaint({ clear: true }, this);
@@ -1068,9 +1138,19 @@
         var s = Date.now();
         var kEl = document.getElementById('mKey');
         var kv = kEl ? kEl.value.trim() : '';
-        saveMaint({ start: s, end: s + mins * 60000, key: kv, keepKey: !kv }, b);
+        saveMaint({ start: s, end: s + mins * 60000, key: kv, keepKey: !kv, pages: pickedPages() }, b);
       };
     });
+  }
+
+  /** 页面 id → 中文名（表由服务端在 maintenance.pageList 里下发） */
+  function pageNames(ids) {
+    return (ids || []).map(function (id) {
+      for (var i = 0; i < maintPageList.length; i++) {
+        if (maintPageList[i].id === id) return maintPageList[i].name;
+      }
+      return id;
+    }).join('、');
   }
 
   function mNote(text, ok) {
@@ -1088,7 +1168,12 @@
       .then(function (r) { return r.json(); })
       .then(function (j) {
         mNote(j.message || (j.ok ? '已保存' : '保存失败'), !!j.ok);
-        if (j.ok) renderMaintenance(j.maintenance);
+        // 保存接口只回维护状态、不回页面表，把刚才那份表带上，免得勾选框消失
+        if (j.ok) {
+          renderMaintenance(Object.assign({}, j.maintenance, {
+            pageList: (j.maintenance && j.maintenance.pageList) || maintPageList,
+          }));
+        }
         else if (btn) btn.disabled = false;
       })
       .catch(function () { mNote('网络错误', false); if (btn) btn.disabled = false; });

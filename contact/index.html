@@ -237,6 +237,29 @@
     overflow: hidden;
   }
 
+  /* 匿名发送 */
+  .tk-anon {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin: 4px 0 14px;
+    font-size: 13px;
+    color: #4a6a58;
+    cursor: pointer;
+    line-height: 1.7;
+  }
+  .tk-anon input {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    margin-top: 3px;
+    accent-color: #4a8f6a;
+  }
+  .tk-anon-tip {
+    font-size: 11px;
+    color: #7f9c8c;
+  }
+
   /* ===== 返回按钮 ===== */
   .back {
     position: relative;
@@ -326,6 +349,12 @@
         <input id="tkSite" name="website" type="text" tabindex="-1" autocomplete="off">
       </div>
 
+      <label class="tk-anon" for="tkAnon">
+        <input id="tkAnon" type="checkbox">
+        <span>匿名发送</span>
+        <span class="tk-anon-tip">（勾上后控制台只显示「已匿名」，不显示你的用户名；代价是这条工单优先级会降低，排在最下面）</span>
+      </label>
+
       <button class="tk-send" id="tkSend" type="button">提交工单</button>
       <div class="tk-msg" id="tkMsg"></div>
       <div class="tk-tip">
@@ -399,6 +428,7 @@
   var bodyEl = document.getElementById('tkBody');
   var contactEl = document.getElementById('tkContact');
   var siteEl = document.getElementById('tkSite');
+  var anonEl = document.getElementById('tkAnon');
   var sendBtn = document.getElementById('tkSend');
   var msgEl = document.getElementById('tkMsg');
   if (!sendBtn || !msgEl) return;
@@ -459,6 +489,7 @@
         contact: c,
         site: siteEl ? siteEl.value : '',
         elapsedMs: Date.now() - START,
+        anonymous: !!(anonEl && anonEl.checked),
       }),
     })
       .then(function (r) { return r.json().catch(function () { return {}; }); })
@@ -467,6 +498,7 @@
           titleEl.value = '';
           bodyEl.value = '';
           contactEl.value = '';
+          if (anonEl) anonEl.checked = false;
           show(j.message || '工单已提交，我会尽快查看。', true);
         } else {
           // 内容太短 / 全是数字标点：服务端已把这条销毁，文字留在框里让人改

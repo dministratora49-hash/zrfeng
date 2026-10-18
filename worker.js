@@ -1371,7 +1371,8 @@ async function handleTicketSubmit(env, request, ip) {
     /* 读不到就不拦 */
   }
 
-  // 登录用户自动带上账户名，管理员一看就知道是谁提的
+  // 登录用户自动带上账户名，管理员一看就知道是谁提的；
+  // 未登录的就留空，控制台显示成「未登录用户」。
   let account = '';
   try {
     const s = await getSession(env, request);
@@ -1383,6 +1384,10 @@ async function handleTicketSubmit(env, request, ip) {
     account = '';
   }
 
+  // 勾了「匿名发送」：控制台只显示「已匿名」，并且这条工单会被排到最下面。
+  // 注意 account 仍然照存 —— 只是不下发给控制台。
+  const anonymous = body.anonymous === true || body.anon === true;
+
   // 键是 ticket:<15 位时间戳>-<随机>，靠字典序倒排来排「新的在前」。
   // 同一毫秒收到的两条会撞时间戳、只能靠随机段比大小，顺序就不稳定了；
   // 这里顺手在已有列表上取最大值 +1ms，让键严格递增（不多花一次 KV 读）。
@@ -1391,7 +1396,9 @@ async function handleTicketSubmit(env, request, ip) {
 
   const id = String(at).padStart(15, '0') + '-' + randomHex(3);
   try {
-    await env.USERS.put(TICKET_PREFIX + id, JSON.stringify({ title, body: text, contact, account, at }));
+    const rec = { title, body: text, contact, account, at };
+    if (anonymous) rec.anonymous = true;
+    await env.USERS.put(TICKET_PREFIX + id, JSON.stringify(rec));
     await env.USERS.put(cdKey, String(now), { expirationTtl: TICKET_COOLDOWN });
   } catch {
     return json({ ok: false, message: '工单没能保存，请稍后再试' }, 500);
@@ -1423,6 +1430,16 @@ async function handleAdminTickets(env, request) {
     lastRead = 0;
   }
   const now = Date.now();
+
+  // 优先级：匿名工单排在所有具名工单后面（各自仍然新的在前）。
+  // 排序只在这里做，不动 listTickets —— 那边的顺序还要用来算每日上限和淘汰最旧的。
+  const ordered = all.slice().sort((a, b) => {
+    const ax = a.anonymous === true ? 1 : 0;
+    const bx = b.anonymous === true ? 1 : 0;
+    if (ax !== bx) return ax - bx;
+    return (Number(b.at) || 0) - (Number(a.at) || 0);
+  });
+
   return json({
     ok: true,
     count: all.length,
@@ -1431,14 +1448,21 @@ async function handleAdminTickets(env, request) {
     maxKeep: TICKET_MAX_KEEP,
     unread: all.filter((t) => Number(t.at) > lastRead).length,
     lastReadAt: lastRead || null,
-    tickets: all.slice(0, 50).map((t) => ({
-      id: t.id,
-      title: String(t.title || ''),
-      body: String(t.body || ''),
-      contact: String(t.contact || ''),
-      account: String(t.account || ''),
-      at: Number(t.at) || 0,
-    })),
+    anonymousCount: all.filter((t) => t.anonymous === true).length,
+    tickets: ordered.slice(0, 50).map((t) => {
+      const anon = t.anonymous === true;
+      return {
+        id: t.id,
+        title: String(t.title || ''),
+        body: String(t.body || ''),
+        contact: String(t.contact || ''),
+        // 匿名工单不下发用户名：控制台就只显示「已匿名」。
+        // （KV 里其实还留着 account，万一以后要追溯；要连记录都不留，说一声改一行即可）
+        account: anon ? '' : String(t.account || ''),
+        anonymous: anon,
+        at: Number(t.at) || 0,
+      };
+    }),
   });
 }
 
@@ -1571,7 +1595,11 @@ async function handleAdminUsers(env, request) {
       count: deletions.length,
       latestAt: deletions.length ? deletions[0].at : null,
     },
-    maintenance: maintenanceState(await getMaintenance(env), Date.now()),
+    maintenance: Object.assign(maintenanceState(await getMaintenance(env), Date.now()), {
+      // 控制台要用它渲染「页面维护」的勾选框：服务端是这张表唯一的主人，
+      // 前端只负责显示和把勾选结果发回来。
+      pageList: MAINT_PAGES,
+    }),
   });
 }
 
@@ -1612,6 +1640,34 @@ const MAINT_KEY = 'config:maintenance';
 /** 维护时段最长允许 30 天，防止误填出一个「永久维护」 */
 const MAINT_MAX_MS = 30 * 86400000;
 
+/**
+ * 可以被「页面维护」单独关掉的页面。
+ * ⚠️ 故意**不含「联系我们」**：那个页面是所有人（尤其被封禁的人）唯一的联系通道，
+ *    status.js 也硬性规定它永远不弹任何弹窗，所以这里不提供这个选项，
+ *    免得管理员勾了却看不出任何效果。
+ * id 是稳定标识（存进 KV 的就是它），name 只用来显示。
+ * 这张表是唯一来源：控制台用它渲染勾选框，导航页用它把入口标成 Offline。
+ */
+const MAINT_PAGES = [
+  { id: 'home', name: '主站首页', path: '/' },
+  { id: 'aboutme', name: '关于开发者', path: '/aboutme' },
+  { id: 'time', name: '北京时间', path: '/time' },
+  { id: 'guide', name: '导航页', path: '/guide' },
+  { id: 'sponsorship', name: '赞助', path: '/sponsorship' },
+  { id: 'file', name: '资源库', path: '/file' },
+  { id: 'login', name: '登录 / 注册', path: '/login' },
+  { id: 'console', name: '控制台', path: '/console' },
+];
+
+const MAINT_PAGE_IDS = MAINT_PAGES.map((p) => p.id);
+
+/** 洗干净前端传来的页面 id 列表：只留认识的、去重、按 MAINT_PAGES 的顺序排 */
+function cleanMaintPages(input) {
+  if (!Array.isArray(input)) return [];
+  const set = new Set(input.map((x) => String(x || '').trim()));
+  return MAINT_PAGE_IDS.filter((id) => set.has(id));
+}
+
 /** 读取维护时段；没设置或数据损坏时返回 null */
 async function getMaintenance(env) {
   let m = null;
@@ -1635,6 +1691,8 @@ async function getMaintenance(env) {
     start: m.start,
     end: m.end,
     key: typeof m.key === 'string' && m.key ? m.key : null,
+    // 空数组 = 全站维护；老记录没有 pages 字段，等价于全站，行为和以前完全一样
+    pages: cleanMaintPages(m.pages),
     setBy: m.setBy || null,
     setAt: m.setAt || null,
   };
@@ -1642,15 +1700,21 @@ async function getMaintenance(env) {
 
 /**
  * 把维护时段换算成「此刻是否在维护中」。
- *   active     —— 现在正处于 [start, end) 之内：所有页面弹窗
+ *   active     —— 现在正处于 [start, end) 之内
+ *   pages      —— 受影响的页面 id；**空数组 = 全站**
+ *   scope      —— 'all'（全站）或 'pages'（只维护勾选的那几个）
  *   startsInMs —— 还没开始，距离开始还有多久
  *   remainingMs—— 维护中，距离结束还有多久（到点自动关弹窗）
  */
 function maintenanceState(m, now) {
   if (!m) {
-    return { set: false, active: false, start: null, end: null, remainingMs: null, startsInMs: null, ended: false, keySet: false };
+    return {
+      set: false, active: false, start: null, end: null, remainingMs: null,
+      startsInMs: null, ended: false, keySet: false, pages: [], scope: 'all',
+    };
   }
   const active = now >= m.start && now < m.end;
+  const pages = cleanMaintPages(m.pages);
   return {
     set: true,
     active,
@@ -1663,6 +1727,8 @@ function maintenanceState(m, now) {
     setAt: m.setAt,
     // 只告诉前端「设了密钥」，密钥本身永远不下发
     keySet: !!(m.key && String(m.key).length),
+    pages,
+    scope: pages.length ? 'pages' : 'all',
   };
 }
 
@@ -1692,7 +1758,13 @@ async function handleAdminMaintenance(env, request) {
     return json({ ok: false, message: '维护时段最长 30 天' }, 400);
   }
 
-  // 访问密钥：给工作人员在维护期间预览站点用；留空则不设
+  // 访问密钥：给工作人员在维护期间预览站点用；留空则不设。
+  // 页面范围：body.pages 是数组就按它来（空数组 = 全站）；没传这个字段就沿用原来的，
+  // 免得「改个时间」把已勾好的页面悄悄清成全站。
+  let old = null;
+  const needOld = body.keepKey || body.pages === undefined;
+  if (needOld) old = await getMaintenance(env);
+
   const rawKey = body.key === undefined ? null : String(body.key).trim();
   let key = null;
   if (rawKey) {
@@ -1702,17 +1774,26 @@ async function handleAdminMaintenance(env, request) {
     key = rawKey;
   } else if (body.keepKey) {
     // 只改时间段、不填密钥 → 沿用原来的
-    const old = await getMaintenance(env);
     key = old && old.key ? old.key : null;
   }
 
+  const pages = body.pages === undefined ? (old ? old.pages : []) : cleanMaintPages(body.pages);
+
   const m = { start, end, setBy: guard.session.username, setAt: now };
   if (key) m.key = key;
+  if (pages.length) m.pages = pages;
   await env.USERS.put(MAINT_KEY, JSON.stringify(m));
 
   const st = maintenanceState(m, now);
   const human = st.active ? '维护已开始' : '维护将于稍后自动开始';
-  return json({ ok: true, message: '维护时间已设置（' + human + '）', maintenance: st });
+  const scopeText = pages.length ? '，范围：' + pages.map(pageName).join('、') : '，范围：全站';
+  return json({ ok: true, message: '维护时间已设置（' + human + scopeText + '）', maintenance: st });
+}
+
+/** 页面 id → 中文名（不认识就原样返回，方便排查） */
+function pageName(id) {
+  const p = MAINT_PAGES.find((x) => x.id === id);
+  return p ? p.name : String(id);
 }
 
 /**
