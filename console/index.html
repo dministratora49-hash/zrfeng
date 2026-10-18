@@ -158,6 +158,28 @@
     display: inline-block; padding: 1px 7px; border-radius: 20px; font-size: 10px;
     background: rgba(255,176,32,0.14); color: #ffb020; border: 1px solid rgba(255,176,32,0.4);
   }
+  /* 回复线程 */
+  .tk-thread {
+    margin: 10px 0; padding-left: 10px; border-left: 2px solid rgba(0,255,140,0.18);
+  }
+  .tk-reply { padding: 6px 0; }
+  .tk-reply-who { font-size: 10.5px; color: #7fa893; margin-bottom: 3px; }
+  .tk-reply-who.admin { color: #00ff8c; }
+  .tk-reply-text { font-size: 12.5px; line-height: 1.8; color: #cfe8dc; white-space: pre-wrap; word-break: break-word; }
+  .tk-pending {
+    display: inline-block; padding: 1px 7px; border-radius: 20px; font-size: 10px;
+    background: rgba(255,80,80,0.14); color: #ff7b7b; border: 1px solid rgba(255,80,80,0.4);
+    white-space: nowrap;
+  }
+  .tk-rep { font-size: 10.5px; color: #7fa893; white-space: nowrap; }
+  .tk-reply-form { display: flex; gap: 8px; margin: 10px 0; }
+  .tk-reply-form input {
+    flex: 1; min-width: 0; padding: 8px 10px; border-radius: 8px; font-size: 12.5px;
+    border: 1px solid rgba(0,255,140,0.22); background: rgba(0,0,0,0.4);
+    color: #e8f5ee; font-family: inherit;
+  }
+  .tk-reply-form input:focus { outline: none; border-color: rgba(0,255,140,0.55); }
+  .tk-reply-form button { flex: none; padding: 8px 14px; font-size: 12.5px; }
 
   /* 弹窗 */
   .mask {
@@ -616,11 +638,13 @@
 
     var h = '<div class="card"><h2>工单' +
       (tk.unread ? '<span class="tk-new">' + tk.unread + ' 条新</span>' : '') +
+      (tk.pendingCount ? '<span class="tk-new">' + tk.pendingCount + ' 条待回复</span>' : '') +
       '</h2>' +
       '<div class="tk-meta">在库 ' + (tk.count || 0) + ' 条 · 今天收到 ' + (tk.today || 0) +
       ' / ' + (tk.dailyMax || 0) + ' 条 · 最多保留 ' + (tk.maxKeep || 0) + ' 条' +
       (tk.anonymousCount ? ' · 其中匿名 ' + tk.anonymousCount + ' 条（排在最后）' : '') + '<br>' +
-      '（标题不足 3 字、正文不足 10 字，或内容全是数字 / 标点的，已在服务端当场销毁，不落库）' +
+      '（标题不足 3 字、正文不足 10 字，或内容全是数字 / 标点的，已在服务端当场销毁，不落库）<br>' +
+      '（回复后用户会在「<a href="/notice/" target="_blank" style="color:#00ff8c">通知板块 → 我的消息</a>」里看到）' +
       '</div>';
 
     if (!tk.tickets || !tk.tickets.length) {
@@ -639,11 +663,33 @@
         who = '未登录用户';
       }
       if (t.contact) who += ' · 联系方式 ' + esc(t.contact);
+      // 回复线程：用户的留言 + 管理员的回复，按时间排
+      var reps = t.replies || [];
+      var thread = '';
+      if (reps.length) {
+        thread = '<div class="tk-thread">';
+        reps.forEach(function (r) {
+          var isAdmin = r.by === 'admin';
+          thread += '<div class="tk-reply">' +
+            '<div class="tk-reply-who' + (isAdmin ? ' admin' : '') + '">' + (isAdmin ? '管理员' : '用户') +
+            ' · ' + fmtTime(r.at) + '</div>' +
+            '<div class="tk-reply-text">' + esc(r.text) + '</div>' +
+            '</div>';
+        });
+        thread += '</div>';
+      }
       h += '<div class="tk-item' + (t.anonymous ? ' tk-item-anon' : '') + '">' +
         '<div class="tk-head"><span class="tk-title">' + esc(t.title) + '</span>' +
+        (t.pending ? '<span class="tk-pending">待回复</span>' : '') +
+        (t.replyCount ? '<span class="tk-rep">' + t.replyCount + ' 条回复</span>' : '') +
         '<span class="tk-time">' + fmtTime(t.at) + '</span></div>' +
         '<div class="tk-who">' + who + '</div>' +
         '<div class="tk-body">' + esc(t.body) + '</div>' +
+        thread +
+        '<div class="tk-reply-form">' +
+        '<input type="text" maxlength="1000" placeholder="回复这条工单（用户会在通知板块看到）" data-tk-input="' + esc(t.id) + '">' +
+        '<button data-tk-send="' + esc(t.id) + '">发送</button>' +
+        '</div>' +
         '<button class="warn" data-tk="' + esc(t.id) + '">删除</button>' +
         '</div>';
     });
@@ -683,6 +729,36 @@
       b.onclick = function () {
         if (typeof confirm === 'function' && !confirm('确定删除这条工单吗？')) return;
         ticketPost('/api/admin/tickets/delete', { id: b.dataset.tk }, b);
+      };
+    });
+
+    // 回复工单：回复写进工单，并在「通知板块 → 我的消息」里通知提交者
+    var sendReply = function (id, btn) {
+      var input = app.querySelector('input[data-tk-input="' + id + '"]');
+      var text = input ? String(input.value || '').trim() : '';
+      if (!text) { if (input) input.focus(); return; }
+      if (btn) btn.disabled = true;
+      fetch('/api/admin/tickets/reply', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id: id, text: text }),
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          if (j && j.ok) { if (input) input.value = ''; loadAdmin(); }
+          else { if (btn) btn.disabled = false; alert((j && j.message) || '回复失败'); }
+        })
+        .catch(function () { if (btn) btn.disabled = false; alert('网络错误，请稍后再试'); });
+    };
+    app.querySelectorAll('button[data-tk-send]').forEach(function (b) {
+      b.onclick = function () { sendReply(b.dataset.tkSend, b); };
+    });
+    app.querySelectorAll('input[data-tk-input]').forEach(function (inp) {
+      inp.onkeydown = function (e) {
+        if (e.key === 'Enter') {
+          var btn = app.querySelector('button[data-tk-send="' + inp.dataset.tkInput + '"]');
+          if (btn) sendReply(inp.dataset.tkInput, btn);
+        }
       };
     });
   }

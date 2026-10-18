@@ -499,7 +499,12 @@
           bodyEl.value = '';
           contactEl.value = '';
           if (anonEl) anonEl.checked = false;
-          show(j.message || '工单已提交，我会尽快查看。', true);
+          // 编号是以后查看回复、继续追问的凭据；回复出现在「通知板块 → 我的消息」
+          show(
+            (j.message || '工单已提交，我会尽快查看。') +
+              (j.id ? '　编号 ' + j.id + '（回复会出现在「通知板块 → 我的消息」里）' : ''),
+            true
+          );
         } else {
           // 内容太短 / 全是数字标点：服务端已把这条销毁，文字留在框里让人改
           show((j && j.message) || '提交失败，请稍后再试', false);

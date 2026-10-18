@@ -92,6 +92,32 @@ const TICKET_CD_PREFIX = 'ticketcd:';
 /** 管理员上次查看工单的时间（用于「有 N 条新工单」） */
 const TICKET_READ_KEY = 'ticketsread';
 
+/* ========================== 通知板块 ========================== */
+
+/** 公开公告在 KV 里的键前缀（键是 notice:<15 位时间戳>-<随机>，字典序即时间序） */
+const NOTICE_PREFIX = 'notice:';
+
+/** 公告最多保留多少条，超出的从最旧的开始删 */
+const NOTICE_MAX_KEEP = 200;
+
+/** 公告标题 / 正文的长度限制 */
+const NOTICE_TITLE_MAX = 80;
+const NOTICE_BODY_MAX = 2000;
+const NOTICE_TITLE_MIN = 2;
+const NOTICE_BODY_MIN = 2;
+const NOTICE_DAILY_MAX = 100;
+
+/** 个人通知的键前缀：notif:u:<账户>:… 或 notif:d:<设备 id>:… */
+const NOTIF_PREFIX = 'notif:';
+const NOTIF_ACCOUNT_PREFIX = NOTIF_PREFIX + 'u:';
+const NOTIF_DEVICE_PREFIX = NOTIF_PREFIX + 'd:';
+/** 每个人最多保留多少条个人通知 */
+const NOTIF_MAX_KEEP = 100;
+
+/** 工单里的回复 / 通知，正文长度限制 */
+const REPLY_MAX = 1000;
+const REPLY_MIN = 1;
+
 /**
  * 管理员与试用账户的账户名 / 密码全部来自 Cloudflare 密钥，
  * 不写死在代码里 —— 否则会随公开仓库一起泄露。
@@ -1398,6 +1424,10 @@ async function handleTicketSubmit(env, request, ip) {
   try {
     const rec = { title, body: text, contact, account, at };
     if (anonymous) rec.anonymous = true;
+    // 记下设备 cookie：未登录的人以后也能在「通知板块 → 我的消息」里
+    // 找到这条工单并看到管理员的回复（换设备或清缓存就找不到了，界面上有提示）。
+    const dev = deviceIdOf(request);
+    if (dev) rec.dev = String(dev);
     await env.USERS.put(TICKET_PREFIX + id, JSON.stringify(rec));
     await env.USERS.put(cdKey, String(now), { expirationTtl: TICKET_COOLDOWN });
   } catch {
@@ -1431,13 +1461,27 @@ async function handleAdminTickets(env, request) {
   }
   const now = Date.now();
 
+  // 一条工单的「最后动静」时间：提交时间与最后一条回复里取大的。
+  // 「有 N 条新」和排序都用它，这样用户追加回复也能重新顶上来。
+  const lastAct = (t) => {
+    const reps = Array.isArray(t.replies) ? t.replies : [];
+    return reps.reduce((mx, r) => Math.max(mx, Number(r.at) || 0), Number(t.at) || 0);
+  };
+
+  // 未回复的用户留言（管理员还没看过的）
+  const needReply = (t) => {
+    const reps = Array.isArray(t.replies) ? t.replies : [];
+    const last = reps.length ? reps[reps.length - 1] : null;
+    return !last || last.by !== 'admin';
+  };
+
   // 优先级：匿名工单排在所有具名工单后面（各自仍然新的在前）。
   // 排序只在这里做，不动 listTickets —— 那边的顺序还要用来算每日上限和淘汰最旧的。
   const ordered = all.slice().sort((a, b) => {
     const ax = a.anonymous === true ? 1 : 0;
     const bx = b.anonymous === true ? 1 : 0;
     if (ax !== bx) return ax - bx;
-    return (Number(b.at) || 0) - (Number(a.at) || 0);
+    return lastAct(b) - lastAct(a);
   });
 
   return json({
@@ -1446,11 +1490,14 @@ async function handleAdminTickets(env, request) {
     today: all.filter((t) => ticketDayKey(t.at) === ticketDayKey(now)).length,
     dailyMax: TICKET_DAILY_MAX,
     maxKeep: TICKET_MAX_KEEP,
-    unread: all.filter((t) => Number(t.at) > lastRead).length,
+    unread: all.filter((t) => lastAct(t) > lastRead).length,
     lastReadAt: lastRead || null,
     anonymousCount: all.filter((t) => t.anonymous === true).length,
+    // 有几条是「用户还在等回复」的（最后一条不是管理员发的）
+    pendingCount: all.filter(needReply).length,
     tickets: ordered.slice(0, 50).map((t) => {
       const anon = t.anonymous === true;
+      const reps = Array.isArray(t.replies) ? t.replies : [];
       return {
         id: t.id,
         title: String(t.title || ''),
@@ -1461,6 +1508,14 @@ async function handleAdminTickets(env, request) {
         account: anon ? '' : String(t.account || ''),
         anonymous: anon,
         at: Number(t.at) || 0,
+        lastAt: lastAct(t),
+        replyCount: reps.length,
+        pending: needReply(t),
+        replies: reps.slice(-30).map((r) => ({
+          at: Number(r.at) || 0,
+          by: r.by === 'admin' ? 'admin' : 'user',
+          text: String(r.text || ''),
+        })),
       };
     }),
   });
@@ -1507,6 +1562,374 @@ async function handleAdminTicketsDelete(env, request) {
   }
   await env.USERS.delete(TICKET_PREFIX + id);
   return json({ ok: true, message: '已删除该工单', deleted: 1 });
+}
+
+/* ========================== 通知板块 ========================== */
+
+/** 把时间戳格式化成「MM-DD HH:MM」（北京时间，东八区） */
+function fmtCST(ts) {
+  if (!ts) return '—';
+  const d = new Date(Number(ts) + 8 * 3600000);
+  const p2 = (x) => (x < 10 ? '0' + x : '' + x);
+  return p2(d.getUTCMonth() + 1) + '-' + p2(d.getUTCDate()) + ' ' + p2(d.getUTCHours()) + ':' + p2(d.getUTCMinutes());
+}
+
+/** 取出公开公告，新的在前 */
+async function listNotices(env, limit = NOTICE_MAX_KEEP) {
+  let keys = [];
+  try {
+    const r = await env.USERS.list({ prefix: NOTICE_PREFIX, limit });
+    keys = (r && r.keys) || [];
+  } catch {
+    return [];
+  }
+  keys.sort((a, b) => (a.name < b.name ? 1 : a.name > b.name ? -1 : 0));
+  const out = [];
+  for (const k of keys) {
+    let n = null;
+    try {
+      n = await env.USERS.get(k.name, 'json');
+    } catch {
+      n = null;
+    }
+    if (!n || typeof n !== 'object') continue;
+    out.push(Object.assign({ id: k.name.slice(NOTICE_PREFIX.length) }, n));
+  }
+  return out;
+}
+
+/**
+ * 发一条公开公告。
+ * kind: 'manual'（管理员手发）| 'maint'（维护自动发）
+ */
+async function postNotice(env, rec) {
+  const at = Number(rec.at) || Date.now();
+  const id = String(at).padStart(15, '0') + '-' + randomHex(3);
+  const out = {
+    at,
+    title: capText(String(rec.title || ''), NOTICE_TITLE_MAX),
+    body: capText(String(rec.body || ''), NOTICE_BODY_MAX),
+    kind: rec.kind === 'maint' ? 'maint' : 'manual',
+  };
+  if (rec.setBy) out.setBy = String(rec.setBy);
+  await env.USERS.put(NOTICE_PREFIX + id, JSON.stringify(out));
+
+  // 只留最近 NOTICE_MAX_KEEP 条，超出的从最旧的删
+  const all = await listNotices(env, NOTICE_MAX_KEEP + 20);
+  for (const old of all.slice(NOTICE_MAX_KEEP)) {
+    try {
+      await env.USERS.delete(NOTICE_PREFIX + old.id);
+    } catch {
+      /* 忽略 */
+    }
+  }
+  return id;
+}
+
+/**
+ * 个人通知归谁：登录用户按账户，未登录按设备（同一台手机/浏览器）。
+ * 返回 null 表示这次请求既没登录也没设备 cookie，没地方放通知。
+ */
+function notifOwner(account, device) {
+  if (account) return NOTIF_ACCOUNT_PREFIX + String(account).toLowerCase();
+  if (device) return NOTIF_DEVICE_PREFIX + String(device);
+  return null;
+}
+
+/** 取出某个人的通知，新的在前 */
+async function listNotifications(env, owner, limit = NOTIF_MAX_KEEP) {
+  if (!owner) return [];
+  const pre = owner + ':';
+  let keys = [];
+  try {
+    const r = await env.USERS.list({ prefix: pre, limit });
+    keys = (r && r.keys) || [];
+  } catch {
+    return [];
+  }
+  keys.sort((a, b) => (a.name < b.name ? 1 : a.name > b.name ? -1 : 0));
+  const out = [];
+  for (const k of keys) {
+    let n = null;
+    try {
+      n = await env.USERS.get(k.name, 'json');
+    } catch {
+      n = null;
+    }
+    if (!n || typeof n !== 'object') continue;
+    out.push(Object.assign({ id: k.name.slice(pre.length) }, n));
+  }
+  return out;
+}
+
+/** 往某个人的通知中心塞一条 */
+async function pushNotification(env, owner, rec) {
+  if (!owner) return null;
+  const at = Number(rec.at) || Date.now();
+  const id = String(at).padStart(15, '0') + '-' + randomHex(3);
+  const out = { at, text: capText(String(rec.text || ''), REPLY_MAX) };
+  if (rec.ticketId) out.ticketId = String(rec.ticketId);
+  if (rec.kind) out.kind = String(rec.kind);
+  if (rec.title) out.title = capText(String(rec.title), NOTICE_TITLE_MAX);
+  await env.USERS.put(owner + ':' + id, JSON.stringify(out));
+
+  const all = await listNotifications(env, owner, NOTIF_MAX_KEEP + 20);
+  for (const old of all.slice(NOTIF_MAX_KEEP)) {
+    try {
+      await env.USERS.delete(owner + ':' + old.id);
+    } catch {
+      /* 忽略 */
+    }
+  }
+  return id;
+}
+
+/** 公开公告列表：任何人都能看（含维护自动消息） */
+async function handleNotices(env, request) {
+  const all = await listNotices(env, NOTICE_MAX_KEEP);
+  return json({
+    ok: true,
+    count: all.length,
+    notices: all.slice(0, 50).map((n) => ({
+      id: n.id,
+      at: Number(n.at) || 0,
+      title: String(n.title || ''),
+      body: String(n.body || ''),
+      kind: n.kind === 'maint' ? 'maint' : 'manual',
+    })),
+  });
+}
+
+/** 我的通知 + 我的工单（含回复）：登录按账户，未登录按设备 */
+async function handleMyNotifications(env, request) {
+  const now = Date.now();
+  const device = deviceIdOf(request);
+
+  let account = '';
+  let isAdmin = false;
+  try {
+    const s = await getSession(env, request);
+    if (s) {
+      const u = await sessionUser(env, s);
+      account = (u && u.username) || s.username || '';
+      isAdmin = !!(u && isAdminRole(roleOf(u)));
+    }
+  } catch {
+    account = '';
+  }
+
+  const owner = notifOwner(account, device);
+  const notifications = await listNotifications(env, owner, NOTIF_MAX_KEEP);
+
+  // 我的工单：登录用户看自己账户提交的；未登录看这台设备提交的
+  const all = await listTickets(env, TICKET_MAX_KEEP);
+  const mine = all.filter((t) => {
+    const byAccount = account && String(t.account || '').toLowerCase() === account.toLowerCase();
+    const byDevice = device && t.dev && String(t.dev) === String(device);
+    return !!(byAccount || byDevice);
+  });
+
+  return json({
+    ok: true,
+    me: {
+      loggedIn: !!account,
+      username: account || null,
+      isAdmin,
+      // 未登录时靠设备记住，换设备/清缓存就找不到了 —— 界面上会提示
+      byDevice: !account && !!device,
+    },
+    notifications: notifications.map((n) => ({
+      id: n.id,
+      at: Number(n.at) || 0,
+      text: String(n.text || ''),
+      title: String(n.title || ''),
+      kind: String(n.kind || ''),
+      ticketId: String(n.ticketId || ''),
+    })),
+    tickets: mine.slice(0, 30).map((t) => {
+      const replies = Array.isArray(t.replies) ? t.replies : [];
+      return {
+        id: t.id,
+        title: String(t.title || ''),
+        body: String(t.body || ''),
+        at: Number(t.at) || 0,
+        anonymous: t.anonymous === true,
+        canReply: true,
+        replies: replies.slice(-30).map((r) => ({
+          at: Number(r.at) || 0,
+          by: r.by === 'admin' ? 'admin' : 'user',
+          text: String(r.text || ''),
+        })),
+      };
+    }),
+    serverNow: now,
+  });
+}
+
+/** 用户回复自己的工单（历史工单也能继续聊） */
+async function handleTicketReply(env, request) {
+  const body = await readJson(request);
+  const id = String(body.id || '').trim();
+  if (!/^\d{15}-[0-9a-f]{6}$/.test(id)) {
+    return json({ ok: false, message: '工单编号不正确' }, 400);
+  }
+  const text = capText(String(body.text || '').trim(), REPLY_MAX + 1);
+  if (ticketLen(text) < REPLY_MIN) {
+    return json({ ok: false, message: '请先写点什么再发送' }, 400);
+  }
+  if (Array.from(text).length > REPLY_MAX) {
+    return json({ ok: false, message: '回复太长了，最多 ' + REPLY_MAX + ' 个字' }, 400);
+  }
+
+  const t = await env.USERS.get(TICKET_PREFIX + id, 'json');
+  if (!t || typeof t !== 'object') {
+    return json({ ok: false, message: '找不到这条工单' }, 404);
+  }
+
+  // 身份校验：登录用户按账户名，未登录按设备 cookie。
+  // 两者都对不上就不是你的工单，不能回复（否则谁都能给别人的工单留言）。
+  const device = deviceIdOf(request);
+  let account = '';
+  try {
+    const s = await getSession(env, request);
+    if (s) {
+      const u = await sessionUser(env, s);
+      account = (u && u.username) || s.username || '';
+    }
+  } catch {
+    account = '';
+  }
+  const byAccount = account && String(t.account || '').toLowerCase() === account.toLowerCase();
+  const byDevice = device && t.dev && String(t.dev) === String(device);
+  if (!byAccount && !byDevice) {
+    return json({ ok: false, message: '这不是你提交的工单，不能在这里回复' }, 403);
+  }
+
+  const now = Date.now();
+  const replies = Array.isArray(t.replies) ? t.replies.slice() : [];
+  replies.push({ at: now, by: 'user', text });
+  t.replies = replies.slice(-50);
+  try {
+    await env.USERS.put(TICKET_PREFIX + id, JSON.stringify(t));
+  } catch {
+    return json({ ok: false, message: '回复没能保存，请稍后再试' }, 500);
+  }
+  return json({ ok: true, message: '回复已发送', at: now });
+}
+
+/** 管理员回复工单：写入回复，并给提交者发一条个人通知 */
+async function handleAdminTicketReply(env, request) {
+  const guard = await requireAdmin(env, request);
+  if (guard.error) return guard.error;
+
+  const body = await readJson(request);
+  const id = String(body.id || '').trim();
+  if (!/^\d{15}-[0-9a-f]{6}$/.test(id)) {
+    return json({ ok: false, message: '工单编号不正确' }, 400);
+  }
+  const text = capText(String(body.text || '').trim(), REPLY_MAX + 1);
+  if (ticketLen(text) < REPLY_MIN) {
+    return json({ ok: false, message: '请先写点什么再发送' }, 400);
+  }
+  if (Array.from(text).length > REPLY_MAX) {
+    return json({ ok: false, message: '回复太长了，最多 ' + REPLY_MAX + ' 个字' }, 400);
+  }
+
+  const t = await env.USERS.get(TICKET_PREFIX + id, 'json');
+  if (!t || typeof t !== 'object') {
+    return json({ ok: false, message: '找不到这条工单' }, 404);
+  }
+
+  const now = Date.now();
+  const replies = Array.isArray(t.replies) ? t.replies.slice() : [];
+  replies.push({ at: now, by: 'admin', text, account: guard.session.username });
+  t.replies = replies.slice(-50);
+  try {
+    await env.USERS.put(TICKET_PREFIX + id, JSON.stringify(t));
+  } catch {
+    return json({ ok: false, message: '回复没能保存，请稍后再试' }, 500);
+  }
+
+  // 提交者能在「通知板块 → 我的消息」里看到这条回复。
+  // 匿名工单也照发 —— 归属看的是记录里的 account/dev，不是控制台显示的那个名字。
+  let notified = false;
+  try {
+    const owner = notifOwner(t.account, t.dev);
+    if (owner) {
+      await pushNotification(env, owner, {
+        at: now,
+        kind: 'ticket-reply',
+        ticketId: id,
+        title: '工单有新回复',
+        text: '你的工单《' + String(t.title || '') + '》有新回复：' + text.slice(0, 120),
+      });
+      notified = true;
+    }
+  } catch {
+    notified = false;
+  }
+
+  return json({ ok: true, message: '回复已发送', at: now, notified });
+}
+
+/** 管理员发一条公开公告 */
+async function handleAdminNoticePost(env, request) {
+  const guard = await requireAdmin(env, request);
+  if (guard.error) return guard.error;
+
+  const body = await readJson(request);
+  const title = capText(String(body.title || '').trim(), NOTICE_TITLE_MAX + 1);
+  const text = capText(String(body.body || body.content || '').trim(), NOTICE_BODY_MAX + 1);
+
+  if (Array.from(title).length < NOTICE_TITLE_MIN) {
+    return json({ ok: false, message: '标题至少要 ' + NOTICE_TITLE_MIN + ' 个字' }, 400);
+  }
+  if (Array.from(text).length < NOTICE_BODY_MIN) {
+    return json({ ok: false, message: '正文至少要 ' + NOTICE_BODY_MIN + ' 个字' }, 400);
+  }
+  if (Array.from(title).length > NOTICE_TITLE_MAX) {
+    return json({ ok: false, message: '标题最多 ' + NOTICE_TITLE_MAX + ' 个字' }, 400);
+  }
+  if (Array.from(text).length > NOTICE_BODY_MAX) {
+    return json({ ok: false, message: '正文最多 ' + NOTICE_BODY_MAX + ' 个字' }, 400);
+  }
+
+  const id = await postNotice(env, {
+    at: Date.now(),
+    title,
+    body: text,
+    kind: 'manual',
+    setBy: guard.session.username,
+  });
+  return json({ ok: true, message: '公告已发布', id });
+}
+
+/** 管理员删公告：带 id 删一条，带 all:true 清空 */
+async function handleAdminNoticeDelete(env, request) {
+  const guard = await requireAdmin(env, request);
+  if (guard.error) return guard.error;
+
+  const body = await readJson(request);
+  if (body.all) {
+    const all = await listNotices(env, NOTICE_MAX_KEEP + 50);
+    let n = 0;
+    for (const x of all) {
+      try {
+        await env.USERS.delete(NOTICE_PREFIX + x.id);
+        n++;
+      } catch {
+        /* 忽略 */
+      }
+    }
+    return json({ ok: true, message: '已清空 ' + n + ' 条公告', deleted: n });
+  }
+
+  const id = String(body.id || '').trim();
+  if (!/^\d{15}-[0-9a-f]{6}$/.test(id)) {
+    return json({ ok: false, message: '公告编号不正确' }, 400);
+  }
+  await env.USERS.delete(NOTICE_PREFIX + id);
+  return json({ ok: true, message: '已删除该公告', deleted: 1 });
 }
 
 /* ========================== 管理员控制台 ========================== */
@@ -1653,6 +2076,7 @@ const MAINT_PAGES = [
   { id: 'aboutme', name: '关于开发者', path: '/aboutme' },
   { id: 'time', name: '北京时间', path: '/time' },
   { id: 'guide', name: '导航页', path: '/guide' },
+  { id: 'notice', name: '通知板块', path: '/notice' },
   { id: 'sponsorship', name: '赞助', path: '/sponsorship' },
   { id: 'file', name: '资源库', path: '/file' },
   { id: 'login', name: '登录 / 注册', path: '/login' },
@@ -1742,7 +2166,22 @@ async function handleAdminMaintenance(env, request) {
 
   // 清除
   if (body.clear) {
+    // 只有真的撤销了一次维护才发公告，避免空点「清除」刷屏
+    const before = await getMaintenance(env);
     await env.USERS.delete(MAINT_KEY);
+    if (before) {
+      try {
+        await postNotice(env, {
+          at: now,
+          kind: 'maint',
+          title: '维护已结束',
+          body: '站点维护已结束，服务已恢复正常，感谢等待。',
+          setBy: guard.session.username,
+        });
+      } catch {
+        /* 公告发不出去不影响清除维护 */
+      }
+    }
     return json({ ok: true, message: '已清除维护时间', maintenance: maintenanceState(null, now) });
   }
 
@@ -1787,6 +2226,23 @@ async function handleAdminMaintenance(env, request) {
   const st = maintenanceState(m, now);
   const human = st.active ? '维护已开始' : '维护将于稍后自动开始';
   const scopeText = pages.length ? '，范围：' + pages.map(pageName).join('、') : '，范围：全站';
+
+  // 维护也往通知板块发一条，用户不用等到点开某个页面才知道
+  try {
+    const scopeName = pages.length ? '（' + pages.map(pageName).join('、') + '）' : '（全站）';
+    await postNotice(env, {
+      at: now,
+      kind: 'maint',
+      title: st.active ? '站点正在维护' : '维护公告',
+      body: st.active
+        ? '站点正在维护中' + scopeName + '，预计 ' + fmtCST(end) + ' 结束。'
+        : '站点将于 ' + fmtCST(start) + ' 开始维护' + scopeName + '，预计 ' + fmtCST(end) + ' 结束。',
+      setBy: guard.session.username,
+    });
+  } catch {
+    /* 公告发不出去不影响维护本身 */
+  }
+
   return json({ ok: true, message: '维护时间已设置（' + human + scopeText + '）', maintenance: st });
 }
 
@@ -2996,6 +3452,26 @@ export default {
         }
         if (path === '/api/admin/tickets/delete' && method === 'POST') {
           return await handleAdminTicketsDelete(env, request);
+        }
+        if (path === '/api/admin/tickets/reply' && method === 'POST') {
+          return await handleAdminTicketReply(env, request);
+        }
+
+        // 通知板块：公开公告 + 我的通知/我的工单 + 用户回复工单
+        if (path === '/api/notices' && method === 'GET') {
+          return await handleNotices(env, request);
+        }
+        if (path === '/api/my/notifications' && method === 'GET') {
+          return await handleMyNotifications(env, request);
+        }
+        if (path === '/api/ticket/reply' && method === 'POST') {
+          return await handleTicketReply(env, request);
+        }
+        if (path === '/api/admin/notices' && method === 'POST') {
+          return await handleAdminNoticePost(env, request);
+        }
+        if (path === '/api/admin/notices/delete' && method === 'POST') {
+          return await handleAdminNoticeDelete(env, request);
         }
         if (path === '/api/admin/maintenance' && method === 'POST') {
           return await handleAdminMaintenance(env, request);

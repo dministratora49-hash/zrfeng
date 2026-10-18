@@ -65,10 +65,12 @@ footer{text-align:center;color:var(--muted);font-size:12px;margin-top:40px;lette
   <p class="sub fade2">欢迎来到本站，这里是信息发布与资源汇聚的中心枢纽。</p>
 
   <div class="card fade2">
-    <div class="card-label"><i class="fas fa-broadcast-tower"></i> 站点公告</div>
+    <div class="card-label"><i class="fas fa-broadcast-tower"></i> 通知板块</div>
     <div class="line"></div>
-    <div class="news-date">2026-09-24 08:00</div>
-    <p class="news-text">www.zrfeng.top主站已于<strong>2026年9月24日上午8点整</strong>正式成立，感谢您的访问与支持！</p>
+    <p class="news-text" id="latestNotice">站点公告、维护消息和我的消息都搬到「通知板块」了。</p>
+    <div class="btn-wrap">
+      <a class="btn-nav" href="/notice/">进入通知板块 <i class="fas fa-arrow-right"></i></a>
+    </div>
   </div>
 
   <div class="card fade3">
@@ -160,6 +162,17 @@ footer{text-align:center;color:var(--muted);font-size:12px;margin-top:40px;lette
     document.getElementById("now-date").textContent=now.getFullYear()+"/"+pad(now.getMonth()+1)+"/"+pad(now.getDate());
   }
   update();setInterval(update,1000);
+})();
+
+// 通知板块入口：顺手把最新一条公告的标题显示出来
+(function(){
+  function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
+  fetch("/api/notices",{cache:"no-store"}).then(function(r){return r.json()}).then(function(j){
+    var n=j&&j.notices&&j.notices[0];
+    var e=document.getElementById("latestNotice");
+    if(!n||!e)return;
+    e.innerHTML=(n.kind==="maint"?"维护消息：":"最新公告：")+"<strong>"+esc(n.title)+"</strong>";
+  }).catch(function(){});
 })();
 </script>
   <script src="/status.js" defer></script>

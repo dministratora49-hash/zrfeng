@@ -91,6 +91,12 @@
     '#' + MAINT_ID + ' h2{margin:0 0 12px;font-size:20px;color:#ffb020;letter-spacing:.5px;' +
     'font-family:Orbitron,"Microsoft YaHei",sans-serif;}' +
     '#' + MAINT_ID + ' p{margin:0 0 10px;font-size:13px;line-height:1.9;color:#e6dcc4;}' +
+    /* 维护弹窗第一行：一句诗 */
+    '#' + MAINT_ID + ' .mt-quote{font-size:13px;color:#c9b98a;letter-spacing:1.5px;margin:0 0 14px;}' +
+    /* 进度百分比：等宽数字，避免跳动 */
+    '#' + MAINT_ID + ' .mt-pct{color:#ffb020;margin:0;}' +
+    '#' + MAINT_ID + ' .mt-pct b{font-family:ui-monospace,Menlo,Consolas,monospace;' +
+    'font-variant-numeric:tabular-nums;font-weight:600;}' +
     '#' + MAINT_ID + ' .mt-cd{color:#ffb020;}' +
     '#' + MAINT_ID + ' .mt-cd span{font-family:ui-monospace,Menlo,Consolas,monospace;' +
     'font-variant-numeric:tabular-nums;font-weight:600;}' +
@@ -242,6 +248,26 @@
     }
   }
 
+  /**
+   * 维护进度（0–100 的整数）。
+   * 「按维护时间算」：刚开始 = 0%，到点 = 100%。
+   */
+  function maintPercent(st) {
+    if (!st || !st.start || !st.end || st.end <= st.start) return 0;
+    var now = Date.now();
+    if (now <= st.start) return 0;
+    if (now >= st.end) return 100;
+    return Math.floor(((now - st.start) / (st.end - st.start)) * 100);
+  }
+
+  /** 刷新弹窗里的「已完成 xx%」（顺带刷新剩余时间，若界面上有） */
+  function updateMaintMeters(st) {
+    var p = document.getElementById('dsh-mt-pct');
+    if (p) p.textContent = maintPercent(st) + '%';
+    var l = document.getElementById('dsh-mt-left');
+    if (l && st && st.end) l.textContent = fmtLeft(Math.max(0, st.end - Date.now()));
+  }
+
   /** 刷新弹窗里的「预计剩余」 */
   function updateMaintLeft(endAt) {
     var el = document.getElementById('dsh-mt-left');
@@ -252,17 +278,16 @@
   function showMaintenance(st, isAdmin) {
     var endAt = st && st.end ? st.end : null;
     if (document.getElementById(MAINT_ID)) {
-      updateMaintLeft(endAt);
+      updateMaintMeters(st);
       return;
     }
     var mask = document.createElement('div');
     mask.id = MAINT_ID;
     mask.innerHTML =
       '<div class="mt-card">' +
+      '<p class="mt-quote">海内存知己，天涯若比邻</p>' +
       '<h2>正在维护服务</h2>' +
-      '<p>站点正在维护中，请稍后再来。</p>' +
-      (endAt ? '<p class="mt-cd">预计剩余 <span id="dsh-mt-left">—</span></p>' : '') +
-      (st && st.start && endAt ? '<p class="mt-range">维护时段：' + fmtClock(st.start) + ' → ' + fmtClock(endAt) + '</p>' : '') +
+      '<p class="mt-pct">已完成 <b id="dsh-mt-pct">' + maintPercent(st) + '%</b></p>' +
       '<div class="mt-acts"><button type="button" id="dsh-mt-admin">管理员关闭</button></div>' +
       '<div class="mt-note" id="dsh-mt-note">管理员可进入控制台关闭维护</div>' +
       (st && st.keySet
@@ -324,7 +349,7 @@
       if (kEl) kEl.onkeydown = function (e) { if (e.key === 'Enter') go(); };
     }
 
-    updateMaintLeft(endAt);
+    updateMaintMeters(st);
     if (maintTickTimer) clearInterval(maintTickTimer);
     maintTickTimer = setInterval(function () {
       if (!endAt || Date.now() >= endAt) {
@@ -332,7 +357,7 @@
         load();
         return;
       }
-      updateMaintLeft(endAt);
+      updateMaintMeters(st);
     }, 1000);
   }
 
@@ -386,6 +411,7 @@
     ['/aboutme', 'aboutme'],
     ['/time', 'time'],
     ['/guide', 'guide'],
+    ['/notice', 'notice'],
     ['/sponsorship', 'sponsorship'],
     ['/file', 'file'],
     ['/login', 'login'],

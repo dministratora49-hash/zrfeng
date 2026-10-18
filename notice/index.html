@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>通知板块</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    min-height: 100vh;
+    background: #050807;
+    background-image:
+      radial-gradient(circle at 15% 10%, rgba(0, 255, 140, 0.07) 0%, transparent 45%),
+      radial-gradient(circle at 85% 85%, rgba(0, 255, 140, 0.05) 0%, transparent 45%);
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    color: #e8f5ee;
+    padding: 80px 16px 48px;
+  }
+
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,255,140,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,255,140,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .wrap { position: relative; z-index: 1; max-width: 720px; margin: 0 auto; }
+
+  h1 {
+    font-size: 30px;
+    text-align: center;
+    background: linear-gradient(90deg, #ffffff, #00ff8c);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 10px;
+  }
+
+  p.sub { text-align: center; color: #7fa893; font-size: 13px; letter-spacing: 1px; margin-bottom: 28px; }
+
+  .card {
+    background: rgba(10, 18, 14, 0.85);
+    border: 1px solid rgba(0, 255, 140, 0.22);
+    border-radius: 16px;
+    padding: 20px 18px;
+    margin-bottom: 20px;
+    box-shadow: 0 0 18px rgba(0, 255, 140, 0.06);
+  }
+
+  .card h2 {
+    font-size: 15px;
+    color: #00ff8c;
+    letter-spacing: 1.5px;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card h2 .bar { width: 3px; height: 15px; background: #00ff8c; border-radius: 2px; display: inline-block; }
+
+  .hint { font-size: 12px; color: #6d8a7b; line-height: 1.8; margin-bottom: 12px; }
+
+  .empty { font-size: 13px; color: #5d7a6c; text-align: center; padding: 18px 0; }
+
+  /* ---------- 公告 ---------- */
+  .nt {
+    border-bottom: 1px dashed rgba(0, 255, 140, 0.14);
+    padding: 14px 0;
+  }
+  .nt:last-child { border-bottom: none; padding-bottom: 0; }
+  .nt:first-child { padding-top: 0; }
+  .nt-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 7px; }
+  .nt-title { font-size: 15px; font-weight: 700; color: #e8f5ee; }
+  .nt-time { font-size: 11px; color: #5d7a6c; font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .nt-body { font-size: 13px; line-height: 1.9; color: #b9d2c5; white-space: pre-wrap; word-break: break-word; }
+  .tag {
+    font-size: 10px; padding: 2px 8px; border-radius: 20px; letter-spacing: .5px;
+    border: 1px solid rgba(0, 255, 140, 0.35); color: #00ff8c; background: rgba(0, 255, 140, 0.08);
+  }
+  .tag.maint { border-color: rgba(255, 176, 32, 0.45); color: #ffb020; background: rgba(255, 176, 32, 0.1); }
+
+  /* ---------- 我的消息 ---------- */
+  .who { font-size: 12px; color: #7fa893; margin-bottom: 12px; line-height: 1.9; }
+  .who b { color: #00ff8c; font-weight: 700; }
+
+  .msg {
+    display: flex; gap: 10px; padding: 11px 12px; border-radius: 10px;
+    background: rgba(0, 255, 140, 0.05);
+    border: 1px solid rgba(0, 255, 140, 0.14);
+    margin-bottom: 9px;
+  }
+  .msg:last-child { margin-bottom: 0; }
+  .msg .dot { width: 7px; height: 7px; border-radius: 50%; background: #00ff8c; flex: none; margin-top: 6px; box-shadow: 0 0 7px #00ff8c; }
+  .msg .tx { font-size: 13px; line-height: 1.8; color: #cfe8dc; word-break: break-word; }
+  .msg .tm { font-size: 11px; color: #5d7a6c; margin-top: 4px; font-family: ui-monospace, Menlo, Consolas, monospace; }
+
+  /* ---------- 工单 ---------- */
+  .tk {
+    border: 1px solid rgba(0, 255, 140, 0.16);
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 14px;
+    background: rgba(6, 14, 10, 0.6);
+  }
+  .tk:last-child { margin-bottom: 0; }
+  .tk-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+  .tk-title { font-size: 14px; font-weight: 700; }
+  .tk-meta { font-size: 11px; color: #5d7a6c; font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .tk-body { font-size: 12.5px; line-height: 1.85; color: #a9c3b6; white-space: pre-wrap; word-break: break-word; margin-bottom: 10px; }
+
+  .rp { margin: 8px 0 0; padding-left: 10px; border-left: 2px solid rgba(0, 255, 140, 0.18); }
+  .rp-item { padding: 7px 0; }
+  .rp-who { font-size: 11px; margin-bottom: 3px; }
+  .rp-who.admin { color: #00ff8c; }
+  .rp-who.user { color: #7fa893; }
+  .rp-text { font-size: 12.5px; line-height: 1.8; color: #cfe8dc; white-space: pre-wrap; word-break: break-word; }
+  .rp-time { font-size: 10.5px; color: #4a6a58; margin-top: 3px; font-family: ui-monospace, Menlo, Consolas, monospace; }
+
+  .tk-form { display: flex; gap: 8px; margin-top: 12px; }
+  .tk-form input {
+    flex: 1; min-width: 0; padding: 9px 11px; border-radius: 9px; font-size: 13px;
+    border: 1px solid rgba(0, 255, 140, 0.25); background: rgba(0, 0, 0, 0.35);
+    color: #e8f5ee; font-family: inherit;
+  }
+  .tk-form input:focus { outline: none; border-color: rgba(0, 255, 140, 0.6); }
+  .tk-form button {
+    padding: 9px 16px; border-radius: 9px; font-size: 13px; cursor: pointer; font-family: inherit;
+    border: 1px solid rgba(0, 255, 140, 0.45); background: rgba(0, 255, 140, 0.12); color: #00ff8c;
+  }
+  .tk-form button:active { background: rgba(0, 255, 140, 0.25); }
+  .tk-form button:disabled { opacity: .5; }
+
+  .fld { margin-bottom: 10px; }
+  .fld label { display: block; font-size: 12px; color: #7fa893; margin-bottom: 6px; }
+  .fld input, .fld textarea {
+    width: 100%; padding: 10px 12px; border-radius: 10px; font-size: 13px;
+    border: 1px solid rgba(0, 255, 140, 0.25); background: rgba(0, 0, 0, 0.35);
+    color: #e8f5ee; font-family: inherit; resize: vertical;
+  }
+  .fld textarea { min-height: 90px; line-height: 1.7; }
+  .fld input:focus, .fld textarea:focus { outline: none; border-color: rgba(0, 255, 140, 0.6); }
+
+  .btn {
+    display: inline-block; padding: 10px 18px; border-radius: 10px; font-size: 13px; cursor: pointer;
+    border: 1px solid rgba(0, 255, 140, 0.45); background: rgba(0, 255, 140, 0.12);
+    color: #00ff8c; font-family: inherit;
+  }
+  .btn:active { background: rgba(0, 255, 140, 0.25); }
+  .btn:disabled { opacity: .5; }
+  .btn.ghost { border-color: rgba(255, 107, 107, 0.4); color: #ff8a8a; background: rgba(255, 107, 107, 0.08); }
+  .btn.small { padding: 5px 12px; font-size: 12px; }
+
+  .msg-line { font-size: 12px; min-height: 17px; margin-top: 8px; }
+  .msg-line.ok { color: #00ff8c; }
+  .msg-line.err { color: #ff7b7b; }
+
+  .links { text-align: center; margin-top: 26px; font-size: 12px; }
+  .links a { color: #7fa893; text-decoration: none; margin: 0 10px; }
+  .links a:hover { color: #00ff8c; }
+
+  footer { text-align: center; color: #3d5a4b; font-size: 11px; margin-top: 24px; letter-spacing: 1px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>通知板块</h1>
+  <p class="sub">站点公告 · 维护消息 · 我的消息</p>
+
+  <div class="card">
+    <h2><span class="bar"></span>站点公告</h2>
+    <div id="pubList"><div class="empty">正在加载…</div></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="bar"></span>我的消息</h2>
+    <div class="who" id="whoLine">正在确认身份…</div>
+    <div id="msgList"></div>
+    <div id="tkList"></div>
+  </div>
+
+  <div class="card" id="adminCard" style="display:none">
+    <h2><span class="bar"></span>发布公告（管理员）</h2>
+    <div class="fld">
+      <label for="adTitle">标题</label>
+      <input id="adTitle" type="text" maxlength="80" placeholder="例如：站点已恢复访问">
+    </div>
+    <div class="fld">
+      <label for="adBody">正文</label>
+      <textarea id="adBody" maxlength="2000" placeholder="写点想告诉大家的事…"></textarea>
+    </div>
+    <button class="btn" id="adPost" type="button">发布公告</button>
+    <button class="btn ghost small" id="adClear" type="button" style="margin-left:8px">清空全部公告</button>
+    <div class="msg-line" id="adMsg"></div>
+  </div>
+
+  <div class="links">
+    <a href="/">主站</a>
+    <a href="/guide/">导航页</a>
+    <a href="/contact/">联系我们</a>
+  </div>
+  <footer>zrfeng.top · 通知板块</footer>
+</div>
+<script src="/status.js" defer></script>
+<script>
+(function () {
+  'use strict';
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+  function p2(n) { return n < 10 ? '0' + n : '' + n; }
+  function fmt(ts) {
+    if (!ts) return '';
+    var d = new Date(Number(ts));
+    return (d.getMonth() + 1) + '-' + d.getDate() + ' ' + p2(d.getHours()) + ':' + p2(d.getMinutes());
+  }
+  function el(id) { return document.getElementById(id); }
+
+  /* ---------------- 站点公告 ---------------- */
+  function renderNotices(list) {
+    var box = el('pubList');
+    if (!box) return;
+    if (!list || !list.length) {
+      box.innerHTML = '<div class="empty">还没有公告</div>';
+      return;
+    }
+    var h = '';
+    for (var i = 0; i < list.length; i++) {
+      var n = list[i];
+      var tag = n.kind === 'maint' ? '<span class="tag maint">维护</span>' : '<span class="tag">公告</span>';
+      h += '<div class="nt">' +
+        '<div class="nt-head">' + tag +
+        '<span class="nt-title">' + esc(n.title) + '</span>' +
+        '<span class="nt-time">' + esc(fmt(n.at)) + '</span>' +
+        '</div>' +
+        '<div class="nt-body">' + esc(n.body) + '</div>' +
+        '</div>';
+    }
+    box.innerHTML = h;
+  }
+
+  function loadNotices() {
+    return fetch('/api/notices', { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) { renderNotices((j && j.notices) || []); })
+      .catch(function () {
+        var box = el('pubList');
+        if (box) box.innerHTML = '<div class="empty">公告加载失败，请刷新重试</div>';
+      });
+  }
+
+  /* ---------------- 我的工单 + 回复 ---------------- */
+  function renderTickets(tickets) {
+    var box = el('tkList');
+    if (!box) return;
+    if (!tickets || !tickets.length) {
+      box.innerHTML = '';
+      return;
+    }
+    var h = '<div class="hint" style="margin-top:18px">我提交过的工单（可以直接在这里继续回复）</div>';
+    for (var i = 0; i < tickets.length; i++) {
+      var t = tickets[i];
+      h += '<div class="tk" data-tk="' + esc(t.id) + '">' +
+        '<div class="tk-head">' +
+        '<span class="tk-title">' + esc(t.title) + '</span>' +
+        (t.anonymous ? '<span class="tag">已匿名</span>' : '') +
+        '<span class="tk-meta">' + esc(fmt(t.at)) + '</span>' +
+        '</div>' +
+        '<div class="tk-body">' + esc(t.body) + '</div>';
+
+      var reps = t.replies || [];
+      if (reps.length) {
+        h += '<div class="rp">';
+        for (var k = 0; k < reps.length; k++) {
+          var r = reps[k];
+          var isAdmin = r.by === 'admin';
+          h += '<div class="rp-item">' +
+            '<div class="rp-who ' + (isAdmin ? 'admin' : 'user') + '">' + (isAdmin ? '管理员' : '我') + '</div>' +
+            '<div class="rp-text">' + esc(r.text) + '</div>' +
+            '<div class="rp-time">' + esc(fmt(r.at)) + '</div>' +
+            '</div>';
+        }
+        h += '</div>';
+      } else {
+        h += '<div class="hint">还没有回复，可以补充说明。</div>';
+      }
+
+      h += '<div class="tk-form">' +
+        '<input type="text" maxlength="1000" placeholder="继续回复这条工单…" data-rp-input="' + esc(t.id) + '">' +
+        '<button type="button" data-rp-send="' + esc(t.id) + '">发送</button>' +
+        '</div></div>';
+    }
+    box.innerHTML = h;
+
+    // 绑定发送
+    var btns = box.querySelectorAll('[data-rp-send]');
+    for (var b = 0; b < btns.length; b++) {
+      btns[b].onclick = function () { sendReply(this.getAttribute('data-rp-send'), this); };
+    }
+    var inputs = box.querySelectorAll('[data-rp-input]');
+    for (var q = 0; q < inputs.length; q++) {
+      inputs[q].onkeydown = function (e) {
+        if (e.key === 'Enter') {
+          var id = this.getAttribute('data-rp-input');
+          var btn = box.querySelector('[data-rp-send="' + id + '"]');
+          if (btn) sendReply(id, btn);
+        }
+      };
+    }
+  }
+
+  function sendReply(id, btn) {
+    var input = document.querySelector('[data-rp-input="' + id + '"]');
+    var text = input ? String(input.value || '').trim() : '';
+    if (!text) { if (input) input.focus(); return; }
+    if (btn) btn.disabled = true;
+    fetch('/api/ticket/reply', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: id, text: text }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (j && j.ok) {
+          if (input) input.value = '';
+          loadMine();
+        } else {
+          alert((j && j.message) || '回复失败');
+        }
+      })
+      .catch(function () { alert('网络错误，请稍后再试'); })
+      .then(function () { if (btn) btn.disabled = false; });
+  }
+
+  /* ---------------- 我的消息 + 身份 ---------------- */
+  function renderMine(j) {
+    var me = (j && j.me) || {};
+    var who = el('whoLine');
+    if (who) {
+      if (me.loggedIn) {
+        who.innerHTML = '已登录：<b>' + esc(me.username || '') + '</b>　—— 工单回复会放到这里。';
+      } else if (me.byDevice) {
+        who.innerHTML = '未登录（按这台设备记住）。登录后消息会跟着账户走，换设备或清缓存就找不到了。';
+      } else {
+        who.innerHTML = '还没有身份信息，先去 <a href="/login/" style="color:#00ff8c">登录</a> 吧。';
+      }
+    }
+
+    var list = (j && j.notifications) || [];
+    var box = el('msgList');
+    if (box) {
+      if (!list.length) {
+        box.innerHTML = '<div class="empty">暂时没有新消息</div>';
+      } else {
+        var h = '';
+        for (var i = 0; i < list.length; i++) {
+          var n = list[i];
+          h += '<div class="msg"><span class="dot"></span><div>' +
+            '<div class="tx">' + esc(n.text) + '</div>' +
+            '<div class="tm">' + esc(fmt(n.at)) + '</div>' +
+            '</div></div>';
+        }
+        box.innerHTML = h;
+      }
+    }
+
+    var ac = el('adminCard');
+    if (ac) ac.style.display = me.isAdmin ? 'block' : 'none';
+
+    renderTickets((j && j.tickets) || []);
+  }
+
+  function loadMine() {
+    return fetch('/api/my/notifications', { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(renderMine)
+      .catch(function () {
+        var box = el('msgList');
+        if (box) box.innerHTML = '<div class="empty">加载失败，请刷新重试</div>';
+      });
+  }
+
+  /* ---------------- 管理员发公告 ---------------- */
+  function bindAdmin() {
+    var btn = el('adPost');
+    if (btn) {
+      btn.onclick = function () {
+        var t = el('adTitle'), b = el('adBody'), m = el('adMsg');
+        var title = t ? t.value.trim() : '';
+        var body = b ? b.value.trim() : '';
+        if (!title || !body) {
+          if (m) { m.textContent = '标题和正文都要填'; m.className = 'msg-line err'; }
+          return;
+        }
+        btn.disabled = true;
+        if (m) { m.textContent = '正在发布…'; m.className = 'msg-line'; }
+        fetch('/api/admin/notices', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ title: title, body: body }),
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (j) {
+            if (j && j.ok) {
+              if (m) { m.textContent = '发布成功'; m.className = 'msg-line ok'; }
+              if (t) t.value = '';
+              if (b) b.value = '';
+              loadNotices();
+            } else if (m) {
+              m.textContent = (j && j.message) || '发布失败';
+              m.className = 'msg-line err';
+            }
+          })
+          .catch(function () { if (m) { m.textContent = '网络错误'; m.className = 'msg-line err'; } })
+          .then(function () { btn.disabled = false; });
+      };
+    }
+
+    var clr = el('adClear');
+    if (clr) {
+      clr.onclick = function () {
+        if (!confirm('确定要清空全部公告吗？')) return;
+        var m = el('adMsg');
+        clr.disabled = true;
+        fetch('/api/admin/notices/delete', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ all: true }),
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (j) {
+            if (m) { m.textContent = (j && j.message) || ''; m.className = 'msg-line ok'; }
+            loadNotices();
+          })
+          .catch(function () { if (m) { m.textContent = '网络错误'; m.className = 'msg-line err'; } })
+          .then(function () { clr.disabled = false; });
+      };
+    }
+  }
+
+  function boot() {
+    bindAdmin();
+    loadNotices();
+    loadMine();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+})();
+</script>
+</body>
+</html>
