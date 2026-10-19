@@ -1614,10 +1614,12 @@ async function listNotices(env, limit = NOTICE_MAX_KEEP) {
 /**
  * 发一条公开公告。
  * kind: 'manual'（管理员手发）| 'maint'（维护自动发）
+ * 传了 rec.id 就用这个编号（用来做「同一条消息只发一次」的幂等覆盖，
+ * 比如维护到点自动结束时，多个并发请求都会来发一次，但写的键是同一个）。
  */
 async function postNotice(env, rec) {
   const at = Number(rec.at) || Date.now();
-  const id = String(at).padStart(15, '0') + '-' + randomHex(3);
+  const id = rec.id ? String(rec.id) : String(at).padStart(15, '0') + '-' + randomHex(3);
   const out = {
     at,
     title: capText(String(rec.title || ''), NOTICE_TITLE_MAX),
@@ -2280,6 +2282,20 @@ async function getMaintenance(env) {
       await env.USERS.delete(MAINT_KEY);
     } catch {
       /* 忽略 */
+    }
+    // 到点自动结束也要往通知板块说一声（以前只有「手动清除」才会发）。
+    // 编号由结束时间决定，所以并发请求同时来发也只会留下一条。
+    try {
+      await postNotice(env, {
+        id: String(m.end).padStart(15, '0') + '-end000',
+        at: Date.now(),
+        kind: 'maint',
+        title: '维护已结束',
+        body: '维护时段已到，站点已恢复正常，感谢等待。',
+        setBy: m.setBy || '',
+      });
+    } catch {
+      /* 公告发不出去不影响维护状态 */
     }
     return null;
   }
