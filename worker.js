@@ -118,6 +118,18 @@ const NOTIF_MAX_KEEP = 100;
 const REPLY_MAX = 1000;
 const REPLY_MIN = 1;
 
+/* ========================== 账户警告 ========================== */
+
+/** 警告在 KV 里的键前缀：warn:<账户>:<15 位时间戳>-<随机> */
+const WARN_PREFIX = 'warn:';
+/** 某账户「已看到警告」的时间戳：warnseen:<账户> */
+const WARN_SEEN_PREFIX = 'warnseen:';
+/** 每个账户最多保留多少条警告 */
+const WARN_MAX_KEEP = 20;
+/** 警告内容的长度限制（内容由管理员自己填） */
+const WARN_TEXT_MAX = 500;
+const WARN_TEXT_MIN = 1;
+
 /**
  * 管理员与试用账户的账户名 / 密码全部来自 Cloudflare 密钥，
  * 不写死在代码里 —— 否则会随公开仓库一起泄露。
@@ -515,8 +527,9 @@ function accountStatus(user) {
     return {
       state: 'banned',
       dot: 'red',
-      // 文案保持简洁；具体封禁时段由前端按**本地时间**显示（见 status.js）
-      label: 'You are banned（账户已被封禁）',
+      // 状态栏左上角显示「账户异常」，剩余封禁时间由前端逐秒倒数
+      // （永久封禁显示 -1天，和「试用期仅剩-1天」一个写法）
+      label: '账户异常',
       activated: false,
       days: null,
       remainingMs: null,
@@ -1940,6 +1953,133 @@ async function handleAdminNoticeDelete(env, request) {
   return json({ ok: true, message: '已删除该公告', deleted: 1 });
 }
 
+/* ========================== 账户警告 ========================== */
+
+/** 取出某个账户收到的警告，新的在前 */
+async function listWarnings(env, account, limit = WARN_MAX_KEEP) {
+  const name = String(account || '').toLowerCase();
+  if (!name) return [];
+  const pre = WARN_PREFIX + name + ':';
+  let keys = [];
+  try {
+    const r = await env.USERS.list({ prefix: pre, limit });
+    keys = (r && r.keys) || [];
+  } catch {
+    return [];
+  }
+  keys.sort((a, b) => (a.name < b.name ? 1 : a.name > b.name ? -1 : 0));
+  const out = [];
+  for (const k of keys) {
+    let w = null;
+    try {
+      w = await env.USERS.get(k.name, 'json');
+    } catch {
+      w = null;
+    }
+    if (!w || typeof w !== 'object') continue;
+    out.push(Object.assign({ id: k.name.slice(pre.length) }, w));
+  }
+  return out;
+}
+
+/** 给某个账户记一条警告（内容由管理员手填） */
+async function pushWarning(env, account, rec) {
+  const name = String(account || '').toLowerCase();
+  if (!name) return null;
+  const at = Number(rec.at) || Date.now();
+  const id = String(at).padStart(15, '0') + '-' + randomHex(3);
+  const out = { at, text: capText(String(rec.text || ''), WARN_TEXT_MAX) };
+  if (rec.by) out.by = String(rec.by);
+  await env.USERS.put(WARN_PREFIX + name + ':' + id, JSON.stringify(out));
+
+  const all = await listWarnings(env, name, WARN_MAX_KEEP + 10);
+  for (const old of all.slice(WARN_MAX_KEEP)) {
+    try {
+      await env.USERS.delete(WARN_PREFIX + name + ':' + old.id);
+    } catch {
+      /* 忽略 */
+    }
+  }
+  return id;
+}
+
+/** 某个账户的警告概况：一共几条、有几条还没看到 */
+async function warningState(env, account) {
+  const all = await listWarnings(env, account);
+  let seen = 0;
+  try {
+    seen = Number(await env.USERS.get(WARN_SEEN_PREFIX + String(account || '').toLowerCase())) || 0;
+  } catch {
+    seen = 0;
+  }
+  const unread = all.filter((w) => Number(w.at) > seen);
+  const last = all[0] || null;
+  return {
+    count: all.length,
+    unread: unread.length,
+    seenAt: seen || null,
+    last: last
+      ? { at: Number(last.at) || 0, text: String(last.text || ''), by: String(last.by || '') }
+      : null,
+  };
+}
+
+/** 管理员给某个账户发警告（内容管理员自己填） */
+async function handleAdminWarn(env, request) {
+  const guard = await requireAdmin(env, request);
+  if (guard.error) return guard.error;
+
+  const body = await readJson(request);
+  const username = String(body.username || '').trim();
+  const text = capText(String(body.text || body.message || '').trim(), WARN_TEXT_MAX + 1);
+
+  if (!username) return json({ ok: false, message: '缺少用户名' }, 400);
+  if (Array.from(text).length < WARN_TEXT_MIN) {
+    return json({ ok: false, message: '请填写警告内容' }, 400);
+  }
+  if (Array.from(text).length > WARN_TEXT_MAX) {
+    return json({ ok: false, message: '警告内容最多 ' + WARN_TEXT_MAX + ' 个字' }, 400);
+  }
+
+  const user = await getUser(env, username);
+  if (!user) return json({ ok: false, message: '找不到这个账户' }, 404);
+  const perm = canManageAccount(guard.user, user);
+  if (!perm.ok) return perm.res;
+
+  const now = Date.now();
+  await pushWarning(env, user.username, { at: now, text, by: guard.session.username });
+
+  // 同时放进「通知板块 → 我的消息」，弹窗关掉以后还能回头看到
+  try {
+    await pushNotification(env, notifOwner(user.username, null), {
+      at: now,
+      kind: 'warn',
+      title: '账户警告',
+      text,
+    });
+  } catch {
+    /* 通知发不出去不影响警告本身 */
+  }
+
+  return json({ ok: true, message: '已警告账户 ' + user.username, username: user.username, warnedAt: now });
+}
+
+/** 当前用户确认「我知道了」，之后不再弹这个警告 */
+async function handleWarningsSeen(env, request) {
+  const session = await getSession(env, request);
+  if (!session) return json({ ok: false, message: '请先登录', needLogin: true }, 401);
+  const user = await sessionUser(env, session);
+  const name = String((user && user.username) || session.username || '').toLowerCase();
+  if (!name) return json({ ok: false, message: '请先登录', needLogin: true }, 401);
+  const now = Date.now();
+  try {
+    await env.USERS.put(WARN_SEEN_PREFIX + name, String(now));
+  } catch {
+    return json({ ok: false, message: '没能记录，请稍后再试' }, 500);
+  }
+  return json({ ok: true, message: '已确认', seenAt: now });
+}
+
 /* ========================== 管理员控制台 ========================== */
 
 /** 要求当前会话是管理员，否则返回 null */
@@ -1973,11 +2113,32 @@ async function handleAdminUsers(env, request) {
   if (guard.error) return guard.error;
 
   const list = await env.USERS.list({ prefix: 'user:', limit: 1000 });
+
+  // 警告次数：一次 list 把所有警告的键拿出来按账户归组，
+  // 比「每个用户读一次」省很多（KV 免费额度有限）。
+  const warnStats = {};
+  try {
+    const wr = await env.USERS.list({ prefix: WARN_PREFIX, limit: 1000 });
+    for (const k of (wr && wr.keys) || []) {
+      const rest = k.name.slice(WARN_PREFIX.length);
+      const i = rest.lastIndexOf(':');
+      if (i < 0) continue;
+      const acc = rest.slice(0, i);
+      const at = Number(rest.slice(i + 1, i + 16)) || 0;
+      const g = warnStats[acc] || (warnStats[acc] = { count: 0, lastAt: 0 });
+      g.count++;
+      if (at > g.lastAt) g.lastAt = at;
+    }
+  } catch {
+    /* 数不出来就当没有 */
+  }
+
   const users = [];
   for (const k of list.keys) {
     const u = await env.USERS.get(k.name, 'json');
     if (!u) continue;
     const st = accountStatus(u);
+    const ws = warnStats[String(u.username || '').toLowerCase()] || { count: 0, lastAt: 0 };
     users.push({
       username: u.username,
       email: u.email || '',
@@ -1995,6 +2156,9 @@ async function handleAdminUsers(env, request) {
       banPermanent: !!u.banned && !u.banUntil,
       banRemainingMs: banState(u, Date.now()).remainingMs || null,
       bannedAt: u.bannedAt || null,
+      // 警告次数与最后一次警告时间（控制台每行显示）
+      warnCount: ws.count,
+      lastWarnAt: ws.lastAt || null,
     });
   }
   // 管理员在前，其余按创建时间倒序
@@ -3390,6 +3554,8 @@ export default {
             username: u ? u.username : s ? s.username : null,
             isAdmin: !!(u && isAdminRole(roleOf(u))),
             account: accountStatus(u),
+            // 账户警告：只有登录用户才有；没看过的警告前端会弹一次
+            warning: u ? await warningState(env, u.username) : null,
             // 维护时段：所有页面据此决定是否弹出「正在维护服务」。
             // 持有工作人员通行证的人：维护照实下发（导航页的 Offline 灯要靠它），
             // 但加 unlocked: true —— 弹窗看到它就不弹。
@@ -3489,6 +3655,13 @@ export default {
         }
         if (path === '/api/admin/role' && method === 'POST') {
           return await handleAdminRole(env, request);
+        }
+        // 账户警告：管理员手填内容发给某个账户；被警告的人确认「我知道了」后不再弹
+        if (path === '/api/admin/warn' && method === 'POST') {
+          return await handleAdminWarn(env, request);
+        }
+        if (path === '/api/warnings/seen' && method === 'POST') {
+          return await handleWarningsSeen(env, request);
         }
 
         return json({ ok: false, message: '接口不存在' }, 404);

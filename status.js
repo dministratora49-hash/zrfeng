@@ -20,7 +20,18 @@
   var MASK_ID = 'dsh-block-mask';
   var MAINT_ID = 'dsh-maint-mask';
   var BAN_ID = 'dsh-ban-mask';
+  var WARN_ID = 'dsh-warn-mask';
   var DAY = 86400000;
+
+  /** 把一段文字转义成可以安全放进 innerHTML 的形式 */
+  function escHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
 
   /** 每秒倒计时的定时器；重新渲染前必须先清掉，避免叠加 */
   var countdownTimer = null;
@@ -132,7 +143,29 @@
     'border-radius:9px;font-size:13px;cursor:pointer;text-decoration:none;text-align:center;' +
     'font-family:inherit;border:1px solid rgba(255,60,60,.5);background:rgba(255,60,60,.1);' +
     'color:#ff8a8a;}' +
-    '#' + BAN_ID + ' .bn-acts a:active,#' + BAN_ID + ' .bn-acts button:active{opacity:.7;}';
+    '#' + BAN_ID + ' .bn-acts a:active,#' + BAN_ID + ' .bn-acts button:active{opacity:.7;}' +
+    /* 账户警告弹窗：琥珀色，和「维护」区分开，但同样是「提醒」而不是「拦截」 */
+    '#' + WARN_ID + '{position:fixed;inset:0;z-index:100003;background:rgba(0,0,0,.78);' +
+    'display:flex;align-items:center;justify-content:center;padding:20px;' +
+    'font-family:"Microsoft YaHei","PingFang SC",sans-serif;}' +
+    '#' + WARN_ID + ' .wn-card{width:100%;max-width:380px;padding:24px 22px;text-align:left;' +
+    'background:rgba(20,15,5,.99);border:1px solid rgba(255,190,60,.6);border-radius:16px;' +
+    'box-shadow:0 0 40px rgba(255,190,60,.2);}' +
+    '#' + WARN_ID + ' .wn-badge{display:inline-block;padding:3px 10px;border-radius:20px;' +
+    'font-size:11px;letter-spacing:1px;background:rgba(255,190,60,.16);color:#ffbe3c;' +
+    'border:1px solid rgba(255,190,60,.45);margin-bottom:12px;}' +
+    '#' + WARN_ID + ' h2{margin:0 0 14px;font-size:18px;color:#ffbe3c;letter-spacing:.5px;}' +
+    '#' + WARN_ID + ' .wn-text{font-size:13.5px;line-height:1.9;color:#efe4cc;' +
+    'background:rgba(0,0,0,.35);border:1px solid rgba(255,190,60,.2);border-radius:10px;' +
+    'padding:12px 14px;white-space:pre-wrap;word-break:break-word;max-height:40vh;overflow:auto;}' +
+    '#' + WARN_ID + ' .wn-by{font-size:11px;color:#8a7a5c;margin:10px 0 0;}' +
+    '#' + WARN_ID + ' .wn-note{font-size:11px;color:#8a7a5c;margin:10px 0 0;line-height:1.7;}' +
+    '#' + WARN_ID + ' .wn-acts{display:flex;gap:10px;margin-top:16px;}' +
+    '#' + WARN_ID + ' .wn-acts a,#' + WARN_ID + ' .wn-acts button{flex:1;padding:10px 0;' +
+    'border-radius:9px;font-size:13px;cursor:pointer;text-decoration:none;text-align:center;' +
+    'font-family:inherit;border:1px solid rgba(255,190,60,.5);background:rgba(255,190,60,.12);' +
+    'color:#ffbe3c;}' +
+    '#' + WARN_ID + ' .wn-acts a:active,#' + WARN_ID + ' .wn-acts button:active{opacity:.7;}';
 
   function injectCss() {
     if (document.getElementById('dsh-status-css')) return;
@@ -200,18 +233,25 @@
     if (document.getElementById(BAN_ID)) return;
     // 用**本地时间**显示封禁时段（服务端只给时间戳），支持「期限封禁」与「永久封禁」
     var meta = '';
+    if (acc && (acc.banFrom || acc.banUntil)) {
+      // 完整的起止时间：开始 →（结束 或 永久）
+      meta += '<p class="bn-meta">封禁时段：' + (acc.banFrom ? fmtClock(acc.banFrom) : '—') +
+        ' → ' + (acc.banUntil ? fmtClock(acc.banUntil) : '永久') + '</p>';
+    }
     if (acc && acc.banPermanent) {
-      meta = '<p class="bn-meta">永久封禁</p>';
+      // 永久封禁：和「试用期仅剩-1天」一样，用 -1天 表示永不到期
+      meta += '<p class="bn-meta">剩余封禁时间 <b>-1天</b>（永久封禁，不会自动解封）</p>';
     } else if (acc && acc.banUntil) {
-      meta = '<p class="bn-meta">封禁至 ' + fmtClock(acc.banUntil) + '（到期自动解封）</p>';
+      meta += '<p class="bn-meta">剩余封禁时间 <span id="dsh-ban-left">' +
+        fmtLeft(Math.max(0, Number(acc.banRemainingMs) || 0)) + '</span>（到期自动解封）</p>';
     } else if (acc && acc.bannedAt) {
-      meta = '<p class="bn-meta">封禁时间：' + fmtClock(acc.bannedAt) + '</p>';
+      meta += '<p class="bn-meta">封禁时间：' + fmtClock(acc.bannedAt) + '</p>';
     }
     var mask = document.createElement('div');
     mask.id = BAN_ID;
     mask.innerHTML =
       '<div class="bn-card">' +
-      '<h2>You are banned</h2>' +
+      '<h2>账户异常</h2>' +
       '<p>该账户已被管理员封禁，请联系管理员。</p>' +
       meta +
       '<div class="bn-acts">' +
@@ -225,6 +265,50 @@
       out.onclick = function () {
         fetch('/api/logout', { method: 'POST' }).then(function () {
           location.href = '/';
+        });
+      };
+    }
+  }
+
+  /* ==================== 账户警告弹窗 ==================== */
+
+  function hideWarn() {
+    var m = document.getElementById(WARN_ID);
+    if (m) m.remove();
+  }
+
+  /**
+   * 管理员发的警告。**警告内容是管理员手填的**，所以只走 textContent，
+   * 绝不拼进 innerHTML —— 否则谁都能在警告里塞一段脚本。
+   */
+  function showWarn(w) {
+    if (document.getElementById(WARN_ID)) return;
+    if (!w || !w.text) return;
+    var mask = document.createElement('div');
+    mask.id = WARN_ID;
+    mask.innerHTML =
+      '<div class="wn-card">' +
+      '<div class="wn-badge">账户警告</div>' +
+      '<h2>收到一条管理员警告</h2>' +
+      '<div class="wn-text" id="dsh-warn-text"></div>' +
+      (w.by ? '<p class="wn-by">来自管理员：' + escHtml(w.by) + '</p>' : '') +
+      '<p class="wn-note">确认后不再弹出；你可以在「通知板块 → 我的消息」里随时回顾。</p>' +
+      '<div class="wn-acts">' +
+      '<button type="button" id="dsh-warn-ok">我知道了</button>' +
+      '<a href="/notice/">去通知板块</a>' +
+      '</div>' +
+      '</div>';
+    document.body.appendChild(mask);
+
+    var t = document.getElementById('dsh-warn-text');
+    if (t) t.textContent = String(w.text || '');
+
+    var ok = document.getElementById('dsh-warn-ok');
+    if (ok) {
+      ok.onclick = function () {
+        hideWarn();
+        fetch('/api/warnings/seen', { method: 'POST' }).catch(function () {
+          /* 记不上就算了，下次还会弹，总比看不见强 */
         });
       };
     }
@@ -506,6 +590,7 @@
       hideBanned();
       hideBlocked();
       hideMaintenance();
+      hideWarn();
       stopCountdown();
       return;
     }
@@ -546,6 +631,24 @@
       cdEl = document.createElement('span');
       cdEl.className = 'sb-cd';
       cdEl.textContent = fmtLeft(acc.remainingMs);
+      left.appendChild(preEl);
+      left.appendChild(preShortEl);
+      left.appendChild(cdEl);
+    } else if (acc.state === 'banned') {
+      // 左上角「账户异常」+ 剩余封禁时间：
+      //   有期限 → 「账户异常，剩余封禁时间 3天 12:34:56」（逐秒递减）
+      //   永久   → 「账户异常，剩余封禁时间 -1天」（和「试用期仅剩-1天」一个写法）
+      preEl = document.createElement('span');
+      preEl.className = 'sb-pre';
+      preEl.textContent = '账户异常，剩余封禁时间 ';
+      preShortEl = document.createElement('span');
+      preShortEl.className = 'sb-pre-s';
+      preShortEl.textContent = '账户异常 ';
+      cdEl = document.createElement('span');
+      cdEl.className = 'sb-cd';
+      cdEl.textContent = acc.banPermanent
+        ? '-1天'
+        : fmtLeft(Math.max(0, Number(acc.banRemainingMs) || 0));
       left.appendChild(preEl);
       left.appendChild(preShortEl);
       left.appendChild(cdEl);
@@ -594,33 +697,56 @@
       hideBlocked();
     }
 
-    // 被封禁：弹出 You are banned
+    // 被封禁：弹出「账户异常」（含封禁起止时间与剩余时间）
     if (acc.state === 'banned') {
       showBanned(acc);
     } else {
       hideBanned();
     }
+
+    // 账户警告：管理员发的、还没看过的警告弹一次（内容由管理员手填）
+    var warning = (data && data.warning) || null;
+    if (warning && warning.unread > 0 && warning.last) {
+      showWarn(warning.last);
+    }
+
     // 维护时段：到点自动弹出 / 到点自动关闭（页面维护时只有勾选的页面会弹）
     applyMaintenance(data && data.maintenance, !!(data && data.isAdmin));
     // 导航页：被维护的页面显示 Offline，其余显示 Online（或它原本的文字）
     applyPageStatus(data && data.maintenance);
 
-    // 启动每秒倒计时
-    if (cdEl && acc.remainingMs > 0) {
-      var endAt = Date.now() + acc.remainingMs;
+    // 启动每秒倒计时（试用期 或 剩余封禁时间）
+    var isBanBar = acc.state === 'banned';
+    var tickMs = isBanBar
+      ? (acc.banPermanent ? 0 : Math.max(0, Number(acc.banRemainingMs) || 0))
+      : (typeof acc.remainingMs === 'number' ? acc.remainingMs : 0);
+    if (cdEl && tickMs > 0) {
+      var endAt = Date.now() + tickMs;
       countdownTimer = setInterval(function () {
         var leftMs = endAt - Date.now();
         if (leftMs <= 0) {
           stopCountdown();
           cdEl.textContent = '0天 00:00:00';
-          if (preEl) preEl.textContent = '未激活，试用期已到';
-          if (preShortEl) preShortEl.textContent = '已到期';
-          showBlocked();
+          if (isBanBar) {
+            // 到点自动解封：先关掉弹窗，再与服务端确认
+            if (preEl) preEl.textContent = '账户异常，已到解封时间 ';
+            if (preShortEl) preShortEl.textContent = '已解封 ';
+            hideBanned();
+          } else {
+            if (preEl) preEl.textContent = '未激活，试用期已到';
+            if (preShortEl) preShortEl.textContent = '已到期';
+            showBlocked();
+          }
           // 与服务端确认一次（客户端时钟可能偏差），3 秒后同步
           setTimeout(load, 3000);
           return;
         }
         cdEl.textContent = fmtLeft(leftMs);
+        // 封禁弹窗里那个「剩余封禁时间」也跟着倒数
+        if (isBanBar) {
+          var bl = document.getElementById('dsh-ban-left');
+          if (bl) bl.textContent = fmtLeft(leftMs);
+        }
       }, 1000);
     }
   }

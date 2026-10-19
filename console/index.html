@@ -112,6 +112,13 @@
     color: #f0e8d8; font-size: 14px; font-family: inherit;
   }
   .m-field input:focus { outline: none; border-color: rgba(255,170,0,0.8); }
+  /* 警告内容用多行文本框（管理员自己写） */
+  .m-field textarea {
+    width: 100%; padding: 10px 12px; border-radius: 9px; font-size: 13.5px;
+    border: 1px solid rgba(255,170,0,0.35); background: rgba(0,0,0,0.45);
+    color: #f0e8d8; font-family: inherit; line-height: 1.7; resize: vertical;
+  }
+  .m-field textarea:focus { outline: none; border-color: rgba(255,170,0,0.8); }
   /* 页面维护勾选框 */
   .m-pages { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
   .m-page {
@@ -618,6 +625,8 @@
     out += u.banned
       ? '<button data-act="unban" data-u="' + un + '">解封</button>'
       : '<button class="warn" data-act="ban" data-u="' + un + '">封禁</button>';
+    // 警告：内容由管理员自己填，按下后发给该账户
+    out += '<button class="warn" data-act="warn" data-u="' + un + '">警告</button>';
     if (iAmSuper) {
       out += u.role === 'sub'
         ? '<button class="mute" data-act="demote" data-u="' + un + '">解除管理员</button>'
@@ -784,9 +793,12 @@
       data.users.forEach(function (u) {
         var meta = (u.email || '（无邮箱）') + ' · 注册于 ' + fmtDate(u.createdAt);
         if (u.banned) {
-          meta += u.banUntil
-            ? ' · 封禁至 ' + fmtTime(u.banUntil) + '（到点自动解封）'
-            : ' · 永久封禁';
+          // 完整的封禁起止时间：开始 →（结束 或 永久）
+          meta += ' · 封禁时段：' + (u.banFrom ? fmtTime(u.banFrom) : '—') +
+            ' → ' + (u.banUntil ? fmtTime(u.banUntil) + '（到点自动解封）' : '永久');
+        }
+        if (u.warnCount) {
+          meta += ' · 已警告 ' + u.warnCount + ' 次' + (u.lastWarnAt ? '（最近 ' + fmtTime(u.lastWarnAt) + '）' : '');
         }
         html += '<div class="row"><div class="info">' +
           '<div class="name">' + esc(u.username) + tagOf(u) + '</div>' +
@@ -817,6 +829,13 @@
     if (action === 'ban') {
       var target = USERS.filter(function (x) { return x.username === username; })[0];
       openBan(target || { username: username });
+      return;
+    }
+
+    // 警告需要先写内容，弹窗里再提交
+    if (action === 'warn') {
+      var wtarget = USERS.filter(function (x) { return x.username === username; })[0];
+      openWarn(wtarget || { username: username });
       return;
     }
 
@@ -1109,6 +1128,67 @@
       .then(function (r) { return r.json(); })
       .then(function (j) {
         if (!j.ok) { setErr(j.message || '封禁失败'); btn.disabled = false; return; }
+        closeModal();
+        note(j.message, true);
+        loadAdmin();
+      })
+      .catch(function () { setErr('网络错误'); btn.disabled = false; });
+  }
+
+  /* ===================== 管理员：警告（内容自己填） ===================== */
+  var warnTarget = null;
+
+  function openWarn(u) {
+    warnTarget = u;
+    setErr('');
+    dmTitle.textContent = '警告账户';
+    dmStep.textContent = u.username;
+    dmBody.innerHTML =
+      '<p>警告会<b>立刻弹给这个账户</b>（所有页面，琥珀色卡片），同时进他的「通知板块 → 我的消息」。</p>' +
+      '<p class="small">他点「我知道了」之后就不再弹，但消息一直留在通知板块里，可以随时回顾。</p>' +
+      '<div class="m-field"><label>警告内容（自己写）</label>' +
+      '<textarea id="warnText" maxlength="500" rows="5" placeholder="例如：请不要再上传重复的文件，否则会被限制下载。"></textarea></div>' +
+      '<div class="m-quick">' +
+      '<button data-warnq="t1">提醒注意</button>' +
+      '<button data-warnq="t2">最后警告</button>' +
+      '<button data-warnq="t3">停止违规</button>' +
+      '</div>';
+    dmActs.innerHTML =
+      '<button class="mute" id="warnCancel">取消</button>' +
+      '<button class="warn" id="warnOk">发送警告</button>';
+    delMask.className = 'mask';
+    document.getElementById('warnCancel').onclick = closeModal;
+    document.getElementById('warnOk').onclick = doWarn;
+
+    var presets = {
+      t1: '请注意：近期发现你的操作不符合站点规范，请留意一下，谢谢配合。',
+      t2: '这是最后一次提醒：如再出现同样的问题，账户会被限制使用。',
+      t3: '请立即停止当前的违规操作，否则管理员将对该账户进行封禁。',
+    };
+    dmBody.querySelectorAll('button[data-warnq]').forEach(function (b) {
+      b.onclick = function () {
+        var el = document.getElementById('warnText');
+        if (el && !el.value.trim()) el.value = presets[b.dataset.warnq] || '';
+        if (el) el.focus();
+      };
+    });
+  }
+
+  function doWarn() {
+    if (!warnTarget) return;
+    var el = document.getElementById('warnText');
+    var text = el ? String(el.value || '').trim() : '';
+    if (!text) { setErr('请填写警告内容'); return; }
+    var btn = document.getElementById('warnOk');
+    btn.disabled = true;
+    setErr('');
+    fetch('/api/admin/warn', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username: warnTarget.username, text: text }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j.ok) { setErr(j.message || '警告失败'); btn.disabled = false; return; }
         closeModal();
         note(j.message, true);
         loadAdmin();
