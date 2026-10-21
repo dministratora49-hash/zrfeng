@@ -565,3 +565,37 @@ html[data-theme="light"] #dsh-theme-float {
   color: #66ccff;
   box-shadow: 0 2px 12px rgba(12, 60, 40, .10);
 }
+
+/* ---------- 20. 小说下载页（file/novel 及其子页） ---------- */
+html[data-theme="light"] .row { background: #fff; border-color: var(--lt-line); box-shadow: var(--lt-shadow); }
+html[data-theme="light"] .book,
+html[data-theme="light"] .file-card .fc-name,
+html[data-theme="light"] .close:hover { color: var(--lt-fg); }
+html[data-theme="light"] .dl-btn {
+  color: var(--lt-accent);
+  border-color: var(--lt-line-2);
+  background: rgba(102, 204, 255, .08);
+}
+html[data-theme="light"] .need-login {
+  background: rgba(102, 204, 255, .06);
+  border-color: var(--lt-line);
+}
+html[data-theme="light"] .need-login .nl-text { color: var(--lt-muted); }
+html[data-theme="light"] .need-login .nl-btn {
+  color: var(--lt-accent);
+  border-color: var(--lt-line-2);
+  background: rgba(102, 204, 255, .08);
+}
+html[data-theme="light"] .modal {
+  background: #fff;
+  border-color: var(--lt-line-2);
+  box-shadow: var(--lt-shadow);
+}
+html[data-theme="light"] .file-card { background: #fff; border-color: var(--lt-line); }
+html[data-theme="light"] .file-card .fc-btn {
+  background: linear-gradient(135deg, #66ccff, #48bdea);
+  box-shadow: 0 2px 14px rgba(102, 204, 255, .35);
+}
+
+/* ---------- 21. 赞助支付页（sponsorship/alipay、wechatpay） ---------- */
+html[data-theme="light"] .desc { color: var(--lt-muted); }
