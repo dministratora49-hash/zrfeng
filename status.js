@@ -71,10 +71,23 @@
     'border:1px solid rgba(0,255,140,.45);color:#00ff8c;text-decoration:none;' +
     'font-size:12px;line-height:1.3;white-space:nowrap;background:rgba(0,255,140,.07);}' +
     '#' + BAR_ID + ' .sb-btn:active{background:rgba(0,255,140,.2);}' +
+    /* 亮 / 暗色切换按钮：复用 .sb-btn 的观感，窄屏只留图标 */
+    '#' + BAR_ID + ' .sb-theme{display:inline-flex;align-items:center;gap:6px;cursor:pointer;' +
+    'font-family:inherit;}' +
+    '#' + BAR_ID + ' .sb-theme .ico{font-size:13px;line-height:1;}' +
+    /* 「联系我们」页故意没有状态栏，亮/暗切换改用独立的小悬浮按钮 */
+    '#dsh-theme-float{position:fixed;top:44px;right:12px;z-index:99998;display:inline-flex;' +
+    'align-items:center;gap:6px;padding:6px 12px;border-radius:20px;cursor:pointer;' +
+    'border:1px solid rgba(0,255,140,.45);background:rgba(6,14,10,.92);color:#00ff8c;' +
+    'font-size:12px;line-height:1.2;font-family:"Microsoft YaHei","PingFang SC",sans-serif;' +
+    'backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);}' +
+    '#dsh-theme-float .ico{font-size:13px;line-height:1;}' +
     '@media (max-width:420px){' +
     '#' + BAR_ID + '{padding:0 8px;gap:6px;}' +
     '#' + BAR_ID + ' .sb-pre{display:none;}' +
     '#' + BAR_ID + ' .sb-pre-s{display:inline;}' +
+    '#' + BAR_ID + ' .sb-theme .lbl{display:none;}' +
+    '#dsh-theme-float .lbl{display:none;}' +
     '#' + BAR_ID + ' .sb-btn{padding:3px 8px;font-size:11px;}}' +
     /* 弹窗 */
     '#' + MASK_ID + '{position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.72);' +
@@ -166,6 +179,86 @@
     'font-family:inherit;border:1px solid rgba(255,190,60,.5);background:rgba(255,190,60,.12);' +
     'color:#ffbe3c;}' +
     '#' + WARN_ID + ' .wn-acts a:active,#' + WARN_ID + ' .wn-acts button:active{opacity:.7;}';
+
+  /* ==================== 亮 / 暗色主题 ====================
+   * 站点原本是深色，这里只负责在 <html> 上写 data-theme：
+   * 具体配色全部在 /theme.css 里，且只有 data-theme="light" 时才生效。
+   * 选择记在 localStorage，下次打开自动沿用；不选则默认深色。
+   */
+  var THEME_KEY = 'zrfeng-theme';
+  var THEME_FLOAT_ID = 'dsh-theme-float';
+
+  function currentTheme() {
+    return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+  }
+
+  function readTheme() {
+    try {
+      var t = localStorage.getItem(THEME_KEY);
+      if (t === 'light' || t === 'dark') return t;
+    } catch (e) { /* 隐私模式下 localStorage 可能不可用 */ }
+    return currentTheme();
+  }
+
+  function applyTheme(theme, persist) {
+    var t = theme === 'light' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+    if (persist) {
+      try { localStorage.setItem(THEME_KEY, t); } catch (e) { /* 忽略 */ }
+    }
+    // 首页粒子背景这类「自己画」的东西，靠这个事件跟着换色
+    try {
+      document.dispatchEvent(new CustomEvent('zrfeng:themechange', { detail: { theme: t } }));
+    } catch (e) {
+      var ev = document.createEvent('CustomEvent');
+      ev.initCustomEvent('zrfeng:themechange', false, false, { theme: t });
+      document.dispatchEvent(ev);
+    }
+    syncThemeButtons(t);
+  }
+
+  /** 按钮上写的是「点下去会变成什么」，不是当前状态 */
+  function syncThemeButtons(theme) {
+    var target = theme === 'light' ? 'dark' : 'light';
+    var btns = document.querySelectorAll('#' + BAR_ID + ' .sb-theme, #' + THEME_FLOAT_ID);
+    for (var i = 0; i < btns.length; i++) {
+      var b = btns[i];
+      var ico = b.querySelector('.ico');
+      var lbl = b.querySelector('.lbl');
+      if (ico) ico.textContent = target === 'light' ? '☀' : '☾';
+      if (lbl) lbl.textContent = target === 'light' ? '亮色' : '暗色';
+      var tip = target === 'light' ? '切换到亮色模式' : '切换到暗色模式';
+      b.setAttribute('title', tip);
+      b.setAttribute('aria-label', tip);
+    }
+  }
+
+  function onThemeClick(e) {
+    if (e) e.preventDefault();
+    applyTheme(currentTheme() === 'light' ? 'dark' : 'light', true);
+  }
+
+  function makeThemeBtn(cls, id) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = cls;
+    if (id) b.id = id;
+    b.innerHTML = '<span class="ico">☀</span><span class="lbl">亮色</span>';
+    b.onclick = onThemeClick;
+    return b;
+  }
+
+  /** 联系我们页没有状态栏 —— 给它一个独立小按钮，别让亮色模式在那页进不去 */
+  function ensureFloatThemeBtn() {
+    if (document.getElementById(THEME_FLOAT_ID)) return;
+    document.body.appendChild(makeThemeBtn('', THEME_FLOAT_ID));
+    syncThemeButtons(currentTheme());
+  }
+
+  function removeFloatThemeBtn() {
+    var f = document.getElementById(THEME_FLOAT_ID);
+    if (f) f.remove();
+  }
 
   function injectCss() {
     if (document.getElementById('dsh-status-css')) return;
@@ -592,6 +685,7 @@
       hideMaintenance();
       hideWarn();
       stopCountdown();
+      ensureFloatThemeBtn();
       return;
     }
 
@@ -662,6 +756,8 @@
 
     var right = document.createElement('div');
     right.className = 'sb-r';
+    // 亮 / 暗色切换：任何账户状态下都要能用，所以放在最右一组的最前面
+    right.appendChild(makeThemeBtn('sb-btn sb-theme'));
     // 右上角控制台：已激活（完成邮箱验证）的用户可见。
     // 管理员额外可见 —— 否则没人能去激活被拦截的账户。
     if (data && data.loggedIn && (acc.activated || data.isAdmin)) {
@@ -688,7 +784,9 @@
     }
     bar.appendChild(right);
 
+    removeFloatThemeBtn();
     document.body.insertBefore(bar, document.body.firstChild);
+    syncThemeButtons(currentTheme());
 
     // 与服务端重新对齐：只有真的 blocked 才弹窗
     if (acc.state === 'blocked') {
@@ -776,6 +874,12 @@
   }
 
   function boot() {
+    // 先落地已保存的主题（页面 <head> 里还有一段内联脚本做更早的一次，避免闪白）
+    applyTheme(readTheme(), false);
+    // 同浏览器别的标签页切了主题，这里跟着变
+    window.addEventListener('storage', function (e) {
+      if (e.key === THEME_KEY) applyTheme(readTheme(), false);
+    });
     rememberPadding();
     load();
     // 每 60 秒重新同步一次：管理员激活 / 续期后，客户端最多 1 分钟跟上

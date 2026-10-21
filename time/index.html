@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>/* 尽早落地亮/暗色主题，避免刷新时先闪一下深色（切换按钮在顶部状态栏里） */(function(){var t='dark';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
 <title>北京时间 · 同步阿里时间服务器</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
@@ -42,6 +43,7 @@
     cursor:pointer; user-select:none; -webkit-tap-highlight-color:transparent; transition:.2s; }
   .btn:active { background:rgba(0,230,118,.25); box-shadow:0 0 14px rgba(0,255,136,.4); }
 </style>
+<link rel="stylesheet" href="/theme.css">
 </head>
 <body>
 <div class="card">

@@ -1,0 +1,567 @@
+/* ============================================================================
+   zrfeng.top —— 亮色主题（light mode）
+   ----------------------------------------------------------------------------
+   切换入口在页面最顶部的状态栏（status.js）：<html data-theme="light|dark">。
+   本文件里的每一条规则都带 html[data-theme="light"] 前缀，所以：
+
+     · data-theme="dark"（默认）时，本文件**一条都不生效**，站点外观与原来完全一样；
+     · data-theme="light" 时，才覆盖各页面的深色配色。
+
+   配色沿站点原有的「绿 + 深色」基因做反相：
+     背景 #f2f7f3 / 卡片 #ffffff / 正文 #10231a / 次要 #5a7a68
+     强调绿 #00ff8c → #008a55（大白底上要压暗才看得清）
+   ============================================================================ */
+
+/* ---------- 0. 设计变量 ---------- */
+html[data-theme="light"] {
+  color-scheme: light;
+  --lt-bg: #f2f7f3;
+  --lt-fg: #10231a;
+  --lt-fg2: #2b4638;
+  --lt-muted: #5a7a68;
+  --lt-faint: #7d9a8b;
+  --lt-accent: #008a55;
+  --lt-accent-2: #00a86b;
+  --lt-line: rgba(0, 145, 88, .22);
+  --lt-line-2: rgba(0, 145, 88, .38);
+  --lt-tint: rgba(0, 170, 110, .08);
+  --lt-shadow: 0 6px 22px rgba(12, 60, 40, .08);
+}
+
+/* ---------- 1. 全局底色与网格 ---------- */
+html[data-theme="light"] body {
+  background-color: var(--lt-bg);
+  background-image:
+    radial-gradient(circle at 20% 18%, rgba(0, 180, 120, .12) 0%, transparent 55%),
+    radial-gradient(circle at 82% 82%, rgba(0, 160, 120, .10) 0%, transparent 55%);
+  color: var(--lt-fg);
+}
+html[data-theme="light"] body::before {
+  background-image:
+    linear-gradient(rgba(0, 145, 88, .07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 145, 88, .07) 1px, transparent 1px);
+}
+html[data-theme="light"] ::selection { background: rgba(0, 170, 110, .22); }
+
+/* ---------- 2. 标题：白→绿的渐变字改成 深墨绿→绿 ---------- */
+html[data-theme="light"] h1 {
+  background: linear-gradient(90deg, #0d2a1d 12%, #00a86b 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+/* 本就用纯色的标题，去掉阴影里的荧光感 */
+html[data-theme="light"] h1,
+html[data-theme="light"] .big {
+  text-shadow: none;
+}
+
+/* ---------- 3. 卡片类表面（各页面共用的容器） ---------- */
+html[data-theme="light"] .card,
+html[data-theme="light"] .box,
+html[data-theme="light"] .item,
+html[data-theme="light"] .ticket,
+html[data-theme="light"] .stat,
+html[data-theme="light"] .clock-box,
+html[data-theme="light"] .github-card,
+html[data-theme="light"] .captcha-box {
+  background: #fff;
+  border-color: var(--lt-line);
+  box-shadow: var(--lt-shadow);
+}
+html[data-theme="light"] .box { color: var(--lt-fg); }
+html[data-theme="light"] .card:hover,
+html[data-theme="light"] .box:hover,
+html[data-theme="light"] .item:hover,
+html[data-theme="light"] .github-card:hover {
+  border-color: var(--lt-line-2);
+  box-shadow: 0 10px 28px rgba(12, 60, 40, .12);
+}
+html[data-theme="light"] .cell,
+html[data-theme="light"] .tk-item,
+html[data-theme="light"] .msg {
+  background: #f8fbf9;
+  border-color: rgba(0, 145, 88, .16);
+  box-shadow: none;
+}
+html[data-theme="light"] .tk {
+  background: #f8fbf9;
+  border-color: rgba(0, 145, 88, .16);
+}
+
+/* ---------- 4. 正文 / 次要文字 ---------- */
+html[data-theme="light"] p,
+html[data-theme="light"] .news-text,
+html[data-theme="light"] .nt-body,
+html[data-theme="light"] .tk-body,
+html[data-theme="light"] .msg .tx,
+html[data-theme="light"] .rp-text,
+html[data-theme="light"] .tk-reply-text,
+html[data-theme="light"] .name,
+html[data-theme="light"] .addr,
+html[data-theme="light"] .nt-title,
+html[data-theme="light"] .tk-title,
+html[data-theme="light"] .card .name,
+html[data-theme="light"] .github-card .text,
+html[data-theme="light"] .kv b,
+html[data-theme="light"] .modal p {
+  color: var(--lt-fg);
+}
+html[data-theme="light"] p.sub,
+html[data-theme="light"] .sub,
+html[data-theme="light"] .hint,
+html[data-theme="light"] .who,
+html[data-theme="light"] .meta,
+html[data-theme="light"] .nt-time,
+html[data-theme="light"] .empty,
+html[data-theme="light"] .center,
+html[data-theme="light"] .kv div,
+html[data-theme="light"] .tk-meta,
+html[data-theme="light"] .tk-time,
+html[data-theme="light"] .tk-who,
+html[data-theme="light"] .tk-rep,
+html[data-theme="light"] .tk-reply-who,
+html[data-theme="light"] .tk-tip,
+html[data-theme="light"] .tk-anon,
+html[data-theme="light"] .tk-anon-tip,
+html[data-theme="light"] .delrow,
+html[data-theme="light"] .delrow .d-t,
+html[data-theme="light"] .m-hint,
+html[data-theme="light"] .m-now,
+html[data-theme="light"] .m-stat,
+html[data-theme="light"] .bottom,
+html[data-theme="light"] footer,
+html[data-theme="light"] .links,
+html[data-theme="light"] .stat span,
+html[data-theme="light"] .github-card .name,
+html[data-theme="light"] .card .cn,
+html[data-theme="light"] .visitor-sub,
+html[data-theme="light"] .clock-label,
+html[data-theme="light"] .clock-date {
+  color: var(--lt-muted);
+}
+html[data-theme="light"] .clock-label,
+html[data-theme="light"] .clock-date { color: var(--lt-faint); }
+
+/* ---------- 5. 强调色（绿） ---------- */
+html[data-theme="light"] .card-label,
+html[data-theme="light"] .badge,
+html[data-theme="light"] .sec-title,
+html[data-theme="light"] .card h2,
+html[data-theme="light"] .hl,
+html[data-theme="light"] .who b,
+html[data-theme="light"] .center a,
+html[data-theme="light"] .timer-tag,
+html[data-theme="light"] .visitor-num,
+html[data-theme="light"] .clock-time,
+html[data-theme="light"] .captcha-q,
+html[data-theme="light"] .nt-title strong,
+html[data-theme="light"] .news-text strong,
+html[data-theme="light"] .msg-line.ok,
+html[data-theme="light"] .hint.ok,
+html[data-theme="light"] .msg.ok,
+html[data-theme="light"] .tk-msg.ok,
+html[data-theme="light"] .links a:hover,
+html[data-theme="light"] .back a:hover,
+html[data-theme="light"] .on,
+html[data-theme="light"] .rp-who.admin,
+html[data-theme="light"] .tk-reply-who.admin {
+  color: var(--lt-accent);
+}
+html[data-theme="light"] .card h2 .bar { background: var(--lt-accent-2); }
+/* .status 三处语义不同：导航页「Online」绿、赞助页「正在维护」红、时间页是灰字 */
+html[data-theme="light"] .box .status { color: var(--lt-accent); text-shadow: none; }
+html[data-theme="light"] .card .status { color: var(--lt-muted); text-shadow: none; }
+html[data-theme="light"] a.card .status { color: #c62828; text-shadow: none; }
+html[data-theme="light"] .stat b,
+html[data-theme="light"] .card h2,
+html[data-theme="light"] .visitor-num { color: var(--lt-accent); }
+html[data-theme="light"] .visitor-num { text-shadow: 0 0 24px rgba(0, 170, 110, .22); }
+html[data-theme="light"] .line {
+  background: linear-gradient(90deg, transparent, rgba(0, 145, 88, .20), transparent);
+}
+
+/* ---------- 6. 按钮 / 链接按钮 ---------- */
+html[data-theme="light"] .btn-nav {
+  background: linear-gradient(135deg, rgba(0, 170, 110, .14), rgba(0, 170, 110, .06));
+  border-color: var(--lt-line-2);
+  color: var(--lt-accent);
+  box-shadow: 0 2px 12px rgba(0, 160, 110, .12);
+}
+html[data-theme="light"] .btn-nav:hover {
+  background: linear-gradient(135deg, rgba(0, 170, 110, .22), rgba(0, 170, 110, .10));
+  box-shadow: 0 6px 20px rgba(0, 160, 110, .20);
+}
+html[data-theme="light"] .back a,
+html[data-theme="light"] .back-btn,
+html[data-theme="light"] .copy,
+html[data-theme="light"] .btn,
+html[data-theme="light"] .tk-form button,
+html[data-theme="light"] .row-code button,
+html[data-theme="light"] .refresh,
+html[data-theme="light"] button {
+  color: var(--lt-accent);
+  border-color: var(--lt-line-2);
+  background: rgba(0, 170, 110, .07);
+}
+html[data-theme="light"] .copy { background: transparent; }
+html[data-theme="light"] .back a { background: rgba(0, 170, 110, .06); }
+html[data-theme="light"] .addr:hover,
+html[data-theme="light"] .copy:hover,
+html[data-theme="light"] .refresh:hover { color: var(--lt-accent); }
+html[data-theme="light"] .btn:hover,
+html[data-theme="light"] .copy:hover,
+html[data-theme="light"] .refresh:hover,
+html[data-theme="light"] .row-code button:hover:not(:disabled) {
+  border-color: var(--lt-accent-2);
+  background: rgba(0, 170, 110, .14);
+}
+html[data-theme="light"] .copy.done {
+  color: #00784a;
+  border-color: var(--lt-accent-2);
+  background: rgba(0, 170, 110, .16);
+}
+html[data-theme="light"] .btn:disabled,
+html[data-theme="light"] .tk-form button:disabled,
+html[data-theme="light"] .row-code button:disabled { opacity: .55; }
+/* 实心绿按钮：绿底黑字在亮色下依旧成立，但绿要压暗一点 */
+html[data-theme="light"] .tk-send,
+html[data-theme="light"] .submit {
+  background: linear-gradient(90deg, #00b371, #009257);
+  color: #06231a;
+}
+
+/* ---------- 7. 表单控件 ---------- */
+html[data-theme="light"] input,
+html[data-theme="light"] textarea,
+html[data-theme="light"] select {
+  background: #fff;
+  color: var(--lt-fg);
+  border-color: rgba(0, 145, 88, .28);
+}
+html[data-theme="light"] .tk-form input,
+html[data-theme="light"] .fld input,
+html[data-theme="light"] .fld textarea,
+html[data-theme="light"] .field input,
+html[data-theme="light"] .captcha-row input,
+html[data-theme="light"] .tk-input,
+html[data-theme="light"] .tk-reply-form input,
+html[data-theme="light"] .m-field input,
+html[data-theme="light"] .m-field textarea,
+html[data-theme="light"] .modal input,
+html[data-theme="light"] .modal .m-field input {
+  background: #fff;
+  color: var(--lt-fg);
+  border-color: rgba(0, 145, 88, .26);
+}
+html[data-theme="light"] input::placeholder,
+html[data-theme="light"] textarea::placeholder,
+html[data-theme="light"] .field input::placeholder,
+html[data-theme="light"] .tk-input::placeholder { color: #9bb3a6; }
+html[data-theme="light"] .tk-form input:focus,
+html[data-theme="light"] .fld input:focus,
+html[data-theme="light"] .fld textarea:focus,
+html[data-theme="light"] .field input:focus,
+html[data-theme="light"] .captcha-row input:focus,
+html[data-theme="light"] .tk-input:focus,
+html[data-theme="light"] .tk-reply-form input:focus {
+  border-color: var(--lt-accent-2);
+  box-shadow: 0 0 0 3px rgba(0, 170, 110, .10);
+}
+html[data-theme="light"] .field label,
+html[data-theme="light"] .fld label { color: var(--lt-muted); }
+html[data-theme="light"] .tabs,
+html[data-theme="light"] .tab { background: rgba(0, 170, 110, .06); }
+html[data-theme="light"] .tab { color: var(--lt-muted); }
+html[data-theme="light"] .tab.on { color: #06231a; background: #00b371; box-shadow: none; }
+
+/* ---------- 8. 绿色小圆点 / 状态灯 ---------- */
+html[data-theme="light"] .dot,
+html[data-theme="light"] .msg .dot { background: var(--lt-accent-2); box-shadow: 0 0 6px rgba(0, 168, 107, .8); }
+html[data-theme="light"] .box[data-down="1"] .status,
+html[data-theme="light"] .box[data-down="1"] .dot { color: #c62828; }
+html[data-theme="light"] .box[data-down="1"] .dot { background: #dc3c3c; box-shadow: 0 0 6px rgba(220, 60, 60, .7); }
+
+/* ---------- 9. 标签（tag / pill） ---------- */
+html[data-theme="light"] .tag { color: var(--lt-accent); border-color: var(--lt-line-2); background: rgba(0, 170, 110, .08); }
+html[data-theme="light"] .tag.main { color: #00784a; border-color: var(--lt-line-2); background: rgba(0, 170, 110, .10); box-shadow: none; }
+html[data-theme="light"] .tag.casual,
+html[data-theme="light"] .tag.maint { color: #8a5b00; border-color: rgba(190, 130, 0, .38); background: rgba(255, 176, 32, .12); }
+html[data-theme="light"] .tag.active { color: #00784a; border-color: var(--lt-line-2); background: rgba(0, 170, 110, .12); }
+html[data-theme="light"] .tag.trial { color: #8a5b00; border-color: rgba(190, 130, 0, .4); background: rgba(255, 204, 0, .14); }
+html[data-theme="light"] .tag.blocked,
+html[data-theme="light"] .tag.banned { color: #b3261e; border-color: rgba(200, 40, 40, .4); background: rgba(255, 77, 77, .12); }
+html[data-theme="light"] .tag.admin { color: #00637a; border-color: rgba(0, 150, 190, .4); background: rgba(0, 200, 255, .12); }
+html[data-theme="light"] .tag.super { color: #8a6a00; border-color: rgba(190, 150, 0, .45); background: rgba(255, 215, 0, .14); }
+html[data-theme="light"] .tag.sub { color: #6b3fbf; border-color: rgba(130, 80, 210, .4); background: rgba(170, 120, 255, .12); }
+html[data-theme="light"] .news-date { background: rgba(255, 107, 53, .12); color: #c2410c; }
+html[data-theme="light"] .timer-tag { background: rgba(0, 170, 110, .10); }
+html[data-theme="light"] .badge { background: rgba(0, 170, 110, .10); border-color: var(--lt-line-2); }
+
+/* ---------- 10. 通知板块（notice） ---------- */
+html[data-theme="light"] .nt { border-bottom-color: rgba(0, 145, 88, .16); }
+html[data-theme="light"] .msg { background: rgba(0, 170, 110, .06); border-color: rgba(0, 145, 88, .16); }
+html[data-theme="light"] .rp { border-left-color: rgba(0, 145, 88, .22); }
+html[data-theme="light"] .btn.ghost { color: #b3261e; border-color: rgba(200, 40, 40, .4); background: rgba(255, 107, 107, .08); }
+html[data-theme="light"] .msg-line.err,
+html[data-theme="light"] .tk-msg.bad { color: #c62828; }
+html[data-theme="light"] .tk-msg.bad {
+  border-color: rgba(200, 40, 40, .35);
+  background: rgba(255, 92, 92, .07);
+}
+html[data-theme="light"] .tk-form input,
+html[data-theme="light"] .fld input,
+html[data-theme="light"] .fld textarea { background: #fff; }
+
+/* ---------- 11. 控制台（console） ---------- */
+html[data-theme="light"] .notice {
+  background: rgba(255, 204, 0, .10);
+  border-color: rgba(190, 130, 0, .45);
+}
+html[data-theme="light"] .notice .nt-t { color: #8a5b00; }
+html[data-theme="light"] .notice .nt-s { color: #8c7443; }
+html[data-theme="light"] .notice button {
+  color: #8a5b00;
+  border-color: rgba(190, 130, 0, .5);
+  background: rgba(255, 204, 0, .16);
+}
+html[data-theme="light"] .dellist { border-top-color: rgba(190, 130, 0, .25); }
+html[data-theme="light"] .delrow { color: #6b6350; }
+html[data-theme="light"] .delrow .d-u { color: #7a5c00; }
+html[data-theme="light"] .row { border-bottom-color: rgba(0, 145, 88, .12); }
+html[data-theme="light"] .tag.active,
+html[data-theme="light"] .stats .stat { background: #fff; }
+html[data-theme="light"] .msg.err,
+html[data-theme="light"] .msg-line.err { color: #c62828; }
+html[data-theme="light"] .tk-new { color: #00637a; border-color: rgba(0, 150, 190, .45); background: rgba(0, 200, 255, .12); }
+html[data-theme="light"] .tk-anon-tag { color: #8a5b00; border-color: rgba(190, 130, 0, .4); background: rgba(255, 176, 32, .14); }
+html[data-theme="light"] .tk-pending { color: #b3261e; border-color: rgba(200, 40, 40, .4); background: rgba(255, 80, 80, .12); }
+html[data-theme="light"] .tk-thread { border-left-color: rgba(0, 145, 88, .22); }
+html[data-theme="light"] .tk-item-anon { opacity: 1; }
+html[data-theme="light"] button.warn { color: #b3261e; border-color: rgba(200, 40, 40, .45); background: rgba(255, 77, 77, .08); }
+html[data-theme="light"] button.mute { color: var(--lt-muted); border-color: rgba(0, 145, 88, .3); background: transparent; }
+
+/* 维护时间面板（琥珀色底） */
+html[data-theme="light"] .maint {
+  background: #fffdf6;
+  border-color: rgba(190, 130, 0, .4);
+  box-shadow: var(--lt-shadow);
+}
+html[data-theme="light"] .maint h2,
+html[data-theme="light"] .maint .m-stat b { color: #8a5b00; }
+html[data-theme="light"] .maint .m-stat { color: #6b5a3a; }
+html[data-theme="light"] .m-field label,
+html[data-theme="light"] .m-hint,
+html[data-theme="light"] .m-now { color: #8a7448; }
+html[data-theme="light"] .m-field input,
+html[data-theme="light"] .m-field textarea {
+  background: #fff;
+  color: var(--lt-fg);
+  border-color: rgba(190, 130, 0, .35);
+}
+html[data-theme="light"] .m-page {
+  background: #fff;
+  color: #6b5a3a;
+  border-color: rgba(190, 130, 0, .3);
+}
+html[data-theme="light"] .m-page.on {
+  border-color: rgba(190, 130, 0, .8);
+  background: rgba(255, 170, 0, .14);
+  color: #7a5200;
+}
+html[data-theme="light"] .m-page em { color: #9a8a68; }
+html[data-theme="light"] .m-page.on em { color: #8a6a2a; }
+html[data-theme="light"] .m-acts button,
+html[data-theme="light"] .m-quick button {
+  color: #7a5200;
+  border-color: rgba(190, 130, 0, .45);
+  background: rgba(255, 170, 0, .12);
+}
+
+/* 控制台弹窗（二次验证 / 危险操作） */
+html[data-theme="light"] .mask { background: rgba(12, 40, 28, .42); }
+html[data-theme="light"] .modal {
+  background: #fff;
+  border-color: rgba(200, 40, 40, .45);
+  box-shadow: 0 12px 40px rgba(60, 10, 10, .18);
+}
+html[data-theme="light"] .modal p,
+html[data-theme="light"] .modal p.small,
+html[data-theme="light"] .step-hint,
+html[data-theme="light"] .modal .m-field label { color: #4a5a52; }
+html[data-theme="light"] .modal h3 { color: #b3261e; }
+html[data-theme="light"] .modal input,
+html[data-theme="light"] .modal .m-field input {
+  background: #fff;
+  color: var(--lt-fg);
+  border-color: rgba(200, 40, 40, .35);
+}
+html[data-theme="light"] .modal .err { color: #c62828; }
+html[data-theme="light"] .modal .acts button,
+html[data-theme="light"] .modal .m-quick button {
+  color: #b3261e;
+  border-color: rgba(200, 40, 40, .4);
+  background: rgba(255, 77, 77, .08);
+}
+
+/* ---------- 12. 登录页（login） ---------- */
+html[data-theme="light"] .login .card,
+html[data-theme="light"] .card { background: #fff; }
+html[data-theme="light"] .field input { background: #fff; }
+html[data-theme="light"] .msg.ok { color: #00784a; background: rgba(0, 170, 110, .08); border-color: rgba(0, 145, 88, .3); }
+html[data-theme="light"] .msg.err { color: #b3261e; background: rgba(255, 90, 90, .08); border-color: rgba(200, 40, 40, .3); }
+html[data-theme="light"] .hint.bad { color: #c62828; }
+html[data-theme="light"] .links a { color: var(--lt-muted); }
+html[data-theme="light"] .links a:hover { color: var(--lt-accent); }
+html[data-theme="light"] .links { color: var(--lt-faint); }
+html[data-theme="light"] .captcha-box { background: rgba(0, 170, 110, .05); border-color: rgba(0, 145, 88, .3); }
+
+/* ---------- 13. 赞助页（sponsorship） ---------- */
+html[data-theme="light"] .card,
+html[data-theme="light"] .github-card {
+  background: #fff;
+  border-color: var(--lt-line-2);
+  box-shadow: var(--lt-shadow);
+}
+html[data-theme="light"] .card .name,
+html[data-theme="light"] .github-card .text { color: var(--lt-fg); }
+html[data-theme="light"] .card .cn,
+html[data-theme="light"] .github-card .name { color: var(--lt-muted); }
+html[data-theme="light"] .status { color: #c62828; text-shadow: none; }
+html[data-theme="light"] .online { color: #00784a; text-shadow: none; }
+html[data-theme="light"] .sub { color: var(--lt-muted); }
+html[data-theme="light"] .github-card .star { filter: none; }
+html[data-theme="light"] .back-btn { background: rgba(0, 170, 110, .07); }
+html[data-theme="light"] .back-btn:hover {
+  background: rgba(0, 170, 110, .16);
+  border-color: var(--lt-accent-2);
+  box-shadow: 0 3px 16px rgba(0, 160, 110, .18);
+}
+
+/* ---------- 14. 时间页（time，终端风） ---------- */
+html[data-theme="light"] .badge {
+  background: rgba(0, 170, 110, .10);
+  border-color: var(--lt-line-2);
+  color: var(--lt-accent);
+}
+html[data-theme="light"] .big { color: #00804d; }
+html[data-theme="light"] .big small,
+html[data-theme="light"] .ampm,
+html[data-theme="light"] .date { color: #2b4638; }
+html[data-theme="light"] .cell .v { color: #00804d; }
+html[data-theme="light"] .cell .l { color: var(--lt-muted); }
+html[data-theme="light"] .status { color: var(--lt-muted); }
+html[data-theme="light"] .dot { background: #00a86b; box-shadow: 0 0 6px rgba(0, 168, 107, .8); }
+html[data-theme="light"] .dot.red { background: #dc3c3c; box-shadow: 0 0 6px rgba(220, 60, 60, .7); }
+html[data-theme="light"] .btn {
+  color: #00784a;
+  border-color: var(--lt-line-2);
+  background: rgba(0, 170, 110, .08);
+}
+html[data-theme="light"] .btn:active { background: rgba(0, 170, 110, .20); box-shadow: none; }
+
+/* ---------- 15. 关于页（aboutme） ---------- */
+html[data-theme="light"] header h1 { color: var(--lt-accent); }
+html[data-theme="light"] header p { color: var(--lt-muted); }
+html[data-theme="light"] .back a { color: var(--lt-accent); border-color: var(--lt-line-2); }
+html[data-theme="light"] .back a:hover { background: rgba(0, 170, 110, .10); }
+
+/* ---------- 16. 主站首页（index）的粒子背景与暗色玻璃块 ---------- */
+html[data-theme="light"] .atm {
+  background:
+    radial-gradient(ellipse 55% 45% at 18% 22%, rgba(0, 180, 120, .10) 0%, transparent 70%),
+    radial-gradient(ellipse 45% 55% at 82% 78%, rgba(255, 140, 80, .07) 0%, transparent 70%);
+}
+html[data-theme="light"] .clock-box { background: rgba(255, 255, 255, .94); }
+html[data-theme="light"] .timer-item { background: rgba(0, 170, 110, .06); border-color: rgba(0, 145, 88, .16); }
+
+/* ---------- 17. 顶部状态栏本身（status.js 注入） ---------- */
+html[data-theme="light"] #dsh-status-bar {
+  background: rgba(255, 255, 255, .95);
+  border-bottom-color: rgba(0, 145, 88, .25);
+  color: #2b4638;
+  box-shadow: 0 1px 10px rgba(12, 60, 40, .07);
+}
+html[data-theme="light"] #dsh-status-bar .sb-btn {
+  border-color: rgba(0, 145, 88, .40);
+  color: #00784a;
+  background: rgba(0, 170, 110, .08);
+}
+html[data-theme="light"] #dsh-status-bar .sb-btn:active { background: rgba(0, 170, 110, .20); }
+html[data-theme="light"] #dsh-status-bar a.sb-text { color: #00784a; }
+html[data-theme="light"] #dsh-status-bar .sb-cd { color: #a06a00; }
+html[data-theme="light"] #dsh-status-bar .sb-theme { border-color: rgba(0, 145, 88, .40); }
+
+/* ---------- 18. 状态栏弹出的各类遮罩 / 弹窗 ---------- */
+html[data-theme="light"] #dsh-block-mask,
+html[data-theme="light"] #dsh-maint-mask,
+html[data-theme="light"] #dsh-ban-mask,
+html[data-theme="light"] #dsh-warn-mask { background: rgba(12, 40, 28, .40); }
+
+html[data-theme="light"] #dsh-block-mask .bm-card,
+html[data-theme="light"] #dsh-ban-mask .bn-card {
+  background: #fff;
+  border-color: rgba(200, 40, 40, .45);
+  box-shadow: 0 14px 44px rgba(60, 10, 10, .18);
+}
+html[data-theme="light"] #dsh-block-mask h2,
+html[data-theme="light"] #dsh-ban-mask h2 { color: #b3261e; }
+html[data-theme="light"] #dsh-block-mask p,
+html[data-theme="light"] #dsh-ban-mask p { color: #3a4a42; }
+html[data-theme="light"] #dsh-ban-mask .bn-meta { color: #8a6a6a; }
+html[data-theme="light"] #dsh-block-mask .bm-acts a,
+html[data-theme="light"] #dsh-block-mask .bm-acts button,
+html[data-theme="light"] #dsh-ban-mask .bn-acts a,
+html[data-theme="light"] #dsh-ban-mask .bn-acts button {
+  color: #b3261e;
+  border-color: rgba(200, 40, 40, .45);
+  background: rgba(255, 77, 77, .08);
+}
+
+html[data-theme="light"] #dsh-maint-mask .mt-card,
+html[data-theme="light"] #dsh-warn-mask .wn-card {
+  background: #fff;
+  border-color: rgba(190, 130, 0, .45);
+  box-shadow: 0 14px 44px rgba(80, 50, 0, .16);
+}
+html[data-theme="light"] #dsh-maint-mask h2,
+html[data-theme="light"] #dsh-maint-mask .mt-pct,
+html[data-theme="light"] #dsh-maint-mask .mt-cd,
+html[data-theme="light"] #dsh-warn-mask h2,
+html[data-theme="light"] #dsh-warn-mask .wn-badge { color: #8a5b00; }
+html[data-theme="light"] #dsh-maint-mask p,
+html[data-theme="light"] #dsh-warn-mask p { color: #4a4030; }
+html[data-theme="light"] #dsh-maint-mask .mt-quote { color: #8a7448; }
+html[data-theme="light"] #dsh-maint-mask .mt-range,
+html[data-theme="light"] #dsh-maint-mask .mt-note,
+html[data-theme="light"] #dsh-maint-mask .mt-staff summary,
+html[data-theme="light"] #dsh-warn-mask .wn-by,
+html[data-theme="light"] #dsh-warn-mask .wn-note { color: #8a7448; }
+html[data-theme="light"] #dsh-maint-mask .mt-acts a,
+html[data-theme="light"] #dsh-maint-mask .mt-acts button,
+html[data-theme="light"] #dsh-maint-mask .mt-staff button,
+html[data-theme="light"] #dsh-warn-mask .wn-acts a,
+html[data-theme="light"] #dsh-warn-mask .wn-acts button {
+  color: #7a5200;
+  border-color: rgba(190, 130, 0, .5);
+  background: rgba(255, 170, 0, .12);
+}
+html[data-theme="light"] #dsh-maint-mask .mt-staff { border-top-color: rgba(190, 130, 0, .3); }
+html[data-theme="light"] #dsh-maint-mask .mt-staff input {
+  background: #fff;
+  color: var(--lt-fg);
+  border-color: rgba(190, 130, 0, .35);
+}
+html[data-theme="light"] #dsh-warn-mask .wn-text {
+  background: #fffdf6;
+  border-color: rgba(190, 130, 0, .25);
+  color: #3a3324;
+}
+
+/* ---------- 19. 「联系我们」页的悬浮切换按钮（该页没有状态栏） ---------- */
+html[data-theme="light"] #dsh-theme-float {
+  background: rgba(255, 255, 255, .95);
+  border-color: rgba(0, 145, 88, .40);
+  color: #00784a;
+  box-shadow: 0 2px 12px rgba(12, 60, 40, .10);
+}

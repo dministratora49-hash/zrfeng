@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>/* 尽早落地亮/暗色主题，避免刷新时先闪一下深色（切换按钮在顶部状态栏里） */(function(){var t='dark';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
 <title>www.zrfeng.top主站点</title>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+SC:wght@300;400;700;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
@@ -50,6 +51,7 @@ h1{font-size:clamp(32px,6vw,58px);font-weight:900;line-height:1.15;margin-bottom
 footer{text-align:center;color:var(--muted);font-size:12px;margin-top:40px;letter-spacing:1px}
 @media(max-width:520px){.timer-grid{grid-template-columns:repeat(3,1fr)}.clock-box{top:40px;right:12px;padding:8px 12px}}
 </style>
+<link rel="stylesheet" href="/theme.css">
 </head>
 <body>
 <canvas id="p"></canvas>
@@ -106,6 +108,11 @@ footer{text-align:center;color:var(--muted);font-size:12px;margin-top:40px;lette
 <script>
 (function(){
   var c=document.getElementById("p"),ctx=c.getContext("2d"),pts=[];
+  // 粒子颜色跟着亮/暗色主题走（切换按钮在顶部状态栏里）
+  var PC=document.documentElement.getAttribute("data-theme")==="light"?"0,145,88":"0,255,170";
+  document.addEventListener("zrfeng:themechange",function(e){
+    PC=(e.detail&&e.detail.theme==="light")?"0,145,88":"0,255,170";
+  });
   function rs(){c.width=innerWidth;c.height=innerHeight}
   rs();window.addEventListener("resize",rs);
   for(var i=0;i<90;i++)pts.push({x:Math.random()*c.width,y:Math.random()*c.height,r:Math.random()*1.5+.5,vx:(Math.random()-.5)*.3,vy:(Math.random()-.5)*.3,a:Math.random()*.4+.1});
@@ -114,9 +121,9 @@ footer{text-align:center;color:var(--muted);font-size:12px;margin-top:40px;lette
     for(var i=0;i<pts.length;i++){
       var p=pts[i];p.x+=p.vx;p.y+=p.vy;
       if(p.x<0)p.x=c.width;if(p.x>c.width)p.x=0;if(p.y<0)p.y=c.height;if(p.y>c.height)p.y=0;
-      ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fillStyle="rgba(0,255,170,"+p.a+")";ctx.fill();
+      ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fillStyle="rgba("+PC+","+p.a+")";ctx.fill();
     }
-    for(var i=0;i<pts.length;i++){for(var j=i+1;j<pts.length;j++){var dx=pts[i].x-pts[j].x,dy=pts[i].y-pts[j].y,d=dx*dx+dy*dy;if(d<18000){ctx.beginPath();ctx.moveTo(pts[i].x,pts[i].y);ctx.lineTo(pts[j].x,pts[j].y);ctx.strokeStyle="rgba(0,255,170,"+((1-d/18000)*.06)+")";ctx.stroke();}}}
+    for(var i=0;i<pts.length;i++){for(var j=i+1;j<pts.length;j++){var dx=pts[i].x-pts[j].x,dy=pts[i].y-pts[j].y,d=dx*dx+dy*dy;if(d<18000){ctx.beginPath();ctx.moveTo(pts[i].x,pts[i].y);ctx.lineTo(pts[j].x,pts[j].y);ctx.strokeStyle="rgba("+PC+","+((1-d/18000)*.06)+")";ctx.stroke();}}}
     requestAnimationFrame(draw);
   })();
 })();
