@@ -633,3 +633,9 @@ html[data-theme="light"] #dsh-slide-toast .sl-acts button.mute {
   border-color: rgba(90, 180, 224, .40);
   background: transparent;
 }
+
+/* ---------- 23. 关于页（aboutme）图片与标题，亮色版外观 ---------- */
+html[data-theme="light"] .logo { border-color: rgba(102, 204, 255, .30); box-shadow: 0 0 22px rgba(102, 204, 255, .14); }
+html[data-theme="light"] .founder { border-color: rgba(102, 204, 255, .28); }
+html[data-theme="light"] .team { color: var(--lt-fg); }
+html[data-theme="light"] .team-sub { color: var(--lt-muted); }

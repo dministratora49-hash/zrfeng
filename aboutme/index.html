@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script>/* 尽早落地亮/暗色主题，避免刷新时先闪一下深色（切换按钮在顶部状态栏里） */(function(){var t='dark';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
-  <title>关于开发者 · zrfeng.top</title>
+  <title>关于项目组 · zrfeng.top</title>
   <style>
     * { margin:0; padding:0; box-sizing:border-box; }
     body {
@@ -24,6 +24,13 @@
     header p { color:#8899aa; font-size:13px; }
     p { line-height:1.9; font-size:15px; color:#cdd8d8; margin-bottom:14px; }
     .hl { color:#00ffaa; font-weight:600; }
+    .logo { width:128px; height:128px; object-fit:cover; border-radius:22px; margin:0 auto 16px; display:block;
+            border:1px solid rgba(0,255,170,.2); box-shadow:0 0 24px rgba(0,255,170,.10); }
+    .team { color:#fff; font-size:20px; margin:0 0 10px; }
+    .intro { color:#cdd8d8; }
+    .team-sub { color:#8899aa; font-size:14px; margin:22px 0 10px; }
+    .founder { width:88px; height:88px; object-fit:cover; border-radius:18px; margin:0 0 14px; display:block;
+               border:1px solid rgba(0,255,170,.18); }
     .back { text-align:center; margin-top:28px; }
     .back a {
       display:inline-block; padding:10px 36px;
@@ -40,10 +47,15 @@
 <body>
   <div class="card">
     <header>
-      <h1>关于开发者</h1>
-      <p>About the Developer</p>
+      <h1>关于项目组</h1>
+      <p>About the Team</p>
+      <img class="logo" src="/aboutme/logo.jpg" alt="宁静立方">
+      <h2 class="team">宁静立方工作室</h2>
+      <p class="intro">宁静立方工作室开发本网站，工作室已于 <span class="hl">2026年10月22日 18:15</span> 成立。</p>
+      <h2 class="team-sub">关于工作室成立者</h2>
     </header>
 
+    <img class="founder" src="/aboutme/founder.jpg" alt="工作室成立者">
     <p>我的网名是 <span class="hl">Summer</span>，是一位 <span class="hl">13岁</span> 的开发者，来自江苏。</p>
 
     <p>平时的时间大多被作业和补习班占着，但剩下的每一分钟，我喜欢写代码、研究航空、听洛天依——以及，折腾这个网站。</p>
