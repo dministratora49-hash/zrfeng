@@ -89,6 +89,34 @@
     '#' + BAR_ID + ' .sb-theme .lbl{display:none;}' +
     '#dsh-theme-float .lbl{display:none;}' +
     '#' + BAR_ID + ' .sb-btn{padding:3px 8px;font-size:11px;}}' +
+    /* ---- 右侧滑出提示：图标 + 标题 + 说明 + 按钮，用站点自己的卡片观感 ---- */
+    '#dsh-slide-toast{position:fixed;top:46px;right:12px;z-index:100010;box-sizing:border-box;' +
+    'width:min(340px,calc(100vw - 24px));display:flex;align-items:flex-start;gap:10px;padding:13px 14px;' +
+    'background:rgba(10,16,28,.94);border:1px solid rgba(0,255,170,.22);border-radius:14px;' +
+    'box-shadow:0 10px 30px rgba(0,0,0,.45);' +
+    'backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);' +
+    'font-family:"Microsoft YaHei","PingFang SC",sans-serif;color:#cfe8dc;text-align:left;' +
+    'transform:translateX(calc(100% + 24px));opacity:0;' +
+    'transition:transform .36s cubic-bezier(.18,.86,.3,1.02),opacity .26s ease;}' +
+    '#dsh-slide-toast.on{transform:translateX(0);opacity:1;}' +
+    '#dsh-slide-toast .sl-ico{width:36px;height:36px;flex:none;display:flex;align-items:center;' +
+    'justify-content:center;font-size:17px;line-height:1;border-radius:10px;' +
+    'background:rgba(0,255,170,.10);border:1px solid rgba(0,255,170,.25);color:#00ffaa;}' +
+    '#dsh-slide-toast .sl-body{flex:1;min-width:0;}' +
+    '#dsh-slide-toast .sl-t{font-size:13px;font-weight:700;color:#00ffaa;letter-spacing:.6px;' +
+    'font-family:Orbitron,"Microsoft YaHei",sans-serif;}' +
+    '#dsh-slide-toast .sl-d{font-size:12px;line-height:1.6;color:#9db6ad;margin-top:4px;word-break:break-word;}' +
+    '#dsh-slide-toast .sl-acts{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;}' +
+    '#dsh-slide-toast .sl-acts button{padding:6px 14px;font-size:12px;font-family:inherit;cursor:pointer;' +
+    'border-radius:20px;border:1px solid rgba(0,255,170,.35);background:rgba(0,255,170,.08);color:#00ffaa;' +
+    'transition:background .2s,border-color .2s,transform .15s;}' +
+    '#dsh-slide-toast .sl-acts button:hover{background:rgba(0,255,170,.16);border-color:rgba(0,255,170,.55);}' +
+    '#dsh-slide-toast .sl-acts button:active{transform:translateY(1px);}' +
+    '#dsh-slide-toast .sl-acts button.primary{background:linear-gradient(135deg,#00ffaa,#00d98a);' +
+    'border-color:transparent;color:#06120c;font-weight:700;}' +
+    '#dsh-slide-toast .sl-acts button.primary:hover{box-shadow:0 0 18px rgba(0,255,170,.35);}' +
+    '#dsh-slide-toast .sl-acts button.mute{border-color:rgba(127,168,147,.4);background:transparent;color:#9db6ad;}' +
+
     /* 弹窗 */
     '#' + MASK_ID + '{position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.72);' +
     'display:flex;align-items:center;justify-content:center;padding:20px;' +
@@ -187,6 +215,13 @@
    */
   var THEME_KEY = 'zrfeng-theme';
   var THEME_FLOAT_ID = 'dsh-theme-float';
+  var TOAST_ID = 'dsh-slide-toast';
+  var PREF_ACK_PREFIX = 'zrfeng-pref-ack:';
+  /** 最近一次 /api/status 的结果（判断是否登录、账户偏好是什么） */
+  var lastStatus = null;
+  /** 每次页面加载只主动问一次「要不要套用账户偏好」 */
+  var prefPrompted = false;
+  var mcTimer = null;
 
   function currentTheme() {
     return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
@@ -235,7 +270,209 @@
 
   function onThemeClick(e) {
     if (e) e.preventDefault();
-    applyTheme(currentTheme() === 'light' ? 'dark' : 'light', true);
+    var next = currentTheme() === 'light' ? 'dark' : 'light';
+    applyTheme(next, true);
+    askSaveThemePref(next);
+  }
+
+  /* ==================== MC 成就风格滑出提示 ====================
+   * 从右侧滑入、方角、粗亮边；用来问「是否保存账户偏好」这类一次性问题。
+   */
+  function hideMcToast(immediate) {
+    if (mcTimer) { clearTimeout(mcTimer); mcTimer = null; }
+    var t = document.getElementById(TOAST_ID);
+    if (!t) return;
+    t.classList.remove('on');
+    if (immediate) { if (t.parentNode) t.parentNode.removeChild(t); return; }
+    setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, 420);
+  }
+
+  function showMcToast(opts) {
+    hideMcToast(true);
+    var t = document.createElement('div');
+    t.id = TOAST_ID;
+
+    var ico = document.createElement('div');
+    ico.className = 'sl-ico';
+    ico.textContent = opts.icon || '★';
+    t.appendChild(ico);
+
+    var body = document.createElement('div');
+    body.className = 'sl-body';
+    var title = document.createElement('div');
+    title.className = 'sl-t';
+    title.textContent = opts.title || '';
+    body.appendChild(title);
+    if (opts.desc) {
+      var d = document.createElement('div');
+      d.className = 'sl-d';
+      d.textContent = opts.desc;
+      body.appendChild(d);
+    }
+    if (opts.actions && opts.actions.length) {
+      var acts = document.createElement('div');
+      acts.className = 'sl-acts';
+      opts.actions.forEach(function (a) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = a.text || '';
+        if (a.cls) b.className = a.cls;
+        b.onclick = function (e) {
+          if (e) e.preventDefault();
+          // 返回 true 表示「先别关」，等异步结果自己接管
+          var keep = a.onClick ? a.onClick() === true : false;
+          if (!keep) hideMcToast();
+        };
+        acts.appendChild(b);
+      });
+      body.appendChild(acts);
+    }
+    t.appendChild(body);
+    document.body.appendChild(t);
+
+    var raf = (typeof requestAnimationFrame === 'function')
+      ? requestAnimationFrame
+      : function (f) { setTimeout(f, 16); };
+    raf(function () { raf(function () { t.classList.add('on'); }); });
+
+    if (opts.autoHideMs) mcTimer = setTimeout(hideMcToast, opts.autoHideMs);
+    return t;
+  }
+
+  /* ==================== 账户偏好同步 ====================
+   * 账户里存的是「上次保存的主题」；本机用 localStorage 记「这台设备已经
+   * 对哪个值做过选择」，避免每次刷新都弹。
+   */
+  function prefAckKey(user) {
+    return PREF_ACK_PREFIX + String(user || '').toLowerCase();
+  }
+  function readPrefAck(user) {
+    try { return localStorage.getItem(prefAckKey(user)); } catch (e) { return null; }
+  }
+  function writePrefAck(user, theme) {
+    try { localStorage.setItem(prefAckKey(user), String(theme || '')); } catch (e) { }
+  }
+  function themeName(t) { return t === 'light' ? '亮色' : '暗色'; }
+
+  function saveThemeToAccount(theme, done) {
+    fetch('/api/pref', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ theme: theme })
+    }).then(function (r) {
+      return r.json();
+    }).then(function (j) {
+      done(!!(j && j.ok), (j && j.error) || '');
+    }).catch(function () {
+      done(false, '网络异常，请稍后再试');
+    });
+  }
+
+  /** 刚切换完主题：登录用户就问一句要不要存进账户 */
+  function askSaveThemePref(theme) {
+    var d = lastStatus;
+    var user = d && d.loggedIn ? String(d.username || '') : '';
+    if (!user) {
+      showMcToast({
+        icon: theme === 'light' ? '☀' : '☾',
+        title: '已切换为「' + themeName(theme) + '」模式',
+        desc: '当前只保存在这台设备上。登录后可以把偏好存到账户，换设备不用再设。',
+        autoHideMs: 4200
+      });
+      return;
+    }
+    if (d.prefTheme === theme) {
+      // 账户里已经是这个值，不用问
+      writePrefAck(user, theme);
+      showMcToast({
+        icon: theme === 'light' ? '☀' : '☾',
+        title: '已切换为「' + themeName(theme) + '」模式',
+        desc: '和账户里保存的偏好一致，不需要再同步。',
+        autoHideMs: 2800
+      });
+      return;
+    }
+    showMcToast({
+      icon: '⚙',
+      title: '账户偏好设置',
+      desc: '要把「' + themeName(theme) + '」模式保存到账户吗？以后在别的设备登录，会问你是否套用。',
+      autoHideMs: 15000,
+      actions: [
+        {
+          text: '保存到账户',
+          cls: 'primary',
+          onClick: function () {
+            saveThemeToAccount(theme, function (ok, err) {
+              if (ok) {
+                writePrefAck(user, theme);
+                if (lastStatus) lastStatus.prefTheme = theme;
+                showMcToast({
+                  icon: '✔',
+                  title: '偏好已同步',
+                  desc: '账户已记住「' + themeName(theme) + '」模式。',
+                  autoHideMs: 3000
+                });
+              } else {
+                showMcToast({
+                  icon: '✖',
+                  title: '保存失败',
+                  desc: err || '请稍后再试。',
+                  autoHideMs: 3600
+                });
+              }
+            });
+            return true;
+          }
+        },
+        {
+          text: '仅本机',
+          cls: 'mute',
+          onClick: function () {
+            if (lastStatus && lastStatus.prefTheme) writePrefAck(user, lastStatus.prefTheme);
+          }
+        }
+      ]
+    });
+  }
+
+  /** 登录后：账户里有偏好、且和这台设备不一致 → 滑出来问一次是否套用 */
+  function maybeAskUsePref(data) {
+    if (prefPrompted) return;
+    var user = data && data.loggedIn ? String(data.username || '') : '';
+    if (!user) return;
+    var saved = data.prefTheme;
+    if (saved !== 'light' && saved !== 'dark') return;
+    var cur = currentTheme();
+    if (saved === cur) { writePrefAck(user, saved); return; }
+    if (readPrefAck(user) === saved) return;   // 这台设备已经对这个值做过选择
+    prefPrompted = true;
+    showMcToast({
+      icon: '⚙',
+      title: '账户偏好设置',
+      desc: '你的账户保存了「' + themeName(saved) + '」模式，这台设备现在是「' + themeName(cur) + '」。要使用账户里的偏好吗？',
+      autoHideMs: 15000,
+      actions: [
+        {
+          text: '使用账户偏好',
+          cls: 'primary',
+          onClick: function () {
+            applyTheme(saved, true);
+            writePrefAck(user, saved);
+            showMcToast({
+              icon: saved === 'light' ? '☀' : '☾',
+              title: '已套用账户偏好',
+              desc: '现在是「' + themeName(saved) + '」模式。',
+              autoHideMs: 2800
+            });
+          }
+        },
+        {
+          text: '保持这台设备',
+          cls: 'mute',
+          onClick: function () { writePrefAck(user, saved); }
+        }
+      ]
+    });
   }
 
   function makeThemeBtn(cls, id) {
@@ -787,6 +1024,9 @@
     removeFloatThemeBtn();
     document.body.insertBefore(bar, document.body.firstChild);
     syncThemeButtons(currentTheme());
+    // 记录本次状态；顺便判断要不要问「是否套用账户偏好」（每页只问一次）
+    lastStatus = data;
+    maybeAskUsePref(data);
 
     // 与服务端重新对齐：只有真的 blocked 才弹窗
     if (acc.state === 'blocked') {

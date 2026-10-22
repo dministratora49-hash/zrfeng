@@ -599,3 +599,37 @@ html[data-theme="light"] .file-card .fc-btn {
 
 /* ---------- 21. 赞助支付页（sponsorship/alipay、wechatpay） ---------- */
 html[data-theme="light"] .desc { color: var(--lt-muted); }
+
+/* ---------- 22. 右侧滑出提示（账户偏好询问），亮色版外观 ---------- */
+html[data-theme="light"] #dsh-slide-toast {
+  background: rgba(255, 255, 255, .97);
+  border-color: var(--lt-line-2);
+  box-shadow: 0 10px 30px rgba(12, 60, 40, .16);
+  color: var(--lt-fg);
+}
+html[data-theme="light"] #dsh-slide-toast .sl-ico {
+  background: rgba(102, 204, 255, .14);
+  border-color: rgba(102, 204, 255, .45);
+  color: var(--lt-accent);
+}
+html[data-theme="light"] #dsh-slide-toast .sl-t { color: var(--lt-accent); }
+html[data-theme="light"] #dsh-slide-toast .sl-d { color: var(--lt-muted); }
+html[data-theme="light"] #dsh-slide-toast .sl-acts button {
+  color: var(--lt-accent);
+  border-color: var(--lt-line-2);
+  background: rgba(102, 204, 255, .10);
+}
+html[data-theme="light"] #dsh-slide-toast .sl-acts button:hover {
+  background: rgba(102, 204, 255, .20);
+  border-color: rgba(102, 204, 255, .75);
+}
+html[data-theme="light"] #dsh-slide-toast .sl-acts button.primary {
+  background: linear-gradient(135deg, #66ccff, #48bdea);
+  border-color: transparent;
+  color: #06222e;
+}
+html[data-theme="light"] #dsh-slide-toast .sl-acts button.mute {
+  color: var(--lt-muted);
+  border-color: rgba(90, 180, 224, .40);
+  background: transparent;
+}

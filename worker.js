@@ -402,6 +402,30 @@ async function putUser(env, user) {
   if (user.email) await env.USERS.put('email:' + user.email, user.username);
 }
 
+/* ---------------- 账户偏好（跨设备同步用，目前只有亮/暗色主题） ----------------
+ * 单独用一个 pref:<用户名> 键，绝不改动 user: 记录 ——
+ * 这样写偏好永远碰不到密码、邮箱、权限这些字段。
+ */
+function prefKey(username) {
+  return 'pref:' + String(username || '').trim().toLowerCase();
+}
+
+async function getPref(env, username) {
+  const key = prefKey(username);
+  if (key === 'pref:') return null;
+  const raw = await env.USERS.get(key, 'json');
+  return raw && typeof raw === 'object' ? raw : null;
+}
+
+async function putPref(env, username, patch) {
+  const key = prefKey(username);
+  if (key === 'pref:') return null;
+  const cur = (await env.USERS.get(key, 'json')) || {};
+  const next = Object.assign({}, cur, patch || {}, { at: Date.now() });
+  await env.USERS.put(key, JSON.stringify(next));
+  return next;
+}
+
 /** 按账号名或邮箱找到用户 */
 async function findByLogin(env, account) {
   const a = String(account || '').trim().toLowerCase();
@@ -3570,6 +3594,14 @@ export default {
             username: u ? u.username : s ? s.username : null,
             isAdmin: !!(u && isAdminRole(roleOf(u))),
             account: accountStatus(u),
+            // 账户偏好（亮/暗色）：换设备登录时前端据此询问是否套用。
+            // 只给已登录用户，且只回传主题名，不含任何其它信息。
+            prefTheme: await (async () => {
+              const un = u ? u.username : s ? s.username : null;
+              if (!un) return null;
+              const p = await getPref(env, un);
+              return p && (p.theme === 'light' || p.theme === 'dark') ? p.theme : null;
+            })(),
             // 账户警告：只有登录用户才有；没看过的警告前端会弹一次
             warning: u ? await warningState(env, u.username) : null,
             // 维护时段：所有页面据此决定是否弹出「正在维护服务」。
@@ -3584,6 +3616,32 @@ export default {
               return st;
             })(),
           }, 200, devTouched ? { 'Set-Cookie': deviceCookie(randomHex(16)) } : undefined);
+        }
+        // 账户偏好：读写当前登录用户的主题偏好
+        if (path === '/api/pref' && method === 'GET') {
+          const s = await getSession(env, request);
+          if (!s) return json({ ok: false, error: '未登录' }, 401);
+          const p = await getPref(env, s.username);
+          return json({
+            ok: true,
+            pref: p && (p.theme === 'light' || p.theme === 'dark')
+              ? { theme: p.theme, at: p.at || null }
+              : null,
+          });
+        }
+        if (path === '/api/pref' && method === 'POST') {
+          const s = await getSession(env, request);
+          if (!s) return json({ ok: false, error: '未登录' }, 401);
+          let body = {};
+          try { body = await request.json(); } catch (e) { body = {}; }
+          const theme = String((body && body.theme) || '');
+          if (theme !== 'light' && theme !== 'dark') {
+            return json({ ok: false, error: 'theme 只能是 light 或 dark' }, 400);
+          }
+          const cur = await getPref(env, s.username);
+          // 和已存的一样就不写 KV：省写入次数，也避免无意义的更新时间
+          const p = cur && cur.theme === theme ? cur : await putPref(env, s.username, { theme });
+          return json({ ok: true, pref: { theme: p.theme, at: p.at || Date.now() } });
         }
         if (path === '/api/downloads' && method === 'GET') {
           return await handleDownloads(env, request);
