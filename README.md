@@ -14,7 +14,7 @@
 | 📢 通知板块 | [www.zrfeng.top/notice/](https://www.zrfeng.top/notice/) | 站点公告 · 维护消息 · 我的消息 |
 | 🧭 导航 | [www.zrfeng.top/guide/](https://www.zrfeng.top/guide/) | 上网起点 |
 | ⏰ 原子钟 | [www.zrfeng.top/time/](https://www.zrfeng.top/time/) | NTP同步·毫秒级·自动校准 |
-| 👤 关于 | [www.zrfeng.top/aboutme/](https://www.zrfeng.top/aboutme/) | 开发者信息 |
+| 👤 关于我们 | [www.zrfeng.top/aboutus/](https://www.zrfeng.top/aboutus/) | 项目组信息 |
 | ☕ 赞助 | [www.zrfeng.top/sponsorship/](https://www.zrfeng.top/sponsorship/) | 支持我 |
 | ✉️ 联系 | [www.zrfeng.top/contact/](https://www.zrfeng.top/contact/) | 联系邮箱 |
 | 📚 资源库 | [www.zrfeng.top/file/](https://www.zrfeng.top/file/) | 资源聚合与分类 |
@@ -375,7 +375,7 @@ python -m http.server 8000
 
 ```
 ├── index.html        # 主站
-├── aboutme/          # 关于开发者
+├── aboutus/          # 关于我们
 ├── guide/            # 导航页
 ├── notice/           # 通知板块（站点公告 · 我的消息 · 我的工单）
 ├── time/             # NTP 原子钟

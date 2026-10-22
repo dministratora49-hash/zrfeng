@@ -822,7 +822,7 @@
    * 前缀匹配。「联系我们」故意不在这里 —— 它永远不弹任何弹窗。
    */
   var PAGE_PATHS = [
-    ['/aboutme', 'aboutme'],
+    ['/aboutus', 'aboutus'],
     ['/time', 'time'],
     ['/guide', 'guide'],
     ['/notice', 'notice'],
