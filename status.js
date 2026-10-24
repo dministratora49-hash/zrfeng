@@ -559,7 +559,34 @@
     if (m) m.remove();
   }
 
+  /** VPN / 代理被封：文案与普通封禁不同，第一行英文标题、第二行中文说明 */
+  var PROXY_MSG = 'You are blocked!\n检测到VPN或代理，您的账户已被封停，现在请立刻关闭VPN或代理，请联系支持人员';
+
+  function showProxyBlock(raw) {
+    if (document.getElementById(BAN_ID)) return;
+    var lines = String(raw || PROXY_MSG).split('\n').filter(function (x) { return x.trim(); });
+    var title = lines.length > 1 ? lines.shift() : 'You are blocked!';
+    var body = lines.join(' ') || '检测到VPN或代理，您的账户已被封停，现在请立刻关闭VPN或代理，请联系支持人员';
+    var mask = document.createElement('div');
+    mask.id = BAN_ID;
+    mask.innerHTML =
+      '<div class="bn-card">' +
+      '<h2>' + escHtml(title) + '</h2>' +
+      '<p>' + escHtml(body) + '</p>' +
+      '<div class="bn-acts">' +
+      '<a href="/contact/">联系我们</a>' +
+      '<button type="button" id="dsh-ban-out">关闭</button>' +
+      '</div></div>';
+    document.body.appendChild(mask);
+    var out = document.getElementById('dsh-ban-out');
+    if (out) out.onclick = function () { hideBanned(); };
+  }
+  // 登录 / 注册页拿到 403 时直接调它弹出这句话
+  window.zrfengProxyBlock = showProxyBlock;
+
   function showBanned(acc) {
+    // 被 VPN / 代理检测封掉的，用专门的文案
+    if (acc && acc.banReason === 'proxy') { showProxyBlock(PROXY_MSG); return; }
     if (document.getElementById(BAN_ID)) return;
     // 用**本地时间**显示封禁时段（服务端只给时间戳），支持「期限封禁」与「永久封禁」
     var meta = '';

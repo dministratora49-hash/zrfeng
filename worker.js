@@ -512,6 +512,136 @@ function banState(user, now) {
   };
 }
 
+/* ========================== VPN / 代理检测 ==========================
+ * Cloudflare 会在 request.cf 里给出客户端 IP 的 ASN 与运营商名，据此判断
+ * 这条线路是不是机房 / 代理：命中 ASN 黑名单，或运营商名里带 VPN / Proxy /
+ * Hosting 等关键词，都算代理。可选再叠加第三方 IP 情报接口。
+ *
+ * 用环境变量 VPN_BLOCK 控制：默认开启；设为 off / false / 0 则整体关闭。
+ * VPN_BLOCK_CF_WARP=on 时把 Cloudflare WARP(AS13335) 也算作代理（默认不算，
+ * 因为 1.1.1.1 这类加速器正常用户很多，误封代价太大）。
+ */
+const PROXY_BLOCK_MSG =
+  'You are blocked!\n检测到VPN或代理，您的账户已被封停，现在请立刻关闭VPN或代理，请联系支持人员';
+
+/** 常见机房 / VPS / VPN 出口的 ASN */
+const PROXY_ASNS = new Set([
+  14061, 46652,          // DigitalOcean
+  63949,                 // Linode
+  20473, 64515,          // Vultr / Choopa
+  24940, 213230,         // Hetzner
+  16276,                 // OVH
+  51167, 141995,         // Contabo
+  28753, 60781,          // Leaseweb
+  9009,                  // M247
+  16509, 14618, 8987,    // Amazon AWS
+  396982, 19527,         // Google Cloud
+  8075, 8068, 8069,      // Microsoft Azure
+  31898,                 // Oracle Cloud
+  45102, 37963,          // 阿里云
+  132203, 45090,         // 腾讯云
+  55990, 136907,         // 华为云
+  12876,                 // Scaleway
+  210644,                // Aeza
+  44477,                 // PQ Hosting
+  51852,                 // Private Layer
+  40676,                 // Psychz
+  46844,                 // Sharktech
+  36352,                 // ColoCrossing
+  54290,                 // Hostwinds
+  204548,                // Kamatera
+  8560,                  // IONOS
+  197540,                // Netcup
+  49505, 50340,          // Selectel / Hostkey
+  62240,                 // Clouvider
+]);
+
+/** 运营商名里出现这些词，基本就是机房或商业 VPN 线路 */
+const PROXY_ORG_RE = /(vpn|proxy|proxies|hosting|dedicat|datacenter|data ?center|colo(cation)?|vps|cloud|anonym|privacy|tunnel|socks|shadowsocks|shadowsocksr|wireguard|nordvpn|expressvpn|surfshark|protonvpn|mullvad|windscribe|ipvanish|cyberghost|purevpn|vyprvpn|astrill|tunnelbear|private internet access|tor exit|torexit)/i;
+
+/** 这些组织本身就承载海量正常用户，关键词命中也放行（避免误杀一整个 CDN） */
+function isBenignOrg(org) {
+  return /^(cloudflare|fastly|akamai)/i.test(String(org || ''));
+}
+
+function vpnBlockOn(env) {
+  const v = String((env && env.VPN_BLOCK) || '').trim().toLowerCase();
+  return !(v === 'off' || v === 'false' || v === '0');
+}
+
+/**
+ * 判断这次请求是不是走 VPN / 代理。
+ * 没有 request.cf（本地开发、非 Cloudflare 环境）时一律放行，宁可漏判不误封。
+ */
+async function detectProxy(request, env) {
+  if (!vpnBlockOn(env)) return { detected: false };
+  const cf = request.cf;
+  if (!cf) return { detected: false };
+
+  const ip = request.headers.get('CF-Connecting-IP') || '';
+  const asn = Number(cf.asn) || 0;
+  const org = String(cf.asOrganization || '');
+
+  // Cloudflare WARP：默认不算代理，除非显式要求
+  const warpOn = /^(on|true|1)$/i.test(String((env && env.VPN_BLOCK_CF_WARP) || ''));
+  if (asn === 13335) {
+    return warpOn
+      ? { detected: true, via: 'warp', asn, org, ip }
+      : { detected: false, asn, org, ip };
+  }
+
+  if (asn && PROXY_ASNS.has(asn)) return { detected: true, via: 'asn', asn, org, ip };
+  if (org && !isBenignOrg(org) && PROXY_ORG_RE.test(org)) {
+    return { detected: true, via: 'org', asn, org, ip };
+  }
+
+  // 可选：第三方 IP 情报（IPINTEL_URL 里用 {ip} 占位，返回 JSON 含 proxy/vpn/isProxy）
+  if (env && env.IPINTEL_URL && ip) {
+    try {
+      const url = String(env.IPINTEL_URL).replace('{ip}', encodeURIComponent(ip));
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), 1500);
+      const res = await fetch(url, { signal: ctl.signal, headers: { accept: 'application/json' } });
+      clearTimeout(timer);
+      if (res.ok) {
+        const j = await res.json();
+        const hit = j && (j.proxy === true || j.vpn === true || j.isProxy === true
+          || Number(j.fraud_score) >= 80 || Number(j.risk) >= 80);
+        if (hit) return { detected: true, via: 'intel', asn, org, ip };
+      }
+    } catch (e) {
+      // 情报接口异常时放行：不能因为第三方挂了就把用户全封了
+    }
+  }
+  return { detected: false, asn, org, ip };
+}
+
+/**
+ * 检测到代理 → 立刻永久封号（并踢掉全部会话）。
+ * 已经有封禁记录的不覆盖，保留管理员原先写下的原因。
+ * 管理员不参与封号，避免自己出差连酒店 / 机场网络时被锁在门外。
+ */
+async function banForProxy(env, user, hit) {
+  if (!user || !user.username) return false;
+  if (isAdminRole(roleOf(user))) return false;
+  const now = Date.now();
+  if (banState(user, now).banned) return false;
+
+  user.banned = true;
+  user.bannedAt = now;
+  user.bannedBy = 'system:vpn';
+  user.banReason = 'proxy';
+  user.banAsn = (hit && hit.asn) || null;
+  user.banOrg = (hit && hit.org) || null;
+  user.banIp = (hit && hit.ip) || null;
+  delete user.banUntil;
+  delete user.banFrom;
+
+  await putUser(env, user);
+  await deleteUserSessions(env, user.username);
+  return true;
+}
+
 /**
  * 计算账户状态。前端状态栏完全依赖这个结果。
  *
@@ -564,6 +694,9 @@ function accountStatus(user) {
       banRemainingMs: ban.remainingMs,
       bannedAt: user.bannedAt || null,
       bannedBy: user.bannedBy || null,
+      // 'proxy' = 被 VPN/代理检测封的，前端据此显示专门的文案
+      banReason: user.banReason || null,
+      banOrg: user.banOrg || null,
     };
   }
 
@@ -858,6 +991,19 @@ async function handleRegister(env, request, ip) {
   await putUser(env, user);
   await env.USERS.delete('code:' + email);
 
+  // 注册时检测到 VPN / 代理：账号照样建出来，但立刻永久封停，不给会话
+  const proxy = await detectProxy(request, env);
+  if (proxy.detected) {
+    await banForProxy(env, user, proxy);
+    return json({
+      ok: false,
+      blocked: true,
+      proxy: true,
+      message: PROXY_BLOCK_MSG,
+      account: accountStatus(user),
+    }, 403);
+  }
+
   const { cookie } = await createSession(env, user);
   return json(
     { ok: true, message: '注册成功', user: { username, email, isAdmin: false } },
@@ -890,6 +1036,24 @@ async function handleLogin(env, request, ip) {
   const hash = await hashPassword(password, user.salt);
   if (!timingSafeEqual(hash, user.hash)) {
     return json({ ok: false, message: '账号或密码错误' }, 401);
+  }
+
+  // 登录时检测到 VPN / 代理：直接封号并拦下。
+  // 管理员豁免（否则自己出差连酒店网络就被锁在门外）；
+  // 若账号早已因别的原因被封，保持原来的提示，不覆盖成 VPN 文案。
+  const proxy = await detectProxy(request, env);
+  if (proxy.detected && !isAdminRole(roleOf(user))) {
+    const alreadyBanned = banState(user, Date.now()).banned;
+    const reportProxy = alreadyBanned ? user.banReason === 'proxy' : await banForProxy(env, user, proxy);
+    if (reportProxy) {
+      return json({
+        ok: false,
+        blocked: true,
+        proxy: true,
+        message: PROXY_BLOCK_MSG,
+        account: accountStatus((await getUser(env, user.username)) || user),
+      }, 403);
+    }
   }
 
   // 新设备登录验证：这台设备从没在该账户上成功登录过 → 需要额外确认身份
@@ -2553,6 +2717,10 @@ async function handleAdminBan(env, request) {
     delete user.banUntil;
     delete user.bannedAt;
     delete user.bannedBy;
+    delete user.banReason;
+    delete user.banAsn;
+    delete user.banOrg;
+    delete user.banIp;
     human = '已解封账户 ' + username;
   } else {
     // 起止时间：可只给结束时间（从现在开始），也可给未来开始时间

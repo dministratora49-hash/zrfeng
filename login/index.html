@@ -537,6 +537,13 @@
       // 没有邮箱的账户：改用「管理员给的密钥」确认身份
       show(msg, r.data.message || '我们无法认证你的身份，请输入管理员给你的密钥', 'err');
       deviceKeyStep(r.data.ticket, btn);
+    } else if (r.data.blocked) {
+      // 检测到 VPN / 代理：账号已被封停，弹出专用提示
+      if (window.zrfengProxyBlock) window.zrfengProxyBlock(r.data.message);
+      show(msg, '检测到VPN或代理，账户已被封停', 'err');
+      btn.disabled = false;
+      btn.textContent = '登 录';
+      if (!cfg.turnstile) loadCaptcha('login');
     } else if (r.data.needDeviceVerify) {
       // 新设备：账号密码已通过，还要输一次发到邮箱的验证码
       show(msg, r.data.message || '这是一台新设备，请输入邮箱验证码', 'ok');
@@ -803,6 +810,13 @@
     if (r.data.ok) {
       show(msg, '注册成功，正在跳转…', 'ok');
       setTimeout(function () { location.href = SITE + '/'; }, 700);
+    } else if (r.data.blocked) {
+      // 注册时检测到 VPN / 代理：账号已建但立即封停
+      if (window.zrfengProxyBlock) window.zrfengProxyBlock(r.data.message);
+      show(msg, '检测到VPN或代理，账户已被封停', 'err');
+      btn.disabled = false;
+      btn.textContent = '注 册';
+      if (!cfg.turnstile) loadCaptcha('reg');
     } else {
       show(msg, r.data.message || '注册失败', 'err');
       btn.disabled = false;
