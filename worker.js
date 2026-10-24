@@ -634,6 +634,26 @@ function vpnBlockOn(env) {
   return !(v === 'off' || v === 'false' || v === '0');
 }
 
+/** 未识别线路的记账本（vpn:seen），用于事后发现新的机场 / VPN 线路 */
+async function noteSeenLine(env, asn, org) {
+  if (!asn && !org) return;
+  try {
+    const cur = (await env.USERS.get('vpn:seen', 'json')) || {};
+    const key = String(asn || 0) + '|' + String(org || '').slice(0, 60);
+    const rec = cur[key] || { asn: asn || 0, org: org || '', count: 0, firstAt: Date.now() };
+    rec.count = (rec.count || 0) + 1;
+    rec.lastAt = Date.now();
+    cur[key] = rec;
+    // 只保留最近 200 条，避免无限增长
+    const keys = Object.keys(cur);
+    if (keys.length > 200) {
+      keys.sort((a, b) => (cur[b].lastAt || 0) - (cur[a].lastAt || 0));
+      for (const k of keys.slice(200)) delete cur[k];
+    }
+    await env.USERS.put('vpn:seen', JSON.stringify(cur));
+  } catch (e) { /* 记账失败不影响判定 */ }
+}
+
 /**
  * 额外规则放 KV（vpn:rules = {asns:[], keywords:[]}），
  * 发现新的机场 / VPN 线路时不用改代码重新部署，管理员调接口加一条即可。
@@ -3906,6 +3926,7 @@ export default {
             hint = '这条线路目前没有被判定为代理。请把下面 asn 与 org 两行原样发给管理员，'
               + '即可把它加进名单（无需重新部署）。';
           }
+          if (verdict === 'clean') await noteSeenLine(env, asn, org);
           return json({
             ok: true,
             ip: request.headers.get('CF-Connecting-IP') || '',
@@ -3936,7 +3957,38 @@ export default {
           if (guard.error) return guard.error;
           const cur = (await env.USERS.get('vpn:rules', 'json')) || { asns: [], keywords: [] };
           if (method === 'GET') {
-            return json({ ok: true, rules: { asns: cur.asns || [], keywords: cur.keywords || [], allowAsns: cur.allowAsns || [] } });
+            const seen = (await env.USERS.get('vpn:seen', 'json')) || {};
+            const seenList = Object.values(seen)
+              .sort((a, b) => (b.lastAt || 0) - (a.lastAt || 0))
+              .slice(0, 50);
+            // 地址栏直接加规则：?addAsn=14061&keyword=xxx&allowAsn=4134
+            const q = url.searchParams;
+            const hasParam = ['addAsn', 'keyword', 'allowAsn', 'removeAsn'].some((k) => q.has(k));
+            if (hasParam) {
+              const asns0 = new Set((cur.asns || []).map(Number).filter((n) => n > 0));
+              const kws0 = new Set((cur.keywords || []).map((k) => String(k).trim().toLowerCase()).filter(Boolean));
+              const allow0 = new Set((cur.allowAsns || []).map(Number).filter((n) => n > 0));
+              if (q.has('addAsn')) {
+                const n = Number(q.get('addAsn'));
+                if (!Number.isFinite(n) || n <= 0) return json({ ok: false, message: 'addAsn 不合法' }, 400);
+                asns0.add(n);
+              }
+              if (q.has('removeAsn')) asns0.delete(Number(q.get('removeAsn')));
+              if (q.has('allowAsn')) {
+                const n = Number(q.get('allowAsn'));
+                if (!Number.isFinite(n) || n <= 0) return json({ ok: false, message: 'allowAsn 不合法' }, 400);
+                allow0.add(n);
+              }
+              if (q.has('keyword')) {
+                const t = String(q.get('keyword')).trim().toLowerCase();
+                if (t.length < 3) return json({ ok: false, message: 'keyword 至少 3 个字符' }, 400);
+                kws0.add(t);
+              }
+              const saved = { asns: [...asns0], keywords: [...kws0], allowAsns: [...allow0], at: Date.now(), by: guard.session.username };
+              await env.USERS.put('vpn:rules', JSON.stringify(saved));
+              return json({ ok: true, saved: true, rules: { asns: saved.asns, keywords: saved.keywords, allowAsns: saved.allowAsns }, seen: seenList });
+            }
+            return json({ ok: true, rules: { asns: cur.asns || [], keywords: cur.keywords || [], allowAsns: cur.allowAsns || [] }, seen: seenList });
           }
           const body = await readJson(request);
           const asns = new Set((cur.asns || []).map(Number).filter((n) => n > 0));

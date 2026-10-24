@@ -121,6 +121,27 @@
           }
         })
         .catch(function () { $('verdict').textContent = '自检失败，请稍后重试'; });
+
+      // 管理员额外说明：看得见未识别线路、也能直接在地址栏加规则
+      fetch('/api/status', { headers: { accept: 'application/json' } })
+        .then(function (r) { return r.json(); })
+        .then(function (st) {
+          if (!st || !st.isAdmin) return;
+          var box = document.createElement('p');
+          box.className = 'hint';
+          box.style.borderTop = '1px dashed rgba(127,168,147,.35)';
+          box.style.paddingTop = '12px';
+          var a1 = document.createElement('a');
+          a1.href = '/api/admin/vpn-rules';
+          a1.textContent = '查看未被识别的线路';
+          a1.style.color = 'inherit';
+          box.appendChild(document.createTextNode('管理员：'));
+          box.appendChild(a1);
+          box.appendChild(document.createTextNode('（JSON，含最近 50 条）；加规则直接在地址栏追加 ?addAsn=ASN编号 即可立刻生效，误封用 ?allowAsn=ASN编号 放行。'));
+          var acts = document.querySelector('.acts');
+          acts.parentNode.insertBefore(box, acts);
+        })
+        .catch(function () {});
     })();
   </script>
 </body>
