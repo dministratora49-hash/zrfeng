@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script>/* 尽早落地亮/暗色主题，避免刷新时先闪一下深色（切换按钮在顶部状态栏里） */(function(){var t='dark';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
+  <title>线路自检 · zrfeng.top</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family:"Microsoft YaHei","PingFang SC",sans-serif;
+      background:linear-gradient(135deg,#0a101c 0%,#0d2818 100%);
+      min-height:100vh; display:flex; align-items:center; justify-content:center;
+      padding:20px; color:#e8f0f0;
+    }
+    .card {
+      background:rgba(10,16,28,.92); border:1px solid rgba(0,255,170,.15);
+      border-radius:16px; max-width:560px; width:100%; padding:28px 24px;
+      box-shadow:0 0 40px rgba(0,255,170,.06);
+    }
+    header { text-align:center; margin-bottom:18px; }
+    h1 { color:#00ffaa; font-size:21px; margin-bottom:6px; }
+    header p { color:#8899aa; font-size:12.5px; }
+    .verdict {
+      text-align:center; padding:14px; border-radius:12px; margin-bottom:16px;
+      font-size:17px; font-weight:700; letter-spacing:1px;
+      border:1px solid rgba(0,255,170,.3); background:rgba(0,255,170,.08); color:#00ffaa;
+    }
+    .verdict.bad { border-color:rgba(255,85,85,.45); background:rgba(255,60,60,.1); color:#ff6b6b; }
+    .verdict.wait { border-color:rgba(160,170,180,.3); background:rgba(160,170,180,.08); color:#a9b6bd; }
+    table { width:100%; border-collapse:collapse; margin-bottom:14px; }
+    td { padding:7px 4px; font-size:13px; border-bottom:1px solid rgba(0,255,170,.1); }
+    td:first-child { color:#7fa893; width:36%; }
+    td:last-child { color:#e8f5ee; word-break:break-all; }
+    .hint { font-size:13px; line-height:1.75; color:#cdd8d8; margin-bottom:14px; }
+    .copyline {
+      display:flex; gap:8px; align-items:center; margin-bottom:16px;
+      background:rgba(0,255,170,.06); border:1px dashed rgba(0,255,170,.3);
+      border-radius:10px; padding:10px 12px;
+    }
+    .copyline code { flex:1; font-size:12.5px; color:#00ffaa; word-break:break-all; }
+    button {
+      font-family:inherit; font-size:12.5px; cursor:pointer; color:#00ffaa;
+      background:rgba(0,255,170,.08); border:1px solid rgba(0,255,170,.35);
+      border-radius:20px; padding:6px 14px; transition:background .2s;
+    }
+    button:hover { background:rgba(0,255,170,.16); }
+    .acts { text-align:center; }
+    .acts a {
+      display:inline-block; padding:10px 30px; border:1px solid rgba(0,255,170,.3);
+      border-radius:24px; color:#00ffaa; text-decoration:none; font-size:14px;
+    }
+    .acts a:hover { background:rgba(0,255,170,.08); }
+    footer { text-align:center; color:#5a6a7a; font-size:12px; margin-top:18px; }
+  </style>
+<link rel="stylesheet" href="/theme.css">
+</head>
+<body>
+  <div class="card">
+    <header>
+      <h1>线路自检</h1>
+      <p>看看 Cloudflare 眼里你这条线路落在哪里</p>
+    </header>
+
+    <div class="verdict wait" id="verdict">检测中…</div>
+
+    <table>
+      <tr><td>ASN</td><td id="v-asn">—</td></tr>
+      <tr><td>运营商</td><td id="v-org">—</td></tr>
+      <tr><td>国家 / 地区</td><td id="v-geo">—</td></tr>
+      <tr><td>接入节点</td><td id="v-colo">—</td></tr>
+      <tr><td>你的出口 IP</td><td id="v-ip">—</td></tr>
+    </table>
+
+    <p class="hint" id="hint">正在读取…</p>
+
+    <div class="copyline" id="copyline" style="display:none">
+      <code id="copytxt">—</code>
+      <button type="button" id="copybtn">复制</button>
+    </div>
+
+    <div class="acts"><a href="https://www.zrfeng.top/">← 返回首页</a></div>
+    <footer>© 2026 zrfeng.top · 自然风，正在吹 🍃</footer>
+  </div>
+  <script src="/status.js" defer></script>
+  <script>
+    (function () {
+      function $(id) { return document.getElementById(id); }
+      fetch('/api/netcheck', { headers: { accept: 'application/json' } })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          var v = $('verdict');
+          if (!d || !d.ok) { v.textContent = '自检失败'; return; }
+          v.className = 'verdict ' + (d.verdict === 'proxy' ? 'bad' : '');
+          v.textContent = d.verdict === 'proxy'
+            ? '已被判定为 VPN / 代理（' + (d.via || '') + '）'
+            : '未被判定为代理';
+          $('v-asn').textContent = d.asn ? 'AS' + d.asn : '—';
+          $('v-org').textContent = d.org || '—';
+          var geo = [d.country, d.region, d.city].filter(Boolean).join(' · ') || '—';
+          $('v-geo').textContent = geo;
+          $('v-colo').textContent = d.colo || '—';
+          $('v-ip').textContent = d.ip || '—';
+          $('hint').textContent = d.hint || '';
+          if (d.verdict !== 'proxy') {
+            var line = 'AS' + (d.asn || '?') + ' · ' + (d.org || '?');
+            $('copytxt').textContent = line;
+            $('copyline').style.display = 'flex';
+            $('copybtn').onclick = function () {
+              var self = this;
+              var done = function () { self.textContent = '已复制'; setTimeout(function () { self.textContent = '复制'; }, 1500); };
+              if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(line).then(done, function () {});
+              } else {
+                var t = document.createElement('textarea');
+                t.value = line; document.body.appendChild(t); t.select();
+                try { document.execCommand('copy'); done(); } catch (e) {}
+                document.body.removeChild(t);
+              }
+            };
+          }
+        })
+        .catch(function () { $('verdict').textContent = '自检失败，请稍后重试'; });
+    })();
+  </script>
+</body>
+</html>

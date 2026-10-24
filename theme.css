@@ -639,3 +639,28 @@ html[data-theme="light"] .logo { border-color: rgba(102, 204, 255, .30); box-sha
 html[data-theme="light"] .founder { border-color: rgba(102, 204, 255, .28); }
 html[data-theme="light"] .team { color: var(--lt-fg); }
 html[data-theme="light"] .team-sub { color: var(--lt-muted); }
+
+/* ---------- 24. 线路自检页（netcheck），亮色版外观 ---------- */
+html[data-theme="light"] .verdict {
+  border-color: rgba(102, 204, 255, .45);
+  background: rgba(102, 204, 255, .12);
+  color: #1c4f6e;
+}
+html[data-theme="light"] .verdict.bad {
+  border-color: rgba(220, 60, 60, .45);
+  background: rgba(220, 60, 60, .08);
+  color: #b3261e;
+}
+html[data-theme="light"] .verdict.wait {
+  border-color: var(--lt-line-2);
+  background: var(--lt-tint);
+  color: var(--lt-muted);
+}
+html[data-theme="light"] table td { border-bottom-color: var(--lt-line); color: var(--lt-fg); }
+html[data-theme="light"] table td:first-child { color: var(--lt-muted); }
+html[data-theme="light"] .copyline {
+  background: rgba(102, 204, 255, .08);
+  border-color: rgba(90, 180, 224, .45);
+}
+html[data-theme="light"] .copyline code { color: #1c4f6e; }
+html[data-theme="light"] .hint { color: var(--lt-fg2); }

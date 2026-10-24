@@ -554,6 +554,10 @@ const PROXY_ASNS = new Set([
   197540,                // Netcup
   49505, 50340,          // Selectel / Hostkey
   62240,                 // Clouvider
+  25820,                 // IT7 Networks（搬瓦工等）
+  53667,                 // FranTech / BuyVM
+  21859,                 // Zenlayer
+  3214,                  // xTom
 ]);
 
 /** 运营商名里出现这些词，基本就是机房或商业 VPN 线路 */
@@ -567,6 +571,28 @@ function isBenignOrg(org) {
 function vpnBlockOn(env) {
   const v = String((env && env.VPN_BLOCK) || '').trim().toLowerCase();
   return !(v === 'off' || v === 'false' || v === '0');
+}
+
+/**
+ * 额外规则放 KV（vpn:rules = {asns:[], keywords:[]}），
+ * 发现新的机场 / VPN 线路时不用改代码重新部署，管理员调接口加一条即可。
+ */
+async function getProxyRules(env) {
+  const out = { asns: new Set(), keywords: [] };
+  try {
+    const raw = await env.USERS.get('vpn:rules', 'json');
+    if (raw && typeof raw === 'object') {
+      for (const a of raw.asns || []) {
+        const n = Number(a);
+        if (Number.isFinite(n) && n > 0 && n <= 4294967295) out.asns.add(n);
+      }
+      for (const k of raw.keywords || []) {
+        const t = String(k || '').trim().toLowerCase();
+        if (t.length >= 3 && t.length <= 40) out.keywords.push(t);
+      }
+    }
+  } catch (e) { /* KV 异常就当没有额外规则 */ }
+  return out;
 }
 
 /**
@@ -591,6 +617,15 @@ async function detectProxy(request, env) {
   }
 
   if (asn && PROXY_ASNS.has(asn)) return { detected: true, via: 'asn', asn, org, ip };
+
+  // KV 里追加的规则（新发现的机场 / VPN 线路）
+  const extra = await getProxyRules(env);
+  if (asn && extra.asns.has(asn)) return { detected: true, via: 'kv-asn', asn, org, ip };
+  const orgLower = org.toLowerCase();
+  if (orgLower && extra.keywords.some((k) => orgLower.includes(k))) {
+    return { detected: true, via: 'kv-keyword', asn, org, ip };
+  }
+
   if (org && !isBenignOrg(org) && PROXY_ORG_RE.test(org)) {
     return { detected: true, via: 'org', asn, org, ip };
   }
@@ -3785,6 +3820,77 @@ export default {
             })(),
           }, 200, devTouched ? { 'Set-Cookie': deviceCookie(randomHex(16)) } : undefined);
         }
+        // 线路自检：把 Cloudflare 眼里「你是谁」原样回给调用者自己，
+        // 用来确认某个 VPN 线路到底落在哪个 ASN / 运营商上。
+        if (path === '/api/netcheck' && method === 'GET') {
+          const hit = await detectProxy(request, env);
+          const cf = request.cf || {};
+          const extra = await getProxyRules(env);
+          const asn = Number(cf.asn) || 0;
+          const org = String(cf.asOrganization || '');
+          let verdict = hit.detected ? 'proxy' : 'clean';
+          let hint;
+          if (hit.detected) {
+            hint = '这条线路已被判定为代理（命中方式：' + hit.via + '），注册/登录会被封号。';
+          } else if (asn === 13335) {
+            hint = '这是 Cloudflare WARP 出口，目前默认放行。若要一并封禁，开启 VPN_BLOCK_CF_WARP。';
+          } else {
+            hint = '这条线路目前没有被判定为代理。请把下面 asn 与 org 两行原样发给管理员，'
+              + '即可把它加进名单（无需重新部署）。';
+          }
+          return json({
+            ok: true,
+            ip: request.headers.get('CF-Connecting-IP') || '',
+            asn,
+            org,
+            country: cf.country || null,
+            region: cf.region || null,
+            city: cf.city || null,
+            colo: cf.colo || null,
+            httpProtocol: cf.httpProtocol || null,
+            tlsVersion: cf.tlsVersion || null,
+            vpnBlockEnabled: vpnBlockOn(env),
+            verdict,
+            via: hit.detected ? hit.via : null,
+            hint,
+            rules: {
+              staticAsns: PROXY_ASNS.size,
+              kvAsns: [...extra.asns],
+              kvKeywords: extra.keywords,
+            },
+          });
+        }
+
+        // 管理员：查看 / 追加 VPN 规则（不用重新部署就能加线路）
+        if (path === '/api/admin/vpn-rules' && (method === 'GET' || method === 'POST')) {
+          const guard = await requireAdmin(env, request);
+          if (guard.error) return guard.error;
+          const cur = (await env.USERS.get('vpn:rules', 'json')) || { asns: [], keywords: [] };
+          if (method === 'GET') {
+            return json({ ok: true, rules: { asns: cur.asns || [], keywords: cur.keywords || [] } });
+          }
+          const body = await readJson(request);
+          const asns = new Set((cur.asns || []).map(Number).filter((n) => n > 0));
+          const kws = new Set((cur.keywords || []).map((k) => String(k).trim().toLowerCase()).filter(Boolean));
+          if (body.asn !== undefined) {
+            const n = Number(body.asn);
+            if (!Number.isFinite(n) || n <= 0 || n > 4294967295) {
+              return json({ ok: false, message: 'asn 不合法' }, 400);
+            }
+            asns.add(n);
+          }
+          if (body.keyword !== undefined) {
+            const t = String(body.keyword).trim().toLowerCase();
+            if (t.length < 3 || t.length > 40) return json({ ok: false, message: 'keyword 需 3-40 字符' }, 400);
+            kws.add(t);
+          }
+          if (body.removeAsn !== undefined) asns.delete(Number(body.removeAsn));
+          if (body.removeKeyword !== undefined) kws.delete(String(body.removeKeyword).trim().toLowerCase());
+          const next = { asns: [...asns], keywords: [...kws], at: Date.now(), by: guard.session.username };
+          await env.USERS.put('vpn:rules', JSON.stringify(next));
+          return json({ ok: true, rules: { asns: next.asns, keywords: next.keywords } });
+        }
+
         // 账户偏好：读写当前登录用户的主题偏好
         if (path === '/api/pref' && method === 'GET') {
           const s = await getSession(env, request);
