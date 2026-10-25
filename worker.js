@@ -100,6 +100,10 @@ const NOTICE_PREFIX = 'notice:';
 /** 公告最多保留多少条，超出的从最旧的开始删 */
 const NOTICE_MAX_KEEP = 200;
 
+/** 公告列表分页：默认每页 20 条，前端可通过 ?limit= 调整（上限 100） */
+const NOTICE_PAGE_DEFAULT = 20;
+const NOTICE_PAGE_MAX = 100;
+
 /** 公告标题 / 正文的长度限制 */
 const NOTICE_TITLE_MAX = 80;
 const NOTICE_BODY_MAX = 2000;
@@ -2011,13 +2015,31 @@ async function pushNotification(env, owner, rec) {
   return id;
 }
 
-/** 公开公告列表：任何人都能看（含维护自动消息） */
+/**
+ * 公开公告列表：任何人都能看（含维护自动消息）。
+ * 分页由前端按 ?limit=&offset= 指定；不传就是第一页、每页 NOTICE_PAGE_DEFAULT 条。
+ * count / total 都是「一共有多少条」，不是「这一页返回了多少条」——
+ * 首页只取 notices[0]，靠它兜底不受分页影响。
+ */
 async function handleNotices(env, request) {
+  const url = new URL(request.url);
+  const rawLimit = Number(url.searchParams.get('limit'));
+  const rawOffset = Number(url.searchParams.get('offset'));
+  const limit = Number.isFinite(rawLimit) && rawLimit > 0
+    ? Math.min(Math.floor(rawLimit), NOTICE_PAGE_MAX)
+    : NOTICE_PAGE_DEFAULT;
+  const offset = Number.isFinite(rawOffset) && rawOffset > 0 ? Math.floor(rawOffset) : 0;
+
   const all = await listNotices(env, NOTICE_MAX_KEEP);
+  const page = all.slice(offset, offset + limit);
   return json({
     ok: true,
     count: all.length,
-    notices: all.slice(0, 50).map((n) => ({
+    total: all.length,
+    limit,
+    offset,
+    returned: page.length,
+    notices: page.map((n) => ({
       id: n.id,
       at: Number(n.at) || 0,
       title: String(n.title || ''),

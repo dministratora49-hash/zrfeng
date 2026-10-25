@@ -161,6 +161,23 @@
   .msg-line.ok { color: #00ff8c; }
   .msg-line.err { color: #ff7b7b; }
 
+  /* ---------- 公告分页 ---------- */
+  .pg {
+    display: none; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 10px; margin-top: 16px;
+    padding-top: 14px; border-top: 1px dashed rgba(0, 255, 140, 0.14);
+  }
+  .pg-info { font-size: 12px; color: #7fa893; font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .pg-acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .pg-size { font-size: 12px; color: #7fa893; display: flex; align-items: center; gap: 6px; }
+  .pg-size select {
+    padding: 5px 8px; border-radius: 8px; font-size: 12px; font-family: inherit;
+    border: 1px solid rgba(0, 255, 140, 0.25); background: rgba(0, 0, 0, 0.35);
+    color: #e8f5ee;
+  }
+  .pg-size select:focus { outline: none; border-color: rgba(0, 255, 140, 0.6); }
+  .btn[disabled] { opacity: .35; cursor: default; }
+
   .links { text-align: center; margin-top: 26px; font-size: 12px; }
   .links a { color: #7fa893; text-decoration: none; margin: 0 10px; }
   .links a:hover { color: #00ff8c; }
@@ -177,6 +194,22 @@
   <div class="card">
     <h2><span class="bar"></span>站点公告</h2>
     <div id="pubList"><div class="empty">正在加载…</div></div>
+    <div class="pg" id="pgBar">
+      <div class="pg-info" id="pgInfo"></div>
+      <div class="pg-acts">
+        <button class="btn small" id="pgPrev" type="button">上一页</button>
+        <button class="btn small" id="pgNext" type="button">下一页</button>
+        <label class="pg-size">每页
+          <select id="pgSize">
+            <option value="10">10</option>
+            <option value="20" selected>20</option>
+            <option value="30">30</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select> 条
+        </label>
+      </div>
+    </div>
   </div>
 
   <div class="card">
@@ -249,14 +282,107 @@
     box.innerHTML = h;
   }
 
-  function loadNotices() {
-    return fetch('/api/notices', { cache: 'no-store' })
+  /* ---------------- 公告分页 ---------------- */
+  var PG_SIZE_DEFAULT = 20;
+  var PG_SIZE_KEY = 'zrfeng-notice-size';   // 每页条数记在本机，下次进来还是这个数
+  var pgSize = PG_SIZE_DEFAULT;
+  var pgOffset = 0;
+  var pgTotal = 0;
+
+  function loadPgSize() {
+    var v = PG_SIZE_DEFAULT;
+    try {
+      var s = parseInt(localStorage.getItem(PG_SIZE_KEY), 10);
+      if (s > 0) v = s;
+    } catch (e) { /* 隐私模式下 localStorage 可能不可用，用默认值 */ }
+    return v;
+  }
+
+  function savePgSize(n) {
+    try { localStorage.setItem(PG_SIZE_KEY, String(n)); } catch (e) { /* 忽略 */ }
+  }
+
+  /** 分页条：页码信息 + 上一页/下一页的可用状态 */
+  function renderPager() {
+    var bar = el('pgBar');
+    if (!bar) return;
+    if (pgTotal <= 0) { bar.style.display = 'none'; return; }
+    bar.style.display = 'flex';
+
+    var pages = Math.max(1, Math.ceil(pgTotal / pgSize));
+    var cur = Math.floor(pgOffset / pgSize) + 1;
+    var info = el('pgInfo');
+    if (info) info.textContent = '第 ' + cur + ' / ' + pages + ' 页 · 共 ' + pgTotal + ' 条';
+
+    var prev = el('pgPrev'), next = el('pgNext');
+    if (prev) prev.disabled = pgOffset <= 0;
+    if (next) next.disabled = pgOffset + pgSize >= pgTotal;
+
+    var sel = el('pgSize');
+    if (sel) sel.value = String(pgSize);
+  }
+
+  /**
+   * 拉一页公告。传 offset 就跳到那一页偏移，不传则沿用当前偏移。
+   * 两种情况会自己回退：页码越界（别人删了公告）、总数为 0。
+   */
+  function loadNotices(offset) {
+    if (typeof offset === 'number') pgOffset = Math.max(0, offset);
+    var box = el('pubList');
+    if (box) box.innerHTML = '<div class="empty">正在加载…</div>';
+    // 请求期间先禁用翻页，避免连点把 offset 点乱
+    var bp = el('pgPrev'), bn = el('pgNext');
+    if (bp) bp.disabled = true;
+    if (bn) bn.disabled = true;
+
+    return fetch('/api/notices?limit=' + pgSize + '&offset=' + pgOffset, { cache: 'no-store' })
       .then(function (r) { return r.json(); })
-      .then(function (j) { renderNotices((j && j.notices) || []); })
+      .then(function (j) {
+        var total = Number(j && (j.total != null ? j.total : j.count));
+        pgTotal = Number.isFinite(total) && total > 0 ? total : 0;
+
+        // 当前页已经超出范围（公告被删 / 换了每页条数）→ 回到最后一页
+        if (pgOffset > 0 && pgOffset >= pgTotal) {
+          var last = Math.max(0, Math.floor((pgTotal - 1) / pgSize) * pgSize);
+          if (last !== pgOffset) { pgOffset = last; return loadNotices(); }
+        }
+
+        renderNotices((j && j.notices) || []);
+        renderPager();
+      })
       .catch(function () {
-        var box = el('pubList');
-        if (box) box.innerHTML = '<div class="empty">公告加载失败，请刷新重试</div>';
+        var b = el('pubList');
+        if (b) b.innerHTML = '<div class="empty">公告加载失败，请刷新重试</div>';
+        var bar = el('pgBar');
+        if (bar) bar.style.display = 'none';
       });
+  }
+
+  function bindPager() {
+    var prev = el('pgPrev');
+    if (prev) {
+      prev.onclick = function () {
+        if (pgOffset <= 0) return;
+        loadNotices(Math.max(0, pgOffset - pgSize));
+      };
+    }
+    var next = el('pgNext');
+    if (next) {
+      next.onclick = function () {
+        if (pgOffset + pgSize >= pgTotal) return;
+        loadNotices(pgOffset + pgSize);
+      };
+    }
+    var sel = el('pgSize');
+    if (sel) {
+      sel.onchange = function () {
+        var n = parseInt(this.value, 10);
+        if (!(n > 0)) return;
+        pgSize = n;
+        savePgSize(n);
+        loadNotices(0);          // 换每页条数就回第一页，避免偏移错位
+      };
+    }
   }
 
   /* ---------------- 我的工单 + 回复 ---------------- */
@@ -415,7 +541,7 @@
               if (m) { m.textContent = '发布成功'; m.className = 'msg-line ok'; }
               if (t) t.value = '';
               if (b) b.value = '';
-              loadNotices();
+              loadNotices(0);   // 新公告在最前面，回到第一页才看得到
             } else if (m) {
               m.textContent = (j && j.message) || '发布失败';
               m.className = 'msg-line err';
@@ -440,7 +566,7 @@
           .then(function (r) { return r.json(); })
           .then(function (j) {
             if (m) { m.textContent = (j && j.message) || ''; m.className = 'msg-line ok'; }
-            loadNotices();
+            loadNotices(0);
           })
           .catch(function () { if (m) { m.textContent = '网络错误'; m.className = 'msg-line err'; } })
           .then(function () { clr.disabled = false; });
@@ -449,8 +575,12 @@
   }
 
   function boot() {
+    pgSize = loadPgSize();   // 上次选过的每页条数
+    var sel = el('pgSize');
+    if (sel) sel.value = String(pgSize);
     bindAdmin();
-    loadNotices();
+    bindPager();
+    loadNotices(0);
     loadMine();
   }
 
