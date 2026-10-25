@@ -3869,6 +3869,15 @@ function handleLangSwitch(request, url) {
   if (want !== 'zh' && want !== 'en') return null;
   const clean = new URL(url.toString());
   clean.searchParams.delete('lang');
+
+  // 页面上两个切换链接本来就写好了目标目录；这里再兜一层，
+  // 手输 /zh_cn/notice/?lang=en 时也能直接落到 /en_us/notice/。
+  const p = clean.pathname;
+  const inZh = p === '/zh_cn' || p.indexOf('/zh_cn/') === 0;
+  const inEn = p === '/en_us' || p.indexOf('/en_us/') === 0;
+  if (want === 'en' && inZh) clean.pathname = '/en_us' + (p.slice(6) || '/');
+  if (want === 'zh' && inEn) clean.pathname = '/zh_cn' + (p.slice(6) || '/');
+
   return redirectTo(clean.toString(), want);
 }
 
