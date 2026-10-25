@@ -409,8 +409,14 @@ en_us/
 - 中文站在 `zh_cn/`，英文站在 `en_us/`，两套页面共用 `/theme.css`、`/api/*` 和 KV 数据（账户、公告、工单都是同一套）。
 - 页面底部有语言切换：中文站写「English」→ `/en_us/...?lang=en`，英文站写「中文」→ `/zh_cn/...?lang=zh`；
   `?lang=` 会写 `zrfeng-lang` Cookie 再跳回去掉参数的原路径。
+- **地区准入**：只有**中国大陆 → `/zh_cn/`**、**美国 → `/en_us/`** 直接放行；
+  其他地区返回一张「暂未在您所在地区开通服务」的提示页（403，按地区语言显示，
+  内置 en / ja / ko / zh-Hant / de / fr / es / pt / it / ru / uk / nl / pl / tr / ar / vi / th / id / ms / sv / hi）。
+  提示页上有两个按钮可以继续访问（「Continue in English」「继续访问中文站」），
+  点了会写 `zrfeng-region=allow` Cookie，之后不再拦——方便你自己在国外或挂梯子时调试；
+  想立刻解封也可以直接访问任意页面加 `?region=allow`。
 - **旧地址 301**：以前中文站直接挂在根目录，现在 `/`、`/notice/` 这类旧链接会被 Worker **301** 到对应语种目录
-  （美国 IP → `/zh_cn/` 的反面，即 `/en_us/`；其他地区 → `/zh_cn/`）。只处理页面，不碰 `/api/*` 与静态资源。
+  （中国大陆 → `/zh_cn/`，美国 → `/en_us/`）。只处理页面，不碰 `/api/*` 与静态资源。
 - **接口文案**：`/api/*` 按 `Referer`（当前页在哪个语种目录）→ `zrfeng-lang` Cookie → `?lang=` → `Accept-Language`
   判定语种，返回 JSON 里的 `message` / `error` / `detail` / `account.label` 会自动英化
   （词表见 `worker.js` 的 `EN_MESSAGES`，翻不出来的保留中文原文）。

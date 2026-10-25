@@ -4013,6 +4013,302 @@ function handleLangSwitch(request, url) {
  * 地区跳转：美国 IP 默认进英文站（/en_us/ + 原路径）。
  * 不跳的情况：已经在 /en_us/、用户手动选过中文、非页面请求。
  */
+/* ---------------------- 地区准入 ---------------------- */
+
+/**
+ * 只对中国大陆和美国开放：
+ *   CN → /zh_cn/…   US → /en_us/…   其他地区 → 「暂未开通」提示页（按当地语言）
+ * 用户点「继续访问」会写 zrfeng-region=allow，之后不再拦（方便你自己在国外/挂梯子调试）。
+ */
+const REGION_COOKIE = 'zrfeng-region';
+
+/** 国家/地区 → 提示页语言。表里没有的一律英文 */
+const REGION_LANG_BY_COUNTRY = {
+  JP: 'ja', KR: 'ko',
+  TW: 'zh-Hant', HK: 'zh-Hant', MO: 'zh-Hant',
+  DE: 'de', AT: 'de', CH: 'de', LI: 'de',
+  FR: 'fr', BE: 'fr', LU: 'fr', MC: 'fr',
+  ES: 'es', MX: 'es', AR: 'es', CO: 'es', CL: 'es', PE: 'es', VE: 'es', UY: 'es',
+  EC: 'es', BO: 'es', PY: 'es', CR: 'es', PA: 'es', DO: 'es', GT: 'es', HN: 'es',
+  SV: 'es', NI: 'es', CU: 'es', PR: 'es',
+  PT: 'pt', BR: 'pt', AO: 'pt', MZ: 'pt', CV: 'pt', GW: 'pt', ST: 'pt', TL: 'pt',
+  IT: 'it', SM: 'it', VA: 'it',
+  RU: 'ru', BY: 'ru', KZ: 'ru', KG: 'ru',
+  UA: 'uk',
+  NL: 'nl', SR: 'nl',
+  PL: 'pl',
+  TR: 'tr',
+  SA: 'ar', AE: 'ar', EG: 'ar', QA: 'ar', KW: 'ar', BH: 'ar', OM: 'ar', JO: 'ar',
+  LB: 'ar', IQ: 'ar', DZ: 'ar', MA: 'ar', TN: 'ar', LY: 'ar', SD: 'ar', YE: 'ar', PS: 'ar',
+  VN: 'vi',
+  TH: 'th',
+  ID: 'id',
+  MY: 'ms', BN: 'ms',
+  SE: 'sv',
+  IN: 'hi',
+};
+
+/** 提示页文案。键是语言代码，缺哪个就退回 en */
+const REGION_TEXT = {
+  en: {
+    title: 'Not available in your region',
+    h1: "We're not available in your region yet",
+    body: 'Sorry — zrfeng.top does not offer service in your region at the moment.',
+    note: 'If you think this is a mistake, you can continue anyway:',
+    en: 'Continue in English',
+    zh: 'Go to the Chinese site',
+  },
+  ja: {
+    title: 'お住まいの地域ではご利用いただけません',
+    h1: 'お住まいの地域ではまだサービスを提供していません',
+    body: '申し訳ありません。zrfeng.top は現在、お住まいの地域ではサービスを提供していません。',
+    note: '誤りだと思われる場合は、そのまま続行できます：',
+    en: '英語版へ進む',
+    zh: '中国語版へ進む',
+  },
+  ko: {
+    title: '귀하의 지역에서는 이용할 수 없습니다',
+    h1: '아직 귀하의 지역에서는 서비스를 제공하지 않습니다',
+    body: '죄송합니다. zrfeng.top은 현재 귀하의 지역에서 서비스를 제공하지 않습니다.',
+    note: '오류라고 생각되면 계속 진행할 수 있습니다:',
+    en: '영어판으로 이동',
+    zh: '중국어판으로 이동',
+  },
+  'zh-Hant': {
+    title: '您所在地區暫未提供服務',
+    h1: '我們尚未在您所在地區提供服務',
+    body: '抱歉，zrfeng.top 目前未在您所在地區提供服務。',
+    note: '若您認為這是誤判，仍可繼續前往：',
+    en: '前往英文站',
+    zh: '前往中文站',
+  },
+  de: {
+    title: 'In Ihrer Region nicht verfügbar',
+    h1: 'In Ihrer Region sind wir noch nicht verfügbar',
+    body: 'Leider bietet zrfeng.top in Ihrer Region derzeit keinen Dienst an.',
+    note: 'Wenn Sie glauben, dass dies ein Fehler ist, können Sie trotzdem fortfahren:',
+    en: 'Auf Englisch fortfahren',
+    zh: 'Zur chinesischen Website',
+  },
+  fr: {
+    title: 'Non disponible dans votre région',
+    h1: "Nous ne sommes pas encore disponibles dans votre région",
+    body: 'Désolé, zrfeng.top ne propose pas encore de service dans votre région.',
+    note: "Si vous pensez qu'il s'agit d'une erreur, vous pouvez continuer :",
+    en: 'Continuer en anglais',
+    zh: 'Aller au site chinois',
+  },
+  es: {
+    title: 'No disponible en tu región',
+    h1: 'Todavía no estamos disponibles en tu región',
+    body: 'Lo sentimos, zrfeng.top no ofrece servicio en tu región por el momento.',
+    note: 'Si crees que es un error, puedes continuar de todos modos:',
+    en: 'Continuar en inglés',
+    zh: 'Ir al sitio en chino',
+  },
+  pt: {
+    title: 'Indisponível na sua região',
+    h1: 'Ainda não estamos disponíveis na sua região',
+    body: 'Desculpe, o zrfeng.top não oferece serviço na sua região no momento.',
+    note: 'Se acredita que isto é um erro, pode continuar mesmo assim:',
+    en: 'Continuar em inglês',
+    zh: 'Ir para o site em chinês',
+  },
+  it: {
+    title: 'Non disponibile nella tua regione',
+    h1: 'Non siamo ancora disponibili nella tua regione',
+    body: 'Spiacenti, zrfeng.top non offre il servizio nella tua regione al momento.',
+    note: 'Se pensi che sia un errore, puoi continuare comunque:',
+    en: 'Continua in inglese',
+    zh: 'Vai al sito cinese',
+  },
+  ru: {
+    title: 'Сервис недоступен в вашем регионе',
+    h1: 'Мы пока не работаем в вашем регионе',
+    body: 'Извините, zrfeng.top не предоставляет услуги в вашем регионе.',
+    note: 'Если вы считаете, что это ошибка, можно продолжить:',
+    en: 'Продолжить на английском',
+    zh: 'Перейти на китайский сайт',
+  },
+  uk: {
+    title: 'Сервіс недоступний у вашому регіоні',
+    h1: 'Ми поки не працюємо у вашому регіоні',
+    body: 'Вибачте, zrfeng.top не надає послуги у вашому регіоні.',
+    note: 'Якщо ви вважаєте, що це помилка, можна продовжити:',
+    en: 'Продовжити англійською',
+    zh: 'Перейти на китайський сайт',
+  },
+  nl: {
+    title: 'Niet beschikbaar in jouw regio',
+    h1: 'We zijn nog niet beschikbaar in jouw regio',
+    body: 'Sorry, zrfeng.top biedt momenteel geen dienst aan in jouw regio.',
+    note: 'Als je denkt dat dit een fout is, kun je toch doorgaan:',
+    en: 'Doorgaan in het Engels',
+    zh: 'Naar de Chinese site',
+  },
+  pl: {
+    title: 'Usługa niedostępna w Twoim regionie',
+    h1: 'Nie jesteśmy jeszcze dostępni w Twoim regionie',
+    body: 'Przepraszamy, zrfeng.top nie oferuje usług w Twoim regionie.',
+    note: 'Jeśli uważasz, że to pomyłka, możesz kontynuować:',
+    en: 'Kontynuuj po angielsku',
+    zh: 'Przejdź do strony chińskiej',
+  },
+  tr: {
+    title: 'Bölgenizde hizmet vermiyoruz',
+    h1: 'Bölgenizde henüz hizmet vermiyoruz',
+    body: 'Üzgünüz, zrfeng.top şu anda bölgenizde hizmet vermiyor.',
+    note: 'Bunun bir hata olduğunu düşünüyorsanız yine de devam edebilirsiniz:',
+    en: 'İngilizce devam et',
+    zh: 'Çince siteye git',
+  },
+  ar: {
+    title: 'الخدمة غير متوفرة في منطقتك',
+    h1: 'لسنا متاحين في منطقتك بعد',
+    body: 'عذرًا، لا يقدّم zrfeng.top الخدمة في منطقتك حاليًا.',
+    note: 'إذا كنت تعتقد أن هذا خطأ، يمكنك المتابعة على أي حال:',
+    en: 'المتابعة باللغة الإنجليزية',
+    zh: 'الانتقال إلى الموقع الصيني',
+  },
+  vi: {
+    title: 'Không khả dụng ở khu vực của bạn',
+    h1: 'Chúng tôi chưa cung cấp dịch vụ tại khu vực của bạn',
+    body: 'Xin lỗi, zrfeng.top hiện chưa cung cấp dịch vụ tại khu vực của bạn.',
+    note: 'Nếu bạn cho rằng đây là nhầm lẫn, bạn vẫn có thể tiếp tục:',
+    en: 'Tiếp tục bằng tiếng Anh',
+    zh: 'Đến trang tiếng Trung',
+  },
+  th: {
+    title: 'ไม่พร้อมให้บริการในภูมิภาคของคุณ',
+    h1: 'เรายังไม่เปิดให้บริการในภูมิภาคของคุณ',
+    body: 'ขออภัย zrfeng.top ยังไม่ให้บริการในภูมิภาคของคุณในขณะนี้',
+    note: 'หากคุณคิดว่านี่เป็นข้อผิดพลาด คุณสามารถดำเนินการต่อได้:',
+    en: 'ดำเนินการต่อเป็นภาษาอังกฤษ',
+    zh: 'ไปที่เว็บไซต์ภาษาจีน',
+  },
+  id: {
+    title: 'Tidak tersedia di wilayah Anda',
+    h1: 'Kami belum tersedia di wilayah Anda',
+    body: 'Maaf, zrfeng.top belum menyediakan layanan di wilayah Anda.',
+    note: 'Jika menurut Anda ini keliru, Anda tetap bisa melanjutkan:',
+    en: 'Lanjutkan dalam bahasa Inggris',
+    zh: 'Buka situs bahasa Mandarin',
+  },
+  ms: {
+    title: 'Tidak tersedia di rantau anda',
+    h1: 'Kami belum tersedia di rantau anda',
+    body: 'Maaf, zrfeng.top belum menyediakan perkhidmatan di rantau anda.',
+    note: 'Jika anda fikir ini satu kesilapan, anda masih boleh meneruskan:',
+    en: 'Teruskan dalam bahasa Inggeris',
+    zh: 'Pergi ke laman Cina',
+  },
+  sv: {
+    title: 'Inte tillgängligt i din region',
+    h1: 'Vi är ännu inte tillgängliga i din region',
+    body: 'Tyvärr erbjuder zrfeng.top ingen tjänst i din region just nu.',
+    note: 'Om du tror att detta är fel kan du fortsätta ändå:',
+    en: 'Fortsätt på engelska',
+    zh: 'Gå till den kinesiska webbplatsen',
+  },
+  hi: {
+    title: 'आपके क्षेत्र में उपलब्ध नहीं',
+    h1: 'हम अभी आपके क्षेत्र में उपलब्ध नहीं हैं',
+    body: 'क्षमा करें, zrfeng.top अभी आपके क्षेत्र में सेवा नहीं देता है।',
+    note: 'अगर आपको लगता है कि यह गलती है, तो आप फिर भी आगे बढ़ सकते हैं:',
+    en: 'अंग्रेज़ी में जारी रखें',
+    zh: 'चीनी साइट पर जाएँ',
+  },
+};
+
+/** 国家/地区 → 提示页语言代码 */
+function regionLang(country) {
+  const c = String(country || '').toUpperCase();
+  return REGION_LANG_BY_COUNTRY[c] || 'en';
+}
+
+function escHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/** 「暂未开通」提示页：纯服务端渲染，不依赖任何外部资源 */
+function regionPageHtml(lang, country) {
+  const t = REGION_TEXT[lang] || REGION_TEXT.en;
+  const rtl = lang === 'ar' ? ' dir="rtl"' : '';
+  return `<!DOCTYPE html>
+<html lang="${escHtml(lang)}"${rtl}>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>${escHtml(t.title)} · zrfeng.top</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;
+    background:#050807;color:#e8f5ee;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    line-height:1.7}
+  .box{max-width:520px;width:100%;text-align:center}
+  .globe{font-size:40px;margin-bottom:18px;opacity:.85}
+  h1{font-size:22px;font-weight:700;margin-bottom:12px;color:#e8f5ee}
+  p{font-size:14px;color:#9fb8ab;margin-bottom:8px}
+  .note{font-size:13px;color:#6d8a7b;margin:22px 0 14px}
+  .acts{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+  a.btn{display:inline-block;padding:10px 18px;border-radius:10px;font-size:13px;text-decoration:none;
+    border:1px solid rgba(0,255,140,.45);background:rgba(0,255,140,.12);color:#00ff8c}
+  a.btn.ghost{border-color:rgba(0,255,140,.22);background:transparent;color:#9fb8ab}
+  .code{margin-top:26px;font-size:11px;color:#3d5a4b;letter-spacing:1px;font-family:ui-monospace,Menlo,Consolas,monospace}
+</style>
+</head>
+<body>
+  <div class="box">
+    <div class="globe">🌐</div>
+    <h1>${escHtml(t.h1)}</h1>
+    <p>${escHtml(t.body)}</p>
+    <div class="note">${escHtml(t.note)}</div>
+    <div class="acts">
+      <a class="btn" href="/en_us/?region=allow">${escHtml(t.en)}</a>
+      <a class="btn ghost" href="/zh_cn/?region=allow">${escHtml(t.zh)}</a>
+    </div>
+    <div class="code">REGION ${escHtml(String(country || '').toUpperCase() || 'UNKNOWN')}</div>
+  </div>
+</body>
+</html>`;
+}
+
+/** ?region=allow：记住「我要继续访问」，然后跳回去掉参数的原路径 */
+function handleRegionAllow(request, url) {
+  if ((url.searchParams.get('region') || '').toLowerCase() !== 'allow') return null;
+  const clean = new URL(url.toString());
+  clean.searchParams.delete('region');
+  const res = new Response(null, { status: 302, headers: { location: clean.toString(), 'cache-control': 'no-store' } });
+  res.headers.append(
+    'set-cookie',
+    REGION_COOKIE + '=allow; Path=/; Max-Age=' + LANG_COOKIE_MAX_AGE + '; SameSite=Lax'
+  );
+  return res;
+}
+
+/** 只有中国大陆和美国放行；其他地区返回提示页，除非用户点过「继续访问」 */
+function handleRegionGate(request, url) {
+  if (readCookie(request.headers.get('Cookie'), REGION_COOKIE) === 'allow') return null;
+
+  const country = String((request.cf && request.cf.country) || '').toUpperCase();
+  if (!country) return null; // 本地开发 / 无 CF 头部：不拦
+  if (country === 'CN' || country === 'US') return null;
+
+  return new Response(regionPageHtml(regionLang(country), country), {
+    status: 403,
+    headers: {
+      'content-type': 'text/html; charset=utf-8',
+      'cache-control': 'no-store',
+      vary: 'CF-IPCountry',
+    },
+  });
+}
+
 function handleLegacyRedirect(request, url) {
   const path = url.pathname;
   // 已经站在某个语种目录里 → 原样放行
@@ -4712,8 +5008,13 @@ async function handleRequest(request, env) {
     // 非 API：先处理语种与地区跳转，再原样交给静态资源
     if (method === 'GET' || method === 'HEAD') {
       if (isPagePath(path)) {
+        const allow = handleRegionAllow(request, url);
+        if (allow) return allow;
         const switched = handleLangSwitch(request, url);
         if (switched) return switched;
+        // 只对大陆 / 美国开放，其他地区先给「暂未开通」提示页
+        const gated = handleRegionGate(request, url);
+        if (gated) return gated;
         const moved = handleLegacyRedirect(request, url);
         if (moved) return moved;
       }
