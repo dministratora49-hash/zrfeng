@@ -415,6 +415,7 @@ en_us/
   提示页上有两个按钮可以继续访问（「Continue in English」「继续访问中文站」），
   点了会写 `zrfeng-region=allow` Cookie，之后不再拦——方便你自己在国外或挂梯子时调试；
   想立刻解封也可以直接访问任意页面加 `?region=allow`。
+  排查地区识别可以直接 `GET /api/region`，它会返回当前请求被识别成的国家、语言和是否放行。
 - **旧地址 301**：以前中文站直接挂在根目录，现在 `/`、`/notice/` 这类旧链接会被 Worker **301** 到对应语种目录
   （中国大陆 → `/zh_cn/`，美国 → `/en_us/`）。只处理页面，不碰 `/api/*` 与静态资源。
 - **接口文案**：`/api/*` 按 `Referer`（当前页在哪个语种目录）→ `zrfeng-lang` Cookie → `?lang=` → `Accept-Language`

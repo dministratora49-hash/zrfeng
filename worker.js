@@ -4964,6 +4964,20 @@ async function handleRequest(request, env) {
         }
 
         // 通知板块：公开公告 + 我的通知/我的工单 + 用户回复工单
+        // 地区自检：能看到当前请求被识别成哪个国家、会进哪个语种、有没有被拦
+        if (path === '/api/region' && method === 'GET') {
+          const country = String((request.cf && request.cf.country) || '').toUpperCase();
+          const allowed = !country || country === 'CN' || country === 'US'
+            || readCookie(request.headers.get('Cookie'), REGION_COOKIE) === 'allow';
+          return json({
+            ok: true,
+            country: country || null,
+            lang: regionLang(country),
+            allowed,
+            defaultSite: country === 'US' ? '/en_us/' : country === 'CN' ? '/zh_cn/' : null,
+            bypassed: readCookie(request.headers.get('Cookie'), REGION_COOKIE) === 'allow',
+          });
+        }
         if (path === '/api/notices' && method === 'GET') {
           return await handleNotices(env, request);
         }
