@@ -769,7 +769,7 @@ async function banForProxy(env, user, hit) {
  * 计算账户状态。前端状态栏完全依赖这个结果。
  *
  *   guest   —— 未登录           红点「登录以享受服务」
- *   admin   —— 管理员           黄点「未激活，试用期仅剩-1天」（永不到期）
+ *   admin   —— 管理员           绿点「账户正常」+ 右上角控制台（与已激活账户一致，不参与试用期倒计时）
  *   banned  —— 已被封禁         红点 + You are banned 弹窗
  *   trial   —— 试用期未结束     黄点「未激活，试用期仅剩…」（前端按 remainingMs 秒级倒数）
  *   blocked —— 试用期已到       黄点 + You are blocked 弹窗
@@ -784,14 +784,15 @@ function accountStatus(user) {
     return { state: 'guest', dot: 'red', label: '登录以享受服务', activated: false, days: null, remainingMs: null };
   }
 
-  // 管理员（主 / 副）：显示为 -1 天，含义是永不到期
+  // 管理员（主 / 副）：与已激活账户同款状态（绿点「账户正常」）。
+  // 额外带 role，控制台据此显示「主管理员 / 副管理员」。管理员不参与试用期倒计时。
   if (user.isAdmin) {
     return {
-      state: 'admin',
-      dot: 'yellow',
-      label: '未激活，试用期仅剩-1天',
-      activated: false,
-      days: -1,
+      state: 'active',
+      dot: 'green',
+      label: '账户正常',
+      activated: true,
+      days: null,
       remainingMs: null,
       role: roleOf(user),
     };
