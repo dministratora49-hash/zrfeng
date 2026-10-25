@@ -4024,6 +4024,8 @@ const REGION_COOKIE = 'zrfeng-region';
 
 /** 国家/地区 → 提示页语言。表里没有的一律英文 */
 const REGION_LANG_BY_COUNTRY = {
+  // CN / US 不会被拦，这里只是让 /api/region 自检时能报出对应语言
+  CN: 'zh-Hans', US: 'en',
   JP: 'ja', KR: 'ko',
   TW: 'zh-Hant', HK: 'zh-Hant', MO: 'zh-Hant',
   DE: 'de', AT: 'de', CH: 'de', LI: 'de',
