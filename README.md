@@ -413,7 +413,8 @@ en_us/
   其他地区返回一张「暂未在您所在地区开通服务」的提示页（403，按地区语言显示，
   内置 en / ja / ko / zh-Hant / de / fr / es / pt / it / ru / uk / nl / pl / tr / ar / vi / th / id / ms / sv / hi）。
   提示页上有两个按钮可以继续访问（「Continue in English」「继续访问中文站」），
-  点了会写 `zrfeng-region=allow` Cookie，之后不再拦——方便你自己在国外或挂梯子时调试；
+  点了会写一条 `zrfeng-region=allow:<地区码>` Cookie：**只对该地区、24 小时内有效**，
+  换地区或过了有效期会重新拦截（旧版本发的 180 天 `allow` Cookie 已作废，需重新点一次）；
   想立刻解封也可以直接访问任意页面加 `?region=allow`。
   排查地区识别可以直接 `GET /api/region`，它会返回当前请求被识别成的国家、语言和是否放行。
 - **旧地址 301**：以前中文站直接挂在根目录，现在 `/`、`/notice/` 这类旧链接会被 Worker **301** 到对应语种目录

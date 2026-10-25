@@ -4280,24 +4280,58 @@ function regionPageHtml(lang, country) {
 </html>`;
 }
 
-/** ?region=allow：记住「我要继续访问」，然后跳回去掉参数的原路径 */
+/** 放行有效期：只给一天，避免「点一次就永久绕过地区限制」 */
+const REGION_PASS_TTL = 60 * 60 * 24;
+
+/**
+ * 是否已经拿到放行。
+ * Cookie 值形如 allow:JP —— 记录的是当初在哪个国家/地区点的「继续访问」，
+ * 换了地区（比如关掉 VPN）就要重新确认，不能一路放行下去。
+ * 老的 allow（没有地区）也认，只是同样受 24 小时有效期约束。
+ */
+function regionBypassed(request, country) {
+  const v = readCookie(request.headers.get('Cookie'), REGION_COOKIE) || '';
+  if (!v) return false;
+  // 只有「allow:地区码」这种新格式才认。老版本发的裸 allow 是 180 天有效期，
+  // 正是「点一次就永久绕过」的来源，一律作废，让用户重新点一次。
+  if (v.indexOf('allow:') !== 0) return false;
+  const cc = v.slice(6).toUpperCase();
+  if (!country) return true;
+  return cc === country;
+}
+
+/** ?region=allow：放行这次访问（限当前地区、24 小时），然后跳回去掉参数的原路径 */
 function handleRegionAllow(request, url) {
   if ((url.searchParams.get('region') || '').toLowerCase() !== 'allow') return null;
+
+  const country = String((request.cf && request.cf.country) || '').toUpperCase();
   const clean = new URL(url.toString());
   clean.searchParams.delete('region');
+
   const res = new Response(null, { status: 302, headers: { location: clean.toString(), 'cache-control': 'no-store' } });
   res.headers.append(
     'set-cookie',
-    REGION_COOKIE + '=allow; Path=/; Max-Age=' + LANG_COOKIE_MAX_AGE + '; SameSite=Lax'
+    REGION_COOKIE + '=allow:' + (country || 'ZZ') +
+      '; Path=/; Max-Age=' + REGION_PASS_TTL + '; SameSite=Lax'
   );
+  // 顺手记住这次选的语种，免得之后访问根路径又按地区默认值跑偏
+  const p = clean.pathname;
+  const picked = p === '/en_us' || p.indexOf('/en_us/') === 0 ? 'en'
+    : p === '/zh_cn' || p.indexOf('/zh_cn/') === 0 ? 'zh' : null;
+  if (picked) {
+    res.headers.append(
+      'set-cookie',
+      LANG_COOKIE + '=' + picked + '; Path=/; Max-Age=' + LANG_COOKIE_MAX_AGE + '; SameSite=Lax'
+    );
+  }
   return res;
 }
 
 /** 只有中国大陆和美国放行；其他地区返回提示页，除非用户点过「继续访问」 */
 function handleRegionGate(request, url) {
-  if (readCookie(request.headers.get('Cookie'), REGION_COOKIE) === 'allow') return null;
-
   const country = String((request.cf && request.cf.country) || '').toUpperCase();
+  if (regionBypassed(request, country)) return null;
+
   if (!country) return null; // 本地开发 / 无 CF 头部：不拦
   if (country === 'CN' || country === 'US') return null;
 
@@ -4969,15 +5003,15 @@ async function handleRequest(request, env) {
         // 地区自检：能看到当前请求被识别成哪个国家、会进哪个语种、有没有被拦
         if (path === '/api/region' && method === 'GET') {
           const country = String((request.cf && request.cf.country) || '').toUpperCase();
-          const allowed = !country || country === 'CN' || country === 'US'
-            || readCookie(request.headers.get('Cookie'), REGION_COOKIE) === 'allow';
+          const bypassed = regionBypassed(request, country);
+          const allowed = !country || country === 'CN' || country === 'US' || bypassed;
           return json({
             ok: true,
             country: country || null,
             lang: regionLang(country),
             allowed,
             defaultSite: country === 'US' ? '/en_us/' : country === 'CN' ? '/zh_cn/' : null,
-            bypassed: readCookie(request.headers.get('Cookie'), REGION_COOKIE) === 'allow',
+            bypassed,
           });
         }
         if (path === '/api/notices' && method === 'GET') {
