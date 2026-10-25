@@ -522,7 +522,7 @@ function banState(user, now) {
  * 因为 1.1.1.1 这类加速器正常用户很多，误封代价太大）。
  */
 const PROXY_BLOCK_MSG =
-  'You are blocked!\n检测到VPN或代理，您的账户已被封停，现在请立刻关闭VPN或代理，请联系支持人员';
+  'You are blocked!\n检测到VPN或代理，您的账户已被封停，现在请立刻关闭VPN或代理，并联系支持人员';
 
 /** 常见机房 / VPS / VPN 出口的 ASN */
 /** 公开的「高风险 ASN」名单（机房 / 防弹主机，共 723 个）：

@@ -560,13 +560,13 @@
   }
 
   /** VPN / 代理被封：文案与普通封禁不同，第一行英文标题、第二行中文说明 */
-  var PROXY_MSG = 'You are blocked!\n检测到VPN或代理，您的账户已被封停，现在请立刻关闭VPN或代理，请联系支持人员';
+  var PROXY_MSG = 'You are blocked!\n检测到VPN或代理，您的账户已被封停，现在请立刻关闭VPN或代理，并联系支持人员';
 
   function showProxyBlock(raw) {
     if (document.getElementById(BAN_ID)) return;
     var lines = String(raw || PROXY_MSG).split('\n').filter(function (x) { return x.trim(); });
     var title = lines.length > 1 ? lines.shift() : 'You are blocked!';
-    var body = lines.join(' ') || '检测到VPN或代理，您的账户已被封停，现在请立刻关闭VPN或代理，请联系支持人员';
+    var body = lines.join(' ') || '检测到VPN或代理，您的账户已被封停，现在请立刻关闭VPN或代理，并联系支持人员';
     var mask = document.createElement('div');
     mask.id = BAN_ID;
     mask.innerHTML =
