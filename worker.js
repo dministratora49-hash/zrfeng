@@ -2023,24 +2023,8 @@ async function pushNotification(env, owner, rec) {
  * 前一个报错（模型下线、参数不认、额度不足）就换下一个，全都不行才返回空。
  */
 const AI_TRANSLATE_MODELS = [
-  {
-    id: '@cf/meta/m2m100-1.2b',
-    kind: 'translate',
-    params: { source_lang: 'zh', target_lang: 'en' },
-    pick: (r) =>
-      (Array.isArray(r.translations) && r.translations[0] && r.translations[0].translated_text) ||
-      (typeof r.translations === 'string' ? r.translations : '') ||
-      '',
-  },
-  {
-    id: '@cf/meta/llama-3.1-8b-instruct',
-    kind: 'chat',
-    params: { max_tokens: 1024, temperature: 0 },
-    pick: (r) =>
-      (typeof r.response === 'string' ? r.response : '') ||
-      (typeof r.result === 'string' ? r.result : '') ||
-      '',
-  },
+  // 2026-10 实测：m2m100 已不可用（返回空），llama-3.1-8b 于 2026-05-30 下线，
+  // llama-3.3-70b-fp8-fast 可用，所以把它排在第一位。
   {
     id: '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
     kind: 'chat',
@@ -2048,6 +2032,15 @@ const AI_TRANSLATE_MODELS = [
     pick: (r) =>
       (typeof r.response === 'string' ? r.response : '') ||
       (typeof r.result === 'string' ? r.result : '') ||
+      '',
+  },
+  {
+    id: '@cf/meta/m2m100-1.2b',
+    kind: 'translate',
+    params: { source_lang: 'zh', target_lang: 'en' },
+    pick: (r) =>
+      (Array.isArray(r.translations) && r.translations[0] && r.translations[0].translated_text) ||
+      (typeof r.translations === 'string' ? r.translations : '') ||
       '',
   },
 ];
@@ -2072,9 +2065,17 @@ function cleanTranslated(out) {
  * 逐段翻译，返回 { text, model, errors[] }。
  * 每次失败的原因都记在 errors 里，管理端探针会把它们显示出来。
  */
+/** 上一次翻译成功的模型 id。同一个 isolate 内复用，避免每次都先撞死模型 */
+let aiPreferredModel = null;
+
 async function translateRaw(env, text) {
   const errors = [];
-  for (const m of AI_TRANSLATE_MODELS) {
+  const ordered = aiPreferredModel
+    ? AI_TRANSLATE_MODELS.slice().sort(
+        (a, b) => (b.id === aiPreferredModel ? 1 : 0) - (a.id === aiPreferredModel ? 1 : 0)
+      )
+    : AI_TRANSLATE_MODELS;
+  for (const m of ordered) {
     try {
       let params;
       if (m.kind === 'chat') {
@@ -2089,9 +2090,14 @@ async function translateRaw(env, text) {
       }
       const r = await env.AI.run(m.id, params);
       const picked = cleanTranslated(m.pick(r || {}));
-      if (picked) return { text: picked, model: m.id, errors };
+      if (picked) {
+        aiPreferredModel = m.id;
+        return { text: picked, model: m.id, errors };
+      }
+      if (aiPreferredModel === m.id) aiPreferredModel = null;
       errors.push(m.id + ': 返回内容为空');
     } catch (e) {
+      if (aiPreferredModel === m.id) aiPreferredModel = null;
       errors.push(m.id + ': ' + String((e && e.message) || e).slice(0, 180));
     }
   }
