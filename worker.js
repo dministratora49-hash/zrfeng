@@ -2019,32 +2019,83 @@ async function pushNotification(env, owner, rec) {
 }
 
 /**
- * 公开公告列表：任何人都能看（含维护自动消息）。
- * 分页由前端按 ?limit=&offset= 指定；不传就是第一页、每页 NOTICE_PAGE_DEFAULT 条。
- * count / total 都是「一共有多少条」，不是「这一页返回了多少条」——
- * 首页只取 notices[0]，靠它兜底不受分页影响。
+ * Workers AI 翻译。按顺序试：专用翻译模型 m2m100 → 通用 instruct 模型（提示词）。
+ * 前一个报错（模型下线、参数不认、额度不足）就换下一个，全都不行才返回空。
  */
-/** Workers AI 的中英翻译模型；绑定缺失或调用失败都只是「没有英文副本」，不影响发布 */
-const AI_TRANSLATE_MODEL = '@cf/meta/m2m100-1.2b';
+const AI_TRANSLATE_MODELS = [
+  {
+    id: '@cf/meta/m2m100-1.2b',
+    kind: 'translate',
+    params: { source_lang: 'zh', target_lang: 'en' },
+    pick: (r) =>
+      (Array.isArray(r.translations) && r.translations[0] && r.translations[0].translated_text) ||
+      (typeof r.translations === 'string' ? r.translations : '') ||
+      '',
+  },
+  {
+    id: '@cf/meta/llama-3.1-8b-instruct',
+    kind: 'chat',
+    params: { max_tokens: 1024, temperature: 0 },
+    pick: (r) =>
+      (typeof r.response === 'string' ? r.response : '') ||
+      (typeof r.result === 'string' ? r.result : '') ||
+      '',
+  },
+  {
+    id: '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+    kind: 'chat',
+    params: { max_tokens: 1024, temperature: 0 },
+    pick: (r) =>
+      (typeof r.response === 'string' ? r.response : '') ||
+      (typeof r.result === 'string' ? r.result : '') ||
+      '',
+  },
+];
 
 /** 单次送进翻译模型的字数上限，超了按句子切开分批发 */
 const TRANSLATE_CHUNK = 700;
 
-async function translateChunk(env, text) {
-  const r = await env.AI.run(AI_TRANSLATE_MODEL, {
-    text,
-    source_lang: 'zh',
-    target_lang: 'en',
-  });
-  if (!r) return '';
-  if (Array.isArray(r.translations) && r.translations[0]) {
-    return String(r.translations[0].translated_text || '');
+const TRANSLATE_SYSTEM =
+  'You are a professional translator. Translate the user text from Chinese into natural English. ' +
+  'Keep the original meaning, numbers and line breaks. Output ONLY the translation — ' +
+  'no explanation, no quotes, no "Translation:" prefix.';
+
+/** 把模型输出洗成干净译文（去掉包裹引号和 "Translation:" 前缀） */
+function cleanTranslated(out) {
+  let t = String(out || '').trim();
+  t = t.replace(/^"([\s\S]*)"$/, '$1').trim();
+  t = t.replace(/^(Translation|English)\s*[:：]\s*/i, '').trim();
+  return t;
+}
+
+/**
+ * 逐段翻译，返回 { text, model, errors[] }。
+ * 每次失败的原因都记在 errors 里，管理端探针会把它们显示出来。
+ */
+async function translateRaw(env, text) {
+  const errors = [];
+  for (const m of AI_TRANSLATE_MODELS) {
+    try {
+      let params;
+      if (m.kind === 'chat') {
+        params = Object.assign({}, m.params, {
+          messages: [
+            { role: 'system', content: TRANSLATE_SYSTEM },
+            { role: 'user', content: text },
+          ],
+        });
+      } else {
+        params = Object.assign({}, m.params, { text });
+      }
+      const r = await env.AI.run(m.id, params);
+      const picked = cleanTranslated(m.pick(r || {}));
+      if (picked) return { text: picked, model: m.id, errors };
+      errors.push(m.id + ': 返回内容为空');
+    } catch (e) {
+      errors.push(m.id + ': ' + String((e && e.message) || e).slice(0, 180));
+    }
   }
-  if (typeof r.translations === 'string') return r.translations;
-  if (typeof r.response === 'string') return r.response;
-  if (typeof r.result === 'string') return r.result;
-  if (typeof r === 'string') return r;
-  return '';
+  return { text: '', model: null, errors };
 }
 
 /**
@@ -2069,8 +2120,8 @@ async function translateToEnglish(env, text) {
 
     const out = [];
     for (const piece of pieces) {
-      const t = await translateChunk(env, piece);
-      out.push(String(t).trim() || piece);
+      const r = await translateRaw(env, piece);
+      out.push(r.text || piece);
     }
     const joined = out.join(' ').trim();
     if (!joined || joined === src) return null;
@@ -2080,6 +2131,19 @@ async function translateToEnglish(env, text) {
   }
 }
 
+/** 自检：翻译一个小句子，把用到的模型和所有报错都吐出来（管理端排障用） */
+async function probeTranslation(env) {
+  if (!env.AI) return { ok: false, model: null, sample: '', errors: ['没有绑定 Workers AI（env.AI 为空）'] };
+  const r = await translateRaw(env, '这是一次翻译自检。');
+  return { ok: !!r.text, model: r.model, sample: r.text, errors: r.errors };
+}
+
+/**
+ * 公开公告列表：任何人都能看（含维护自动消息）。
+ * 分页由前端按 ?limit=&offset= 指定；不传就是第一页、每页 NOTICE_PAGE_DEFAULT 条。
+ * count / total 都是「一共有多少条」，不是「这一页返回了多少条」——
+ * 首页只取 notices[0]，靠它兜底不受分页影响。
+ */
 async function handleNotices(env, request) {
   const url = new URL(request.url);
   const rawLimit = Number(url.searchParams.get('limit'));
@@ -2342,6 +2406,8 @@ async function handleAdminNoticesTranslate(env, request) {
   if (!env.AI) return json({ ok: false, message: '服务器没有绑定 Workers AI，无法翻译' }, 400);
 
   const body = await readJson(request);
+  if (body.probe) return json({ ok: true, probe: await probeTranslation(env) });
+
   const raw = Number(body.limit);
   const limit = Number.isFinite(raw) && raw > 0 ? Math.min(Math.floor(raw), 10) : 3;
 
@@ -2351,11 +2417,17 @@ async function handleAdminNoticesTranslate(env, request) {
 
   let done = 0;
   let failed = 0;
+  const errors = [];
   for (const n of batch) {
     const titleEn = n.title_en || (await translateToEnglish(env, n.title)) || '';
     const bodyEn = n.body_en || (await translateToEnglish(env, n.body)) || '';
     if (!titleEn && !bodyEn) {
       failed++;
+      // 只留一条样本就够定位问题了
+      if (!errors.length) {
+        const detail = await translateRaw(env, n.title || n.body || '');
+        errors.push(...detail.errors.slice(0, 3));
+      }
       continue;
     }
     const rec = {
@@ -2378,6 +2450,7 @@ async function handleAdminNoticesTranslate(env, request) {
     done,
     failed,
     remaining,
+    errors,
   });
 }
 
