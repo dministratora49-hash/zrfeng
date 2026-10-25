@@ -3904,6 +3904,28 @@ const EN_MESSAGES = {
   '账户正常': 'Account active',
   '登录以享受服务': 'Log in to use this site',
   '未激活，试用期已到': 'Trial period over',
+  '人机验证未通过，请重试': 'Human verification failed. Please try again',
+  '人机验证答案不正确': 'Incorrect verification answer',
+  '我们无法认证你的身份，请输入管理员给你的密钥，以帮助我们确认身份':
+    'We could not verify your identity. Please enter the key the admin gave you so we can confirm it is you',
+  '密钥不正确': 'Incorrect key',
+  '尝试次数过多，请重新登录': 'Too many attempts. Please log in again',
+  '尝试次数过多，请重新获取': 'Too many attempts. Please request a new one',
+  '发送过于频繁，请稍后再试': 'Sending too often. Please try again later',
+  '提交得太频繁了，请等一分钟再试': 'Too many submissions. Please wait a minute and try again',
+  '工单没能保存，请稍后再试': 'Could not save the ticket. Please try again later',
+  '如果该账户存在且绑定了邮箱，验证码已发送，请查收':
+    'If that account exists and has an email bound, a code has been sent. Please check your inbox',
+  '恢复代码格式不正确': 'Invalid recovery code format',
+  '当前邮箱已验证，请输入新的邮箱地址': 'Your current email is already verified. Please enter a new address',
+  '新邮箱与当前邮箱相同': 'The new email is the same as the current one',
+  '新用户名与当前用户名相同': 'The new username is the same as the current one',
+  '请先验证当前邮箱': 'Please verify your current email first',
+  '文件尚未上传，请联系管理员': 'The file has not been uploaded yet. Please contact the admin',
+  '标题或正文里没有实际文字（全是数字或标点），这条已按垃圾工单销毁。':
+    'The title or body has no actual text (only digits or punctuation), so this ticket was discarded as spam.',
+  '公告已发布': 'Notice published',
+  '已删除该公告': 'Notice deleted',
 };
 
 /** 带可变尾部/前缀的词条：命中前缀后拼上剩下的原文 */
@@ -3916,9 +3938,14 @@ const EN_PREFIXES = [
   ['已清空 ', 'Cleared '],
   ['标题至少要 ', 'Title must be at least '],
   ['正文至少要 ', 'Body must be at least '],
-  ['正文最多 ', 'Body must be at most '],
   ['回复太长了，最多 ', 'Reply is too long (max '],
   ['警告内容最多 ', 'Warning text is too long (max '],
+  ['标题太长了，最多 ', 'Title is too long (max '],
+  ['标题最多 ', 'Title must be at most '],
+  ['正文太长了，最多 ', 'Body is too long (max '],
+  ['文件过大（上限 ', 'File too large (limit '],
+  ['今天收到的工单太多了，请明天再来（每日上限 ', 'Too many tickets today. Please come back tomorrow (daily limit '],
+  ['正文最多 ', 'Body must be at most '],
 ];
 
 /** 试用期倒计时这类带数字的标签，用正则单独处理（尾部还有量词「天」） */
