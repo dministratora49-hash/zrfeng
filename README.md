@@ -409,14 +409,15 @@ en_us/
 - 中文站在 `zh_cn/`，英文站在 `en_us/`，两套页面共用 `/theme.css`、`/api/*` 和 KV 数据（账户、公告、工单都是同一套）。
 - 页面底部有语言切换：中文站写「English」→ `/en_us/...?lang=en`，英文站写「中文」→ `/zh_cn/...?lang=zh`；
   `?lang=` 会写 `zrfeng-lang` Cookie 再跳回去掉参数的原路径。
-- **地区准入**：只有**中国大陆 → `/zh_cn/`**、**美国 → `/en_us/`** 直接放行；
-  其他地区返回一张「暂未在您所在地区开通服务」的提示页（403，按地区语言显示，
-  内置 en / ja / ko / zh-Hant / de / fr / es / pt / it / ru / uk / nl / pl / tr / ar / vi / th / id / ms / sv / hi）。
-  提示页上有两个按钮可以继续访问（「Continue in English」「继续访问中文站」），
-  点了会写一条 `zrfeng-region=allow:<地区码>` Cookie：**只对该地区、24 小时内有效**，
-  换地区或过了有效期会重新拦截（旧版本发的 180 天 `allow` Cookie 已作废，需重新点一次）；
-  想立刻解封也可以直接访问任意页面加 `?region=allow`。
-  排查地区识别可以直接 `GET /api/region`，它会返回当前请求被识别成的国家、语言和是否放行。
+- **地区准入（严格白名单）**：只有**中国大陆 → `/zh_cn/`**、**美国 → `/en_us/`** 放行；
+  其他地区（含识别不到地区的请求）一律返回 403「暂未在您所在地区开通服务」提示页，
+  按地区语言显示，内置 en / ja / ko / zh-Hant / de / fr / es / pt / it / ru / uk / nl / pl /
+  tr / ar / vi / th / id / ms / sv / hi 共 21 种，阿拉伯语自动 RTL，查不到的回退英文。
+  提示页只给联系邮箱（`summer@zrfeng.top`），**没有任何「继续访问」入口**。
+  自己出差/挂梯子要进来时，在地址后手动加 `?region=allow`，它会写一条**会话级**
+  Cookie `zrfeng-pass`（关掉浏览器即失效）；旧版本那个 180 天的
+  `zrfeng-region=allow` 已彻底失效，换名字后再也不会出现「点过一次就永久绕过」。
+  排查地区识别可以直接 `GET /api/region`，返回当前请求被识别成的国家、语言和是否放行。
 - **旧地址 301**：以前中文站直接挂在根目录，现在 `/`、`/notice/` 这类旧链接会被 Worker **301** 到对应语种目录
   （中国大陆 → `/zh_cn/`，美国 → `/en_us/`）。只处理页面，不碰 `/api/*` 与静态资源。
 - **接口文案**：`/api/*` 按 `Referer`（当前页在哪个语种目录）→ `zrfeng-lang` Cookie → `?lang=` → `Accept-Language`

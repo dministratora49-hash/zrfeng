@@ -4016,11 +4016,13 @@ function handleLangSwitch(request, url) {
 /* ---------------------- 地区准入 ---------------------- */
 
 /**
- * 只对中国大陆和美国开放：
+ * 严格白名单：只对中国大陆和美国开放。
  *   CN → /zh_cn/…   US → /en_us/…   其他地区 → 「暂未开通」提示页（按当地语言）
- * 用户点「继续访问」会写 zrfeng-region=allow，之后不再拦（方便你自己在国外/挂梯子调试）。
+ *
+ * 页面上没有任何「继续访问」入口 —— 想绕过（自己出差/挂梯子调试时）只能在地址后面
+ * 手动加 ?region=allow，它写的是**会话级** Cookie（关掉浏览器即失效），
+ * 和老版本那个 180 天的 zrfeng-region=allow 完全不是一回事。
  */
-const REGION_COOKIE = 'zrfeng-region';
 
 /** 国家/地区 → 提示页语言。表里没有的一律英文 */
 const REGION_LANG_BY_COUNTRY = {
@@ -4050,7 +4052,8 @@ const REGION_LANG_BY_COUNTRY = {
   IN: 'hi',
 };
 
-/** 提示页文案。键是语言代码，缺哪个就退回 en */
+/** 提示页文案。键是语言代码，缺哪个就退回 en。
+ *  note / en / zh 是早期「继续访问」入口的文案，入口已移除，留着备用。 */
 const REGION_TEXT = {
   en: {
     title: 'Not available in your region',
@@ -4059,6 +4062,7 @@ const REGION_TEXT = {
     note: 'If you think this is a mistake, you can continue anyway:',
     en: 'Continue in English',
     zh: 'Go to the Chinese site',
+    contact: 'Questions? Contact us:',
   },
   ja: {
     title: 'お住まいの地域ではご利用いただけません',
@@ -4067,6 +4071,7 @@ const REGION_TEXT = {
     note: '誤りだと思われる場合は、そのまま続行できます：',
     en: '英語版へ進む',
     zh: '中国語版へ進む',
+    contact: 'ご不明な点はこちらまでお問い合わせください：',
   },
   ko: {
     title: '귀하의 지역에서는 이용할 수 없습니다',
@@ -4075,6 +4080,7 @@ const REGION_TEXT = {
     note: '오류라고 생각되면 계속 진행할 수 있습니다:',
     en: '영어판으로 이동',
     zh: '중국어판으로 이동',
+    contact: '문의 사항은 아래로 연락해 주세요:',
   },
   'zh-Hant': {
     title: '您所在地區暫未提供服務',
@@ -4083,6 +4089,7 @@ const REGION_TEXT = {
     note: '若您認為這是誤判，仍可繼續前往：',
     en: '前往英文站',
     zh: '前往中文站',
+    contact: '如有疑問，請聯絡我們：',
   },
   de: {
     title: 'In Ihrer Region nicht verfügbar',
@@ -4091,6 +4098,7 @@ const REGION_TEXT = {
     note: 'Wenn Sie glauben, dass dies ein Fehler ist, können Sie trotzdem fortfahren:',
     en: 'Auf Englisch fortfahren',
     zh: 'Zur chinesischen Website',
+    contact: 'Fragen? Kontaktieren Sie uns:',
   },
   fr: {
     title: 'Non disponible dans votre région',
@@ -4099,6 +4107,7 @@ const REGION_TEXT = {
     note: "Si vous pensez qu'il s'agit d'une erreur, vous pouvez continuer :",
     en: 'Continuer en anglais',
     zh: 'Aller au site chinois',
+    contact: 'Une question ? Contactez-nous :',
   },
   es: {
     title: 'No disponible en tu región',
@@ -4107,6 +4116,7 @@ const REGION_TEXT = {
     note: 'Si crees que es un error, puedes continuar de todos modos:',
     en: 'Continuar en inglés',
     zh: 'Ir al sitio en chino',
+    contact: '¿Preguntas? Contáctanos:',
   },
   pt: {
     title: 'Indisponível na sua região',
@@ -4115,6 +4125,7 @@ const REGION_TEXT = {
     note: 'Se acredita que isto é um erro, pode continuar mesmo assim:',
     en: 'Continuar em inglês',
     zh: 'Ir para o site em chinês',
+    contact: 'Dúvidas? Fale conosco:',
   },
   it: {
     title: 'Non disponibile nella tua regione',
@@ -4123,6 +4134,7 @@ const REGION_TEXT = {
     note: 'Se pensi che sia un errore, puoi continuare comunque:',
     en: 'Continua in inglese',
     zh: 'Vai al sito cinese',
+    contact: 'Domande? Contattaci:',
   },
   ru: {
     title: 'Сервис недоступен в вашем регионе',
@@ -4131,6 +4143,7 @@ const REGION_TEXT = {
     note: 'Если вы считаете, что это ошибка, можно продолжить:',
     en: 'Продолжить на английском',
     zh: 'Перейти на китайский сайт',
+    contact: 'Есть вопросы? Напишите нам:',
   },
   uk: {
     title: 'Сервіс недоступний у вашому регіоні',
@@ -4139,6 +4152,7 @@ const REGION_TEXT = {
     note: 'Якщо ви вважаєте, що це помилка, можна продовжити:',
     en: 'Продовжити англійською',
     zh: 'Перейти на китайський сайт',
+    contact: 'Є питання? Напишіть нам:',
   },
   nl: {
     title: 'Niet beschikbaar in jouw regio',
@@ -4147,6 +4161,7 @@ const REGION_TEXT = {
     note: 'Als je denkt dat dit een fout is, kun je toch doorgaan:',
     en: 'Doorgaan in het Engels',
     zh: 'Naar de Chinese site',
+    contact: 'Vragen? Neem contact op:',
   },
   pl: {
     title: 'Usługa niedostępna w Twoim regionie',
@@ -4155,6 +4170,7 @@ const REGION_TEXT = {
     note: 'Jeśli uważasz, że to pomyłka, możesz kontynuować:',
     en: 'Kontynuuj po angielsku',
     zh: 'Przejdź do strony chińskiej',
+    contact: 'Masz pytania? Napisz do nas:',
   },
   tr: {
     title: 'Bölgenizde hizmet vermiyoruz',
@@ -4163,6 +4179,7 @@ const REGION_TEXT = {
     note: 'Bunun bir hata olduğunu düşünüyorsanız yine de devam edebilirsiniz:',
     en: 'İngilizce devam et',
     zh: 'Çince siteye git',
+    contact: 'Sorularınız mı var? Bize yazın:',
   },
   ar: {
     title: 'الخدمة غير متوفرة في منطقتك',
@@ -4171,6 +4188,7 @@ const REGION_TEXT = {
     note: 'إذا كنت تعتقد أن هذا خطأ، يمكنك المتابعة على أي حال:',
     en: 'المتابعة باللغة الإنجليزية',
     zh: 'الانتقال إلى الموقع الصيني',
+    contact: 'هل لديك أسئلة؟ راسلنا:',
   },
   vi: {
     title: 'Không khả dụng ở khu vực của bạn',
@@ -4179,6 +4197,7 @@ const REGION_TEXT = {
     note: 'Nếu bạn cho rằng đây là nhầm lẫn, bạn vẫn có thể tiếp tục:',
     en: 'Tiếp tục bằng tiếng Anh',
     zh: 'Đến trang tiếng Trung',
+    contact: 'Có thắc mắc? Liên hệ với chúng tôi:',
   },
   th: {
     title: 'ไม่พร้อมให้บริการในภูมิภาคของคุณ',
@@ -4187,6 +4206,7 @@ const REGION_TEXT = {
     note: 'หากคุณคิดว่านี่เป็นข้อผิดพลาด คุณสามารถดำเนินการต่อได้:',
     en: 'ดำเนินการต่อเป็นภาษาอังกฤษ',
     zh: 'ไปที่เว็บไซต์ภาษาจีน',
+    contact: 'มีคำถาม? ติดต่อเรา:',
   },
   id: {
     title: 'Tidak tersedia di wilayah Anda',
@@ -4195,6 +4215,7 @@ const REGION_TEXT = {
     note: 'Jika menurut Anda ini keliru, Anda tetap bisa melanjutkan:',
     en: 'Lanjutkan dalam bahasa Inggris',
     zh: 'Buka situs bahasa Mandarin',
+    contact: 'Ada pertanyaan? Hubungi kami:',
   },
   ms: {
     title: 'Tidak tersedia di rantau anda',
@@ -4203,6 +4224,7 @@ const REGION_TEXT = {
     note: 'Jika anda fikir ini satu kesilapan, anda masih boleh meneruskan:',
     en: 'Teruskan dalam bahasa Inggeris',
     zh: 'Pergi ke laman Cina',
+    contact: 'Ada soalan? Hubungi kami:',
   },
   sv: {
     title: 'Inte tillgängligt i din region',
@@ -4211,6 +4233,7 @@ const REGION_TEXT = {
     note: 'Om du tror att detta är fel kan du fortsätta ändå:',
     en: 'Fortsätt på engelska',
     zh: 'Gå till den kinesiska webbplatsen',
+    contact: 'Frågor? Kontakta oss:',
   },
   hi: {
     title: 'आपके क्षेत्र में उपलब्ध नहीं',
@@ -4219,8 +4242,12 @@ const REGION_TEXT = {
     note: 'अगर आपको लगता है कि यह गलती है, तो आप फिर भी आगे बढ़ सकते हैं:',
     en: 'अंग्रेज़ी में जारी रखें',
     zh: 'चीनी साइट पर जाएँ',
+    contact: 'कोई सवाल? हमसे संपर्क करें:',
   },
 };
+
+/** 提示页上的联系方式（站点本身访问不了，只能走邮箱） */
+const REGION_CONTACT_EMAIL = 'summer@zrfeng.top';
 
 /** 国家/地区 → 提示页语言代码 */
 function regionLang(country) {
@@ -4256,11 +4283,8 @@ function regionPageHtml(lang, country) {
   .globe{font-size:40px;margin-bottom:18px;opacity:.85}
   h1{font-size:22px;font-weight:700;margin-bottom:12px;color:#e8f5ee}
   p{font-size:14px;color:#9fb8ab;margin-bottom:8px}
-  .note{font-size:13px;color:#6d8a7b;margin:22px 0 14px}
-  .acts{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
-  a.btn{display:inline-block;padding:10px 18px;border-radius:10px;font-size:13px;text-decoration:none;
-    border:1px solid rgba(0,255,140,.45);background:rgba(0,255,140,.12);color:#00ff8c}
-  a.btn.ghost{border-color:rgba(0,255,140,.22);background:transparent;color:#9fb8ab}
+  .note{font-size:13px;color:#6d8a7b;margin:22px 0 10px}
+  .mail a{font-size:13px;color:#00ff8c;text-decoration:none;border-bottom:1px solid rgba(0,255,140,.35)}
   .code{margin-top:26px;font-size:11px;color:#3d5a4b;letter-spacing:1px;font-family:ui-monospace,Menlo,Consolas,monospace}
 </style>
 </head>
@@ -4269,51 +4293,38 @@ function regionPageHtml(lang, country) {
     <div class="globe">🌐</div>
     <h1>${escHtml(t.h1)}</h1>
     <p>${escHtml(t.body)}</p>
-    <div class="note">${escHtml(t.note)}</div>
-    <div class="acts">
-      <a class="btn" href="/en_us/?region=allow">${escHtml(t.en)}</a>
-      <a class="btn ghost" href="/zh_cn/?region=allow">${escHtml(t.zh)}</a>
-    </div>
+    <div class="note">${escHtml(t.contact)}</div>
+    <div class="mail"><a href="mailto:${escHtml(REGION_CONTACT_EMAIL)}">${escHtml(REGION_CONTACT_EMAIL)}</a></div>
     <div class="code">REGION ${escHtml(String(country || '').toUpperCase() || 'UNKNOWN')}</div>
   </div>
 </body>
 </html>`;
 }
 
-/** 放行有效期：只给一天，避免「点一次就永久绕过地区限制」 */
-const REGION_PASS_TTL = 60 * 60 * 24;
-
 /**
- * 是否已经拿到放行。
- * Cookie 值形如 allow:JP —— 记录的是当初在哪个国家/地区点的「继续访问」，
- * 换了地区（比如关掉 VPN）就要重新确认，不能一路放行下去。
- * 老的 allow（没有地区）也认，只是同样受 24 小时有效期约束。
+ * 手动放行用的会话级 Cookie。
+ *   1) 名字和老版本的 zrfeng-region 不同 —— 浏览器里那些 180 天的旧 Cookie 直接失效，
+ *      不会再出现「以前点过一次，之后到哪都能进」的情况；
+ *   2) 不设 Max-Age/Expires —— 关掉浏览器即失效（会话 Cookie），不落盘长期生效。
  */
+const REGION_PASS_COOKIE = 'zrfeng-pass';
+
+/** 是否持有手动放行（只认会话 Cookie 的 zrfeng-pass=1） */
 function regionBypassed(request, country) {
-  const v = readCookie(request.headers.get('Cookie'), REGION_COOKIE) || '';
-  if (!v) return false;
-  // 只有「allow:地区码」这种新格式才认。老版本发的裸 allow 是 180 天有效期，
-  // 正是「点一次就永久绕过」的来源，一律作废，让用户重新点一次。
-  if (v.indexOf('allow:') !== 0) return false;
-  const cc = v.slice(6).toUpperCase();
-  if (!country) return true;
-  return cc === country;
+  const v = readCookie(request.headers.get('Cookie'), REGION_PASS_COOKIE);
+  return v === '1';
 }
 
 /** ?region=allow：放行这次访问（限当前地区、24 小时），然后跳回去掉参数的原路径 */
 function handleRegionAllow(request, url) {
   if ((url.searchParams.get('region') || '').toLowerCase() !== 'allow') return null;
 
-  const country = String((request.cf && request.cf.country) || '').toUpperCase();
   const clean = new URL(url.toString());
   clean.searchParams.delete('region');
 
   const res = new Response(null, { status: 302, headers: { location: clean.toString(), 'cache-control': 'no-store' } });
-  res.headers.append(
-    'set-cookie',
-    REGION_COOKIE + '=allow:' + (country || 'ZZ') +
-      '; Path=/; Max-Age=' + REGION_PASS_TTL + '; SameSite=Lax'
-  );
+  // 会话 Cookie：不设 Max-Age，关掉浏览器就没了
+  res.headers.append('set-cookie', REGION_PASS_COOKIE + '=1; Path=/; SameSite=Lax');
   // 顺手记住这次选的语种，免得之后访问根路径又按地区默认值跑偏
   const p = clean.pathname;
   const picked = p === '/en_us' || p.indexOf('/en_us/') === 0 ? 'en'
@@ -4330,10 +4341,10 @@ function handleRegionAllow(request, url) {
 /** 只有中国大陆和美国放行；其他地区返回提示页，除非用户点过「继续访问」 */
 function handleRegionGate(request, url) {
   const country = String((request.cf && request.cf.country) || '').toUpperCase();
-  if (regionBypassed(request, country)) return null;
 
-  if (!country) return null; // 本地开发 / 无 CF 头部：不拦
+  // 白名单：只有中国大陆和美国放行，识别不到地区的请求同样按「未开通」处理
   if (country === 'CN' || country === 'US') return null;
+  if (regionBypassed(request, country)) return null;
 
   return new Response(regionPageHtml(regionLang(country), country), {
     status: 403,
@@ -4341,6 +4352,8 @@ function handleRegionGate(request, url) {
       'content-type': 'text/html; charset=utf-8',
       'cache-control': 'no-store',
       vary: 'CF-IPCountry',
+      'x-zrfeng-region': country || 'UNKNOWN',
+      'x-zrfeng-gate': 'block',
     },
   });
 }
@@ -5004,7 +5017,7 @@ async function handleRequest(request, env) {
         if (path === '/api/region' && method === 'GET') {
           const country = String((request.cf && request.cf.country) || '').toUpperCase();
           const bypassed = regionBypassed(request, country);
-          const allowed = !country || country === 'CN' || country === 'US' || bypassed;
+          const allowed = country === 'CN' || country === 'US' || bypassed;
           return json({
             ok: true,
             country: country || null,
