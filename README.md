@@ -374,22 +374,21 @@ python -m http.server 8000
 ## 📁 目录结构
 
 ```
-├── index.html        # 主站
-├── aboutus/          # 关于我们
-├── guide/            # 导航页
-├── notice/           # 通知板块（站点公告 · 我的消息 · 我的工单）
-├── time/             # NTP 原子钟
-├── sponsorship/      # 赞助页
-│   ├── alipay/       # 支付宝（维护中）
-│   └── wechatpay/    # 微信支付（维护中）
-├── contact/          # 联系我们（邮箱 + 提交工单）
-├── login/            # 登录 / 注册
-├── console/          # 控制台（账户激活管理）
-├── file/             # 资源库
-│   └── novel/        # 小说
-│       └── romancenovel/  # 言情小说《听潮》
-├── status.js         # 全站账户状态栏
-├── worker.js         # 后端：注册/登录/验证码/下载门控/账户状态/工单
+├── zh_cn/            # 中文站（默认语种，入口 /zh_cn/）
+│   ├── index.html    # 主站
+│   ├── aboutus/      # 关于我们
+│   ├── guide/        # 导航页
+│   ├── notice/       # 通知板块（站点公告 · 我的消息 · 我的工单）
+│   ├── time/         # NTP 原子钟
+│   ├── sponsorship/  # 赞助页（alipay/ wechatpay/）
+│   ├── contact/      # 联系我们（邮箱 + 提交工单）
+│   ├── login/        # 登录 / 注册
+│   ├── console/      # 控制台（账户激活管理）
+│   └── file/         # 资源库（novel/romancenovel/）
+├── en_us/            # 英文站（/en_us/），结构与 zh_cn/ 一一对应
+├── aboutus/          # 两个语种共用的图片资源（logo.jpg / founder.jpg）
+├── status.js         # 中文版全站账户状态栏（en_us/status.js 是英文版）
+├── worker.js         # 后端：注册/登录/验证码/下载门控/账户状态/工单/语种路由
 └── wrangler.toml     # Cloudflare 部署配置
 ```
 
@@ -405,13 +404,30 @@ en_us/
 └── status.js             # 英文版状态栏（文案英化，逻辑与原版一致）
 ```
 
-- 中文原站**完全不动**，两套页面共用 `/theme.css`、`/api/*` 和 KV 数据（账户、公告、工单都是同一套）。
-- 页面底部有「中文」链接，指向 `<原中文路径>?lang=zh`，会写 `zrfeng-lang=zh` Cookie。
-- **地区跳转**：`worker.js` 检测到 `request.cf.country === 'US'` 且用户没选过中文时，302 到 `/en_us/` + 原路径（只跳页面，不跳 `/api/*` 和静态资源）。
-- **接口文案**：`/api/*` 按 `zrfeng-lang` Cookie → `?lang=` → `Accept-Language` 判定语种，返回 JSON 里的 `message` / `error` / `detail` / `account.label` 会自动英化（词表见 `worker.js` 的 `EN_MESSAGES`，翻不出来的保留中文原文）。
-- `wrangler.toml` 的 `run_worker_first = true` 是为了让页面请求先进 Worker 做地区判断；非 API 请求在 Worker 里原样 `env.ASSETS.fetch(request)` 交回静态资源。
+对照关系：`zh_cn/notice/index.html` ↔ `en_us/notice/index.html`。
 
-> 注意：公告正文、工单内容这些**管理员发布的文本**不会被翻译，英文站上原样显示中文。
+- 中文站在 `zh_cn/`，英文站在 `en_us/`，两套页面共用 `/theme.css`、`/api/*` 和 KV 数据（账户、公告、工单都是同一套）。
+- 页面底部有语言切换：中文站写「English」→ `/en_us/...?lang=en`，英文站写「中文」→ `/zh_cn/...?lang=zh`；
+  `?lang=` 会写 `zrfeng-lang` Cookie 再跳回去掉参数的原路径。
+- **旧地址 301**：以前中文站直接挂在根目录，现在 `/`、`/notice/` 这类旧链接会被 Worker **301** 到对应语种目录
+  （美国 IP → `/zh_cn/` 的反面，即 `/en_us/`；其他地区 → `/zh_cn/`）。只处理页面，不碰 `/api/*` 与静态资源。
+- **接口文案**：`/api/*` 按 `Referer`（当前页在哪个语种目录）→ `zrfeng-lang` Cookie → `?lang=` → `Accept-Language`
+  判定语种，返回 JSON 里的 `message` / `error` / `detail` / `account.label` 会自动英化
+  （词表见 `worker.js` 的 `EN_MESSAGES`，翻不出来的保留中文原文）。
+- `wrangler.toml` 的 `run_worker_first = true` 是为了让页面请求先进 Worker 做语种路由；
+  非 API 请求在 Worker 里原样 `env.ASSETS.fetch(request)` 交回静态资源。
+
+### 发布内容自动英译
+
+管理员在控制台发布公告时，`worker.js` 会调 **Workers AI**（`@cf/meta/m2m100-1.2b`）把标题和正文译成英文，
+和中文原文一起存进同一条 KV 记录（`title_en` / `body_en`）。英文站读公告时优先取英文副本：
+
+- 正文超过 700 字会**按句子分段**多次调用，避免超出模型输入上限；
+- 翻译失败（没绑 AI 绑定、模型报错、结果为空）**不影响发布**，只是没有英文副本，英文站退回显示中文原文；
+- 维护类公告是固定句式，直接内置英文，不走模型；
+- 已有的老公告没有英文副本，同样退回中文原文。
+
+> 注意：工单内容、管理员手填的警告文案不会自动翻译。
 
 ## ⭐ 支持我
 

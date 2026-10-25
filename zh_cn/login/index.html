@@ -382,7 +382,7 @@
     </form>
 
     <div class="links">
-      <a href="https://www.zrfeng.top/guide">← 返回导航站</a>
+      <a href="/zh_cn/guide">← 返回导航站</a>
     </div>
   </div>
 
@@ -532,7 +532,7 @@
 
     if (r.data.ok) {
       show(msg, '登录成功，正在跳转…', 'ok');
-      setTimeout(function () { location.href = SITE + '/'; }, 700);
+      setTimeout(function () { location.href = SITE + '/zh_cn/'; }, 700);
     } else if (r.data.needDeviceKey) {
       // 没有邮箱的账户：改用「管理员给的密钥」确认身份
       show(msg, r.data.message || '我们无法认证你的身份，请输入管理员给你的密钥', 'err');
@@ -592,7 +592,7 @@
       var r = await api('/api/login/verify', { method: 'POST', body: { ticket: devTicket, code: code.trim() } });
       if (r.data.ok) {
         if (msg) show(msg, '验证通过，正在跳转…', 'ok');
-        setTimeout(function () { location.href = SITE + '/'; }, 700);
+        setTimeout(function () { location.href = SITE + '/zh_cn/'; }, 700);
       } else {
         if (msg) show(msg, r.data.message || '验证失败', 'err');
         if (btn) btn.disabled = false;
@@ -646,7 +646,7 @@
       var r = await api('/api/login/verify', { method: 'POST', body: { ticket: devTicket, key: key } });
       if (r.data.ok) {
         if (msg) show(msg, '身份确认，正在跳转…', 'ok');
-        setTimeout(function () { location.href = SITE + '/'; }, 700);
+        setTimeout(function () { location.href = SITE + '/zh_cn/'; }, 700);
       } else {
         if (msg) show(msg, r.data.message || '你无权访问', 'err');
         if (btn) btn.disabled = false;
@@ -809,7 +809,7 @@
 
     if (r.data.ok) {
       show(msg, '注册成功，正在跳转…', 'ok');
-      setTimeout(function () { location.href = SITE + '/'; }, 700);
+      setTimeout(function () { location.href = SITE + '/zh_cn/'; }, 700);
     } else if (r.data.blocked) {
       // 注册时检测到 VPN / 代理：账号已建但立即封停
       if (window.zrfengProxyBlock) window.zrfengProxyBlock(r.data.message);
@@ -878,12 +878,13 @@
     try {
       var me = await api('/api/me');
       if (me.data && me.data.loggedIn) {
-        location.href = SITE + '/';
+        location.href = SITE + '/zh_cn/';
       }
     } catch (e) { /* 忽略 */ }
   })();
 })();
 </script>
   <script src="/status.js" defer></script>
+<p style="text-align:center;font-size:12px;margin:16px 0"><a href="/en_us/login/?lang=en" style="color:#7fa893;text-decoration:none">English</a></p>
 </body>
 </html>

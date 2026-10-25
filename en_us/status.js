@@ -535,7 +535,7 @@
       '<h2>You are blocked</h2>' +
       '<p>Trial period over. Please contact the admin to activate your account.</p>' +
       '<div class="bm-acts">' +
-      '<a href="/contact/">Contact us</a>' +
+      '<a href="/en_us/contact/">Contact us</a>' +
       '<button type="button" id="dsh-block-close">Close</button>' +
       '</div></div>';
     document.body.appendChild(mask);
@@ -574,7 +574,7 @@
       '<h2>' + escHtml(title) + '</h2>' +
       '<p>' + escHtml(body) + '</p>' +
       '<div class="bn-acts">' +
-      '<a href="/contact/">Contact us</a>' +
+      '<a href="/en_us/contact/">Contact us</a>' +
       '<button type="button" id="dsh-ban-out">Close</button>' +
       '</div></div>';
     document.body.appendChild(mask);
@@ -612,7 +612,7 @@
       '<p>This account has been banned by an admin. Please contact an admin.</p>' +
       meta +
       '<div class="bn-acts">' +
-      '<a href="/contact/">Contact us</a>' +
+      '<a href="/en_us/contact/">Contact us</a>' +
       '<button type="button" id="dsh-ban-out">Log out</button>' +
       '</div>' +
       '</div>';
@@ -621,7 +621,7 @@
     if (out) {
       out.onclick = function () {
         fetch('/api/logout', { method: 'POST' }).then(function () {
-          location.href = '/';
+          location.href = '/en_us/';
         });
       };
     }
@@ -652,7 +652,7 @@
       '<p class="wn-note">It will not appear again after you acknowledge it; you can review it anytime under “Notices → My messages”.</p>' +
       '<div class="wn-acts">' +
       '<button type="button" id="dsh-warn-ok">I understand</button>' +
-      '<a href="/notice/">Go to Notices</a>' +
+      '<a href="/en_us/notice/">Go to Notices</a>' +
       '</div>' +
       '</div>';
     document.body.appendChild(mask);
@@ -746,7 +746,7 @@
     if (btn) {
       btn.onclick = function () {
         if (isAdmin) {
-          location.href = '/console/';
+          location.href = '/en_us/console/';
           return;
         }
         var n = document.getElementById('dsh-mt-note');
@@ -859,8 +859,19 @@
     ['/console', 'console'],
   ];
 
-  function pageIdOf(path) {
+  /**
+   * 去掉语种目录前缀：/zh_cn/notice/ 和 /en_us/notice/ 都按 /notice/ 处理。
+   * 站点拆成两个语种目录后，维护范围判断不能再看完整路径，否则两边对不上。
+   */
+  function langlessPath(path) {
     var p = String(path || '/');
+    if (p === '/zh_cn' || p === '/en_us') return '/';
+    if (p.indexOf('/zh_cn/') === 0 || p.indexOf('/en_us/') === 0) return p.slice(6) || '/';
+    return p;
+  }
+
+  function pageIdOf(path) {
+    var p = langlessPath(path);
     for (var i = 0; i < PAGE_PATHS.length; i++) {
       var pre = PAGE_PATHS[i][0];
       if (p === pre || p === pre + '.html' || p.indexOf(pre + '/') === 0) return PAGE_PATHS[i][1];
@@ -975,7 +986,7 @@
     if (acc.state === 'guest') {
       var a = document.createElement('a');
       a.className = 'sb-text';
-      a.href = '/login/';
+      a.href = '/en_us/login/';
       a.textContent = acc.label || 'Log in to use this site';
       left.appendChild(a);
     } else if (acc.state === 'trial' && typeof acc.remainingMs === 'number') {
@@ -1027,7 +1038,7 @@
     if (data && data.loggedIn && (acc.activated || data.isAdmin)) {
       var c = document.createElement('a');
       c.className = 'sb-btn';
-      c.href = '/console/';
+      c.href = '/en_us/console/';
       c.textContent = 'Console';
       right.appendChild(c);
     }

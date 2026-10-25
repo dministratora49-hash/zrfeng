@@ -564,8 +564,8 @@
           '<p>' + esc(res.j.message) + '</p><p class="small">' + esc(res.j.detail || '') + '</p>' +
           '<p class="small">正在返回主站…</p>';
         dmActs.innerHTML = '<button id="dmHome">返回主站</button>';
-        document.getElementById('dmHome').onclick = function () { location.href = '/'; };
-        setTimeout(function () { location.href = '/'; }, 2600);
+        document.getElementById('dmHome').onclick = function () { location.href = '/zh_cn/'; };
+        setTimeout(function () { location.href = '/zh_cn/'; }, 2600);
       })
       .catch(function () { setErr('网络错误'); btn.disabled = false; });
   }
@@ -655,7 +655,7 @@
       ' / ' + (tk.dailyMax || 0) + ' 条 · 最多保留 ' + (tk.maxKeep || 0) + ' 条' +
       (tk.anonymousCount ? ' · 其中匿名 ' + tk.anonymousCount + ' 条（排在最后）' : '') + '<br>' +
       '（标题不足 3 字、正文不足 10 字，或内容全是数字 / 标点的，已在服务端当场销毁，不落库）<br>' +
-      '（回复后用户会在「<a href="/notice/" target="_blank" style="color:#00ff8c">通知板块 → 我的消息</a>」里看到）' +
+      '（回复后用户会在「<a href="/zh_cn/notice/" target="_blank" style="color:#00ff8c">通知板块 → 我的消息</a>」里看到）' +
       '</div>';
 
     if (!tk.tickets || !tk.tickets.length) {
@@ -1369,7 +1369,7 @@
     .then(function (j) {
       if (!j.loggedIn) {
         who.textContent = '未登录';
-        meEl.innerHTML = '<div class="card"><div class="center">请先<a href="/login/">登录</a>后再访问控制台。</div></div>';
+        meEl.innerHTML = '<div class="card"><div class="center">请先<a href="/zh_cn/login/">登录</a>后再访问控制台。</div></div>';
         return;
       }
       ME = j;
@@ -1392,5 +1392,6 @@
 })();
 </script>
   <script src="/status.js" defer></script>
+<p style="text-align:center;font-size:12px;margin:16px 0"><a href="/en_us/console/?lang=en" style="color:#7fa893;text-decoration:none">English</a></p>
 </body>
 </html>

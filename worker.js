@@ -1943,6 +1943,9 @@ async function postNotice(env, rec) {
     kind: rec.kind === 'maint' ? 'maint' : 'manual',
   };
   if (rec.setBy) out.setBy = String(rec.setBy);
+  // 英文副本：管理员发布时由 Workers AI 自动翻译；维护公告是固定句式，直接给英文
+  if (rec.titleEn) out.title_en = capText(String(rec.titleEn), NOTICE_TITLE_MAX);
+  if (rec.bodyEn) out.body_en = capText(String(rec.bodyEn), NOTICE_BODY_MAX);
   await env.USERS.put(NOTICE_PREFIX + id, JSON.stringify(out));
 
   // 只留最近 NOTICE_MAX_KEEP 条，超出的从最旧的删
@@ -2021,6 +2024,62 @@ async function pushNotification(env, owner, rec) {
  * count / total 都是「一共有多少条」，不是「这一页返回了多少条」——
  * 首页只取 notices[0]，靠它兜底不受分页影响。
  */
+/** Workers AI 的中英翻译模型；绑定缺失或调用失败都只是「没有英文副本」，不影响发布 */
+const AI_TRANSLATE_MODEL = '@cf/meta/m2m100-1.2b';
+
+/** 单次送进翻译模型的字数上限，超了按句子切开分批发 */
+const TRANSLATE_CHUNK = 700;
+
+async function translateChunk(env, text) {
+  const r = await env.AI.run(AI_TRANSLATE_MODEL, {
+    text,
+    source_lang: 'zh',
+    target_lang: 'en',
+  });
+  if (!r) return '';
+  if (Array.isArray(r.translations) && r.translations[0]) {
+    return String(r.translations[0].translated_text || '');
+  }
+  if (typeof r.translations === 'string') return r.translations;
+  if (typeof r.response === 'string') return r.response;
+  if (typeof r.result === 'string') return r.result;
+  if (typeof r === 'string') return r;
+  return '';
+}
+
+/**
+ * 中文 → 英文。返回 null 表示「没翻出来」，调用方原样用中文，绝不阻塞发布。
+ * 公告正文最长 2000 字，翻译模型吃不下这么长，按句子切成若干段分批发。
+ */
+async function translateToEnglish(env, text) {
+  const src = String(text || '').trim();
+  if (!src || !env.AI) return null;
+  try {
+    const pieces = [];
+    let buf = '';
+    for (const part of src.split(/(?<=[。！？!?；;\n])/)) {
+      if ((buf + part).length > TRANSLATE_CHUNK && buf) {
+        pieces.push(buf);
+        buf = part;
+      } else {
+        buf += part;
+      }
+    }
+    if (buf) pieces.push(buf);
+
+    const out = [];
+    for (const piece of pieces) {
+      const t = await translateChunk(env, piece);
+      out.push(String(t).trim() || piece);
+    }
+    const joined = out.join(' ').trim();
+    if (!joined || joined === src) return null;
+    return joined;
+  } catch {
+    return null;
+  }
+}
+
 async function handleNotices(env, request) {
   const url = new URL(request.url);
   const rawLimit = Number(url.searchParams.get('limit'));
@@ -2030,6 +2089,7 @@ async function handleNotices(env, request) {
     : NOTICE_PAGE_DEFAULT;
   const offset = Number.isFinite(rawOffset) && rawOffset > 0 ? Math.floor(rawOffset) : 0;
 
+  const lang = resolveLang(request);
   const all = await listNotices(env, NOTICE_MAX_KEEP);
   const page = all.slice(offset, offset + limit);
   return json({
@@ -2042,9 +2102,11 @@ async function handleNotices(env, request) {
     notices: page.map((n) => ({
       id: n.id,
       at: Number(n.at) || 0,
-      title: String(n.title || ''),
-      body: String(n.body || ''),
+      // 英文站优先用发布时自动生成的英文副本；老公告没有副本就退回中文原文
+      title: String((lang === 'en' && n.title_en) || n.title || ''),
+      body: String((lang === 'en' && n.body_en) || n.body || ''),
       kind: n.kind === 'maint' ? 'maint' : 'manual',
+      translated: lang === 'en' ? !!n.title_en : false,
     })),
   });
 }
@@ -2251,14 +2313,23 @@ async function handleAdminNoticePost(env, request) {
     return json({ ok: false, message: '正文最多 ' + NOTICE_BODY_MAX + ' 个字' }, 400);
   }
 
+  // 发布即翻译：英文站直接读 title_en / body_en。
+  // 翻译失败（没绑 AI、模型报错、超时）只是没有英文副本，公告照发不误。
+  const [titleEn, bodyEn] = await Promise.all([
+    translateToEnglish(env, title),
+    translateToEnglish(env, text),
+  ]);
+
   const id = await postNotice(env, {
     at: Date.now(),
     title,
     body: text,
+    titleEn,
+    bodyEn,
     kind: 'manual',
     setBy: guard.session.username,
   });
-  return json({ ok: true, message: '公告已发布', id });
+  return json({ ok: true, message: '公告已发布', id, translated: !!titleEn });
 }
 
 /** 管理员删公告：带 id 删一条，带 all:true 清空 */
@@ -2580,15 +2651,15 @@ const MAINT_MAX_MS = 30 * 86400000;
  * 这张表是唯一来源：控制台用它渲染勾选框，导航页用它把入口标成 Offline。
  */
 const MAINT_PAGES = [
-  { id: 'home', name: '主站首页', path: '/' },
-  { id: 'aboutus', name: '关于项目组', path: '/aboutus' },
-  { id: 'time', name: '北京时间', path: '/time' },
-  { id: 'guide', name: '导航页', path: '/guide' },
-  { id: 'notice', name: '通知板块', path: '/notice' },
-  { id: 'sponsorship', name: '赞助', path: '/sponsorship' },
-  { id: 'file', name: '资源库', path: '/file' },
-  { id: 'login', name: '登录 / 注册', path: '/login' },
-  { id: 'console', name: '控制台', path: '/console' },
+  { id: 'home', name: '主站首页', nameEn: 'Home', path: '/' },
+  { id: 'aboutus', name: '关于项目组', nameEn: 'About us', path: '/aboutus' },
+  { id: 'time', name: '北京时间', nameEn: 'Beijing Time', path: '/time' },
+  { id: 'guide', name: '导航页', nameEn: 'Directory', path: '/guide' },
+  { id: 'notice', name: '通知板块', nameEn: 'Notices', path: '/notice' },
+  { id: 'sponsorship', name: '赞助', nameEn: 'Sponsorship', path: '/sponsorship' },
+  { id: 'file', name: '资源库', nameEn: 'Files', path: '/file' },
+  { id: 'login', name: '登录 / 注册', nameEn: 'Log in / Sign up', path: '/login' },
+  { id: 'console', name: '控制台', nameEn: 'Console', path: '/console' },
 ];
 
 const MAINT_PAGE_IDS = MAINT_PAGES.map((p) => p.id);
@@ -2626,6 +2697,8 @@ async function getMaintenance(env) {
         kind: 'maint',
         title: '维护已结束',
         body: '维护时段已到，站点已恢复正常，感谢等待。',
+        titleEn: 'Maintenance finished',
+        bodyEn: 'The maintenance window has ended and the site is back to normal. Thanks for waiting.',
         setBy: m.setBy || '',
       });
     } catch {
@@ -2698,6 +2771,8 @@ async function handleAdminMaintenance(env, request) {
           kind: 'maint',
           title: '维护已结束',
           body: '站点维护已结束，服务已恢复正常，感谢等待。',
+          titleEn: 'Maintenance finished',
+          bodyEn: 'Maintenance is over and service has been restored. Thanks for waiting.',
           setBy: guard.session.username,
         });
       } catch {
@@ -2752,6 +2827,9 @@ async function handleAdminMaintenance(env, request) {
   // 维护也往通知板块发一条，用户不用等到点开某个页面才知道
   try {
     const scopeName = pages.length ? '（' + pages.map(pageName).join('、') + '）' : '（全站）';
+    const scopeEn = pages.length
+      ? ' (' + pages.map(pageNameEn).join(', ') + ')'
+      : ' (whole site)';
     await postNotice(env, {
       at: now,
       kind: 'maint',
@@ -2759,6 +2837,10 @@ async function handleAdminMaintenance(env, request) {
       body: st.active
         ? '站点正在维护中' + scopeName + '，预计 ' + fmtCST(end) + ' 结束。'
         : '站点将于 ' + fmtCST(start) + ' 开始维护' + scopeName + '，预计 ' + fmtCST(end) + ' 结束。',
+      titleEn: st.active ? 'Site under maintenance' : 'Maintenance scheduled',
+      bodyEn: st.active
+        ? 'The site is under maintenance' + scopeEn + ', expected to finish at ' + fmtCST(end) + '.'
+        : 'The site will be under maintenance from ' + fmtCST(start) + scopeEn + ', expected to finish at ' + fmtCST(end) + '.',
       setBy: guard.session.username,
     });
   } catch {
@@ -2769,6 +2851,11 @@ async function handleAdminMaintenance(env, request) {
 }
 
 /** 页面 id → 中文名（不认识就原样返回，方便排查） */
+function pageNameEn(id) {
+  const p = MAINT_PAGES.find((x) => x.id === id);
+  return p ? p.nameEn : String(id || '');
+}
+
 function pageName(id) {
   const p = MAINT_PAGES.find((x) => x.id === id);
   return p ? p.name : String(id);
@@ -3756,13 +3843,21 @@ function isPagePath(path) {
 }
 
 /** 302 跳转，带 no-store 免得 CDN 把某个地区的结果缓存给所有人 */
-function redirectTo(location, cookieValue) {
+function redirectTo(location, cookieValue, status) {
   const headers = { location, 'cache-control': 'no-store' };
   if (cookieValue) {
     headers['set-cookie'] =
       LANG_COOKIE + '=' + cookieValue + '; Path=/; Max-Age=' + LANG_COOKIE_MAX_AGE + '; SameSite=Lax';
   }
-  return new Response(null, { status: 302, headers });
+  return new Response(null, { status: status || 302, headers });
+}
+
+/** 这台机器该看哪个语种：用户选过的优先，其次看地区（默认中文） */
+function pickLang(request) {
+  const cookie = readCookie(request.headers.get('Cookie'), LANG_COOKIE);
+  if (cookie === 'zh' || cookie === 'en') return cookie;
+  const country = (request.cf && request.cf.country) || '';
+  return country === 'US' ? 'en' : 'zh';
 }
 
 /**
@@ -3781,18 +3876,18 @@ function handleLangSwitch(request, url) {
  * 地区跳转：美国 IP 默认进英文站（/en_us/ + 原路径）。
  * 不跳的情况：已经在 /en_us/、用户手动选过中文、非页面请求。
  */
-function handleGeoRedirect(request, url) {
+function handleLegacyRedirect(request, url) {
   const path = url.pathname;
+  // 已经站在某个语种目录里 → 原样放行
   if (path === '/en_us' || path.startsWith('/en_us/')) return null;
-  if (readCookie(request.headers.get('Cookie'), LANG_COOKIE) === 'zh') return null;
+  if (path === '/zh_cn' || path.startsWith('/zh_cn/')) return null;
 
-  const country = (request.cf && request.cf.country) || '';
-  if (country !== 'US') return null;
-
+  // 旧地址（以前中文站直接挂在根目录）→ 301 到对应语种目录
+  const lang = pickLang(request);
   const dest = new URL(url.toString());
-  dest.pathname = '/en_us' + (path === '/' ? '/' : path === '/index.html' ? '/' : path);
-  // 顺手记下「英文」，后面 /api/* 的提示语就知道该出英文（用户点中文会被 cookie 覆盖）
-  return redirectTo(dest.toString(), 'en');
+  const rest = path === '/' || path === '/index.html' ? '/' : path;
+  dest.pathname = (lang === 'en' ? '/en_us' : '/zh_cn') + rest;
+  return redirectTo(dest.toString(), null, 301);
 }
 
 /* ---------------------- 接口文案的英文化 ---------------------- */
@@ -3808,6 +3903,20 @@ function resolveLang(request) {
   const url = new URL(request.url);
   const q = (url.searchParams.get('lang') || '').toLowerCase();
   if (q === 'zh' || q === 'en') return q;
+
+  // 页面自己发的 /api 请求：Referer 落在哪个语种目录就以哪边为准。
+  // 这一步必须排在 Cookie 和浏览器语言前面 —— 中文用户在英文站上浏览时，
+  // 浏览器语言是 zh、Cookie 也可能没有，但界面是英文，状态栏文案也得跟着英文。
+  const ref = request.headers.get('Referer') || '';
+  if (ref) {
+    try {
+      const r = new URL(ref);
+      if (r.pathname === '/en_us' || r.pathname.indexOf('/en_us/') === 0) return 'en';
+      if (r.pathname === '/zh_cn' || r.pathname.indexOf('/zh_cn/') === 0) return 'zh';
+    } catch {
+      /* 坏 Referer 忽略，继续往下判断 */
+    }
+  }
 
   const cookie = readCookie(request.headers.get('Cookie'), LANG_COOKIE);
   if (cookie === 'zh' || cookie === 'en') return cookie;
@@ -4465,8 +4574,8 @@ async function handleRequest(request, env) {
       if (isPagePath(path)) {
         const switched = handleLangSwitch(request, url);
         if (switched) return switched;
-        const geo = handleGeoRedirect(request, url);
-        if (geo) return geo;
+        const moved = handleLegacyRedirect(request, url);
+        if (moved) return moved;
       }
     }
 

@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <script>/* 尽早落地亮/暗色主题，避免刷新时先闪一下深色（切换按钮在顶部状态栏里） */(function(){var t='dark';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
-<title>资源库 · zrfeng.top</title>
+<title>小说 · zrfeng.top</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -58,7 +58,7 @@
     margin-bottom: 40px;
   }
 
-  /* ===== 资源卡片 ===== */
+  /* ===== 小说卡片 ===== */
   .boxes {
     display: flex;
     gap: 24px;
@@ -148,19 +148,19 @@
 </head>
 <body>
   <div class="top">
-    <h1>资源库</h1>
-    <p class="sub">精选工具与链接，持续整理中</p>
+    <h1>小说</h1>
+    <p class="sub">在线阅读，慢慢更新</p>
 
-    <!-- 资源列表：以后添加资源时，复制下面的 <a class="box"> 整块即可 -->
+    <!-- 小说列表：以后添加小说时，复制下面的 <a class="box"> 整块即可 -->
     <div class="boxes">
-      <a class="box" href="https://www.zrfeng.top/file/novel">
-        <span class="label">小说</span>
+      <a class="box" href="/zh_cn/file/novel/romancenovel">
+        <span class="label">言情小说</span>
         <span class="status"><span class="dot"></span>Online</span>
       </a>
     </div>
 
     <div class="back">
-      <a href="https://www.zrfeng.top/guide">← 返回导航站</a>
+      <a href="/zh_cn/file">← 返回资源库</a>
     </div>
   </div>
 
@@ -171,5 +171,6 @@
     </div>
   </div>
   <script src="/status.js" defer></script>
+<p style="text-align:center;font-size:12px;margin:16px 0"><a href="/en_us/file/novel/?lang=en" style="color:#7fa893;text-decoration:none">English</a></p>
 </body>
 </html>
