@@ -176,6 +176,16 @@
     color: #e8f5ee;
   }
   .pg-size select:focus { outline: none; border-color: rgba(0, 255, 140, 0.6); }
+  .pg-jump { font-size: 12px; color: #7fa893; display: flex; align-items: center; gap: 6px; }
+  .pg-jump input {
+    width: 58px; padding: 5px 8px; border-radius: 8px; font-size: 12px;
+    font-family: ui-monospace, Menlo, Consolas, monospace; text-align: center;
+    border: 1px solid rgba(0, 255, 140, 0.25); background: rgba(0, 0, 0, 0.35);
+    color: #e8f5ee; -moz-appearance: textfield;
+  }
+  .pg-jump input::-webkit-outer-spin-button,
+  .pg-jump input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .pg-jump input:focus { outline: none; border-color: rgba(0, 255, 140, 0.6); }
   .btn[disabled] { opacity: .35; cursor: default; }
 
   .links { text-align: center; margin-top: 26px; font-size: 12px; }
@@ -201,12 +211,16 @@
         <button class="btn small" id="pgNext" type="button">下一页</button>
         <label class="pg-size">每页
           <select id="pgSize">
-            <option value="10">10</option>
-            <option value="20" selected>20</option>
+            <option value="10" selected>10</option>
+            <option value="20">20</option>
             <option value="30">30</option>
             <option value="50">50</option>
             <option value="100">100</option>
           </select> 条
+        </label>
+        <label class="pg-jump">跳至
+          <input id="pgJump" type="number" min="1" step="1" inputmode="numeric" placeholder="1">
+          <button class="btn small" id="pgGo" type="button">跳转</button>
         </label>
       </div>
     </div>
@@ -283,7 +297,7 @@
   }
 
   /* ---------------- 公告分页 ---------------- */
-  var PG_SIZE_DEFAULT = 20;
+  var PG_SIZE_DEFAULT = 10;
   var PG_SIZE_KEY = 'zrfeng-notice-size';   // 每页条数记在本机，下次进来还是这个数
   var pgSize = PG_SIZE_DEFAULT;
   var pgOffset = 0;
@@ -320,6 +334,26 @@
 
     var sel = el('pgSize');
     if (sel) sel.value = String(pgSize);
+
+    // 跳页输入框的边界跟着总页数走
+    var jump = el('pgJump');
+    if (jump) {
+      jump.max = String(pages);
+      jump.placeholder = String(cur);
+      jump.value = '';
+    }
+  }
+
+  /** 跳到第 n 页（1 起算）；越界就夹到首/尾页，非法输入直接忽略 */
+  function jumpToPage(n) {
+    var pages = Math.max(1, Math.ceil(pgTotal / pgSize));
+    var p = parseInt(n, 10);
+    if (!(p > 0)) return false;
+    if (p > pages) p = pages;
+    var target = (p - 1) * pgSize;
+    if (target === pgOffset) return true;
+    loadNotices(target);
+    return true;
   }
 
   /**
@@ -381,6 +415,19 @@
         pgSize = n;
         savePgSize(n);
         loadNotices(0);          // 换每页条数就回第一页，避免偏移错位
+      };
+    }
+
+    // 跳转到第 N 页：回车或点「跳转」都行
+    var jump = el('pgJump');
+    var go = el('pgGo');
+    function doJump() {
+      if (jump && jumpToPage(jump.value)) jump.value = '';
+    }
+    if (go) go.onclick = doJump;
+    if (jump) {
+      jump.onkeydown = function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); doJump(); }
       };
     }
   }

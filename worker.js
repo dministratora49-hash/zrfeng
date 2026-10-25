@@ -100,8 +100,8 @@ const NOTICE_PREFIX = 'notice:';
 /** 公告最多保留多少条，超出的从最旧的开始删 */
 const NOTICE_MAX_KEEP = 200;
 
-/** 公告列表分页：默认每页 20 条，前端可通过 ?limit= 调整（上限 100） */
-const NOTICE_PAGE_DEFAULT = 20;
+/** 公告列表分页：默认每页 10 条，前端可通过 ?limit= 调整（上限 100） */
+const NOTICE_PAGE_DEFAULT = 10;
 const NOTICE_PAGE_MAX = 100;
 
 /** 公告标题 / 正文的长度限制 */
