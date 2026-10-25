@@ -245,6 +245,7 @@
     </div>
     <button class="btn" id="adPost" type="button">发布公告</button>
     <button class="btn ghost small" id="adClear" type="button" style="margin-left:8px">清空全部公告</button>
+    <button class="btn small" id="adTranslate" type="button">补翻旧公告</button>
     <div class="msg-line" id="adMsg"></div>
   </div>
 
@@ -621,12 +622,47 @@
     }
   }
 
+  /* ---------------- 补翻旧公告（管理员） ---------------- */
+  function bindTranslate() {
+    var btn = el('adTranslate');
+    if (!btn) return;
+    btn.onclick = function () {
+      var m = el('adMsg');
+      btn.disabled = true;
+      if (m) { m.textContent = '正在翻译…'; m.className = 'msg-line'; }
+      (function step() {
+        fetch('/api/admin/notices/translate', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ limit: 3 }),
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (j) {
+            if (!j || !j.ok) {
+              if (m) { m.textContent = (j && j.message) || '翻译失败'; m.className = 'msg-line err'; }
+              btn.disabled = false;
+              return;
+            }
+            if (m) { m.textContent = j.message; m.className = 'msg-line ok'; }
+            if (j.remaining > 0) { step(); return; }
+            loadNotices(0);
+            btn.disabled = false;
+          })
+          .catch(function () {
+            if (m) { m.textContent = '网络错误'; m.className = 'msg-line err'; }
+            btn.disabled = false;
+          });
+      })();
+    };
+  }
+
   function boot() {
     pgSize = loadPgSize();   // 上次选过的每页条数
     var sel = el('pgSize');
     if (sel) sel.value = String(pgSize);
     bindAdmin();
     bindPager();
+    bindTranslate();
     loadNotices(0);
     loadMine();
   }

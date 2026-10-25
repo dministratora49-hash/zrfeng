@@ -2332,6 +2332,55 @@ async function handleAdminNoticePost(env, request) {
   return json({ ok: true, message: '公告已发布', id, translated: !!titleEn });
 }
 
+/**
+ * 批量补翻存量公告：把还没有英文副本的公告翻成英文存回去。
+ * 一次只处理几条，前端循环调用直到 remaining 为 0 —— 单次请求不至于跑太久。
+ */
+async function handleAdminNoticesTranslate(env, request) {
+  const guard = await requireAdmin(env, request);
+  if (guard.error) return guard.error;
+  if (!env.AI) return json({ ok: false, message: '服务器没有绑定 Workers AI，无法翻译' }, 400);
+
+  const body = await readJson(request);
+  const raw = Number(body.limit);
+  const limit = Number.isFinite(raw) && raw > 0 ? Math.min(Math.floor(raw), 10) : 3;
+
+  const all = await listNotices(env, NOTICE_MAX_KEEP);
+  const todo = all.filter((n) => !n.title_en || !n.body_en);
+  const batch = todo.slice(0, limit);
+
+  let done = 0;
+  let failed = 0;
+  for (const n of batch) {
+    const titleEn = n.title_en || (await translateToEnglish(env, n.title)) || '';
+    const bodyEn = n.body_en || (await translateToEnglish(env, n.body)) || '';
+    if (!titleEn && !bodyEn) {
+      failed++;
+      continue;
+    }
+    const rec = {
+      at: n.at,
+      title: n.title,
+      body: n.body,
+      kind: n.kind,
+      title_en: titleEn || n.title_en || '',
+      body_en: bodyEn || n.body_en || '',
+    };
+    if (n.setBy) rec.setBy = n.setBy;
+    await env.USERS.put(NOTICE_PREFIX + n.id, JSON.stringify(rec));
+    done++;
+  }
+
+  const remaining = Math.max(0, todo.length - done - failed);
+  return json({
+    ok: true,
+    message: '本轮翻译 ' + done + ' 条' + (failed ? '，' + failed + ' 条没翻出来' : '') + '，剩余 ' + remaining + ' 条',
+    done,
+    failed,
+    remaining,
+  });
+}
+
 /** 管理员删公告：带 id 删一条，带 all:true 清空 */
 async function handleAdminNoticeDelete(env, request) {
   const guard = await requireAdmin(env, request);
@@ -4554,6 +4603,9 @@ async function handleRequest(request, env) {
         }
         if (path === '/api/admin/notices/delete' && method === 'POST') {
           return await handleAdminNoticeDelete(env, request);
+        }
+        if (path === '/api/admin/notices/translate' && method === 'POST') {
+          return await handleAdminNoticesTranslate(env, request);
         }
         if (path === '/api/admin/maintenance' && method === 'POST') {
           return await handleAdminMaintenance(env, request);
