@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>/* 尽早落地亮/暗色主题，避免刷新时先闪一下深色（切换按钮在顶部状态栏里） */(function(){var t='dark';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
+<title>Log in / Sign up · zrfeng.top</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    min-height: 100vh;
+    background: #050807;
+    background-image:
+      radial-gradient(circle at 20% 20%, rgba(0, 255, 140, 0.06) 0%, transparent 50%),
+      radial-gradient(circle at 80% 80%, rgba(0, 255, 140, 0.05) 0%, transparent 50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 48px 20px;
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    color: #e8f5ee;
+  }
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,255,140,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,255,140,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+  }
+
+  .card {
+    position: relative;
+    width: 100%;
+    max-width: 420px;
+    padding: 32px 26px;
+    border: 1px solid rgba(0, 255, 140, 0.35);
+    border-radius: 16px;
+    background: rgba(10, 18, 14, 0.9);
+    box-shadow: 0 0 30px rgba(0, 255, 140, 0.1);
+  }
+
+  h1 {
+    font-size: 26px;
+    text-align: center;
+    margin-bottom: 6px;
+    background: linear-gradient(90deg, #ffffff, #00ff8c);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .sub {
+    text-align: center;
+    font-size: 12px;
+    color: #7fa893;
+    letter-spacing: 1px;
+    margin-bottom: 24px;
+  }
+
+  /* 标签切换 */
+  .tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 22px;
+    padding: 4px;
+    border-radius: 10px;
+    background: rgba(0, 255, 140, 0.05);
+  }
+  .tab {
+    flex: 1;
+    padding: 9px 0;
+    font-size: 14px;
+    font-family: inherit;
+    letter-spacing: 1px;
+    color: #7fa893;
+    background: transparent;
+    border: none;
+    border-radius: 7px;
+    cursor: pointer;
+    transition: all 0.22s;
+  }
+  .tab.on {
+    color: #050807;
+    font-weight: 700;
+    background: #00ff8c;
+    box-shadow: 0 0 16px rgba(0, 255, 140, 0.35);
+  }
+
+  .field { margin-bottom: 15px; }
+  .field label {
+    display: block;
+    font-size: 12px;
+    color: #7fa893;
+    letter-spacing: 1px;
+    margin-bottom: 7px;
+  }
+  .field input {
+    width: 100%;
+    padding: 12px 14px;
+    font-size: 14px;
+    font-family: inherit;
+    color: #e8f5ee;
+    background: rgba(5, 8, 7, 0.85);
+    border: 1px solid rgba(0, 255, 140, 0.22);
+    border-radius: 9px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .field input:focus {
+    border-color: #00ff8c;
+    box-shadow: 0 0 0 3px rgba(0, 255, 140, 0.1);
+  }
+  .field input::placeholder { color: #4a6a58; }
+
+  /* 邮箱即时校验提示 */
+  .hint {
+    margin-top: 6px;
+    font-size: 12px;
+    line-height: 1.5;
+    min-height: 16px;
+  }
+  .hint.ok { color: #00ff8c; }
+  .hint.bad { color: #ff7a7a; }
+
+  /* 验证码一行 */
+  .row-code { display: flex; gap: 8px; }
+  .row-code input { flex: 1; }
+  .row-code button {
+    flex-shrink: 0;
+    padding: 0 16px;
+    font-size: 13px;
+    font-family: inherit;
+    color: #00ff8c;
+    background: rgba(0, 255, 140, 0.08);
+    border: 1px solid rgba(0, 255, 140, 0.35);
+    border-radius: 9px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s;
+  }
+  .row-code button:hover:not(:disabled) {
+    background: rgba(0, 255, 140, 0.18);
+    border-color: #00ff8c;
+  }
+  .row-code button:disabled { color: #4a6a58; border-color: rgba(0,255,140,0.15); cursor: not-allowed; }
+
+  /* 人机验证 */
+  .captcha-box {
+    padding: 12px 14px;
+    border: 1px dashed rgba(0, 255, 140, 0.3);
+    border-radius: 9px;
+    background: rgba(0, 255, 140, 0.03);
+  }
+  .captcha-row { display: flex; align-items: center; gap: 10px; }
+  .captcha-q {
+    font-size: 15px;
+    color: #00ff8c;
+    letter-spacing: 1px;
+    white-space: nowrap;
+  }
+  .captcha-row input { flex: 1; min-width: 0; padding: 8px 10px; font-size: 14px; font-family: inherit;
+    color: #e8f5ee; background: rgba(5,8,7,0.85); border: 1px solid rgba(0,255,140,0.22);
+    border-radius: 7px; outline: none; }
+  .captcha-row input:focus { border-color: #00ff8c; }
+  .refresh {
+    flex-shrink: 0; padding: 7px 10px; font-size: 15px; line-height: 1;
+    background: transparent; color: #7fa893; border: 1px solid rgba(0,255,140,0.2);
+    border-radius: 7px; cursor: pointer; transition: all 0.2s;
+  }
+  .refresh:hover { color: #00ff8c; border-color: #00ff8c; }
+
+  /* 提交按钮 */
+  .submit {
+    width: 100%;
+    margin-top: 20px;
+    padding: 13px 0;
+    font-size: 15px;
+    font-family: inherit;
+    font-weight: 700;
+    letter-spacing: 3px;
+    color: #050807;
+    background: linear-gradient(90deg, #00ff8c, #00d97a);
+    border: none;
+    border-radius: 9px;
+    cursor: pointer;
+    transition: box-shadow 0.25s, transform 0.15s;
+  }
+  .submit:hover { box-shadow: 0 0 26px rgba(0, 255, 140, 0.45); }
+  .submit:active { transform: scale(0.99); }
+  .submit:disabled { opacity: 0.55; cursor: not-allowed; box-shadow: none; }
+
+  /* 提示条 */
+  .msg {
+    margin-top: 16px;
+    padding: 11px 13px;
+    font-size: 13px;
+    line-height: 1.6;
+    border-radius: 8px;
+    display: none;
+  }
+  .msg.show { display: block; }
+  .msg.ok { color: #00ff8c; background: rgba(0, 255, 140, 0.08); border: 1px solid rgba(0,255,140,0.3); }
+  .msg.err { color: #ff9b9b; background: rgba(255, 90, 90, 0.08); border: 1px solid rgba(255,90,90,0.3); }
+
+  .links {
+    margin-top: 20px;
+    text-align: center;
+    font-size: 12px;
+    color: #4a6a58;
+    line-height: 2;
+  }
+  .links a { color: #7fa893; text-decoration: none; }
+  .links a:hover { color: #00ff8c; }
+
+  .hide { display: none !important; }
+
+  @media (max-width: 420px) {
+    .card { padding: 26px 18px; }
+    h1 { font-size: 22px; }
+  }
+
+</style>
+<link rel="stylesheet" href="/theme.css">
+</head>
+<body>
+  <div class="card">
+    <h1 id="title">Welcome back</h1>
+    <p class="sub" id="subtitle">Log in to download resources</p>
+
+    <div class="tabs">
+      <button class="tab on" id="tabLogin" type="button">Log in</button>
+      <button class="tab" id="tabReg" type="button">Sign up</button>
+    </div>
+
+    <!-- 登录表单 -->
+    <form id="formLogin" autocomplete="on">
+      <div class="field">
+        <label>Account / Email</label>
+        <input type="text" id="loginAccount" placeholder="Username or email" autocomplete="username" required>
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input type="password" id="loginPassword" placeholder="Enter your password" autocomplete="current-password" required>
+      </div>
+
+      <div class="field">
+        <label>Human verification</label>
+        <div class="captcha-box" id="captchaBoxLogin">
+          <div class="captcha-row" id="mathLogin">
+            <span class="captcha-q" id="captchaQLogin">Loading…</span>
+            <input type="text" id="captchaALogin" placeholder="Answer" inputmode="numeric" autocomplete="off">
+            <button class="refresh" type="button" id="refreshLogin" title="New question">↻</button>
+          </div>
+          <div id="turnstileLogin" class="hide"></div>
+        </div>
+      </div>
+
+      <button class="submit" type="submit" id="btnLogin">Log in</button>
+
+      <div style="text-align:center;margin-top:12px">
+        <a href="#" id="forgotLink" style="font-size:13px;color:#7fa893;text-decoration:none">Forgot password?</a>
+      </div>
+      <div class="msg" id="msgLogin"></div>
+    </form>
+
+    <!-- 注册表单 -->
+    <div id="formForgot" class="hide">
+      <div class="field">
+        <label>How would you like to recover it?</label>
+        <div style="display:flex;gap:8px;margin-bottom:14px">
+          <button type="button" id="fmCode" class="tab on" style="flex:1">With a recovery code</button>
+          <button type="button" id="fmMail" class="tab" style="flex:1">With an email code</button>
+        </div>
+      </div>
+
+      <!-- 方式一：恢复代码 -->
+      <div id="paneCode">
+        <div class="field">
+          <label>Recovery code</label>
+          <input type="text" id="rcInput" placeholder="key--username:password--32 random chars" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="field">
+          <label>New password</label>
+          <input type="password" id="rcNew" placeholder="At least 6 characters" autocomplete="new-password">
+        </div>
+        <div class="field">
+          <label>Repeat new password</label>
+          <input type="password" id="rcNew2" placeholder="Confirm new password" autocomplete="new-password">
+        </div>
+        <button class="submit" type="button" id="rcSubmit">Reset password</button>
+        <div class="msg" id="msgForgotCode"></div>
+        <div style="font-size:12px;color:#5c7a6b;line-height:1.8;margin-top:10px">
+          You can find your recovery code under "Console → Account security → Recovery code". It is case-sensitive, so please copy it in full.
+        </div>
+      </div>
+
+      <!-- 方式二：邮箱验证码 -->
+      <div id="paneMail" class="hide">
+        <div class="field">
+          <label>Account / Email</label>
+          <input type="text" id="fmAccount" placeholder="Username or email" autocomplete="username">
+        </div>
+        <div class="field">
+          <label>Human verification</label>
+          <div class="captcha-box" id="captchaBoxForgot">
+            <div class="captcha-row" id="mathForgot">
+              <span class="captcha-q" id="captchaQForgot">Loading…</span>
+              <input type="text" id="captchaAForgot" placeholder="Answer" inputmode="numeric" autocomplete="off">
+              <button class="refresh" type="button" id="refreshForgot" title="New question">↻</button>
+            </div>
+            <div id="turnstileForgot" class="hide"></div>
+          </div>
+        </div>
+        <button class="submit" type="button" id="fmSend" style="background:linear-gradient(135deg,#00c96e,#00a85c)">Send verification code</button>
+
+        <div id="fmMailStep2" class="hide" style="margin-top:16px">
+          <div class="field">
+            <label>Email verification code</label>
+            <input type="text" id="fmCodeInput" placeholder="6 digits" inputmode="numeric" maxlength="6" autocomplete="off">
+          </div>
+          <div class="field">
+            <label>New password</label>
+            <input type="password" id="fmNew" placeholder="At least 6 characters" autocomplete="new-password">
+          </div>
+          <div class="field">
+            <label>Repeat new password</label>
+            <input type="password" id="fmNew2" placeholder="Confirm new password" autocomplete="new-password">
+          </div>
+          <button class="submit" type="button" id="fmConfirm">Reset password</button>
+        </div>
+        <div class="msg" id="msgForgotMail"></div>
+      </div>
+
+      <div style="text-align:center;margin-top:14px">
+        <a href="#" id="forgotBack" style="font-size:13px;color:#7fa893;text-decoration:none">← Back to log in</a>
+      </div>
+    </div>
+
+    <form id="formReg" class="hide" autocomplete="on">
+      <div class="field">
+        <label>Email</label>
+        <input type="email" id="regEmail" placeholder="Only .com .cn .net .top domains are supported" autocomplete="email" required>
+        <div class="hint" id="emailHint"></div>
+      </div>
+
+      <div class="field">
+        <label>Email verification code</label>
+        <div class="row-code">
+          <input type="text" id="regCode" placeholder="6-digit code" inputmode="numeric" maxlength="6" autocomplete="off">
+          <button type="button" id="btnSendCode">Send verification code</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Username</label>
+        <input type="text" id="regUser" placeholder="3-20 letters, digits or underscores" autocomplete="username" required>
+      </div>
+
+      <div class="field">
+        <label>Password</label>
+        <input type="password" id="regPass" placeholder="At least 6 characters" autocomplete="new-password" required>
+      </div>
+
+      <div class="field">
+        <label>Human verification</label>
+        <div class="captcha-box">
+          <div class="captcha-row" id="mathReg">
+            <span class="captcha-q" id="captchaQReg">Loading…</span>
+            <input type="text" id="captchaAReg" placeholder="Answer" inputmode="numeric" autocomplete="off">
+            <button class="refresh" type="button" id="refreshReg" title="New question">↻</button>
+          </div>
+          <div id="turnstileReg" class="hide"></div>
+        </div>
+      </div>
+
+      <button class="submit" type="submit" id="btnReg">Sign up</button>
+      <div class="msg" id="msgReg"></div>
+    </form>
+
+    <div class="links">
+      <a href="/en_us/guide/">← Back to the directory</a>
+    </div>
+  </div>
+
+<script>
+(function () {
+  var SITE = 'https://www.zrfeng.top';
+  var cfg = { turnstile: false, turnstileSiteKey: '' };
+
+  /* ---------- 工具 ---------- */
+  function $(id) { return document.getElementById(id); }
+  function show(el, text, type) {
+    el.textContent = text;
+    el.className = 'msg show ' + (type || 'ok');
+  }
+  function hide(el) { el.className = 'msg'; el.textContent = ''; }
+
+  async function api(path, options) {
+    var opt = options || {};
+    var res = await fetch(SITE + path, {
+      method: opt.method || 'GET',
+      headers: { 'content-type': 'application/json' },
+      credentials: 'same-origin',
+      body: opt.body ? JSON.stringify(opt.body) : undefined
+    });
+    var data;
+    try { data = await res.json(); } catch (e) { data = { ok: false, message: 'Unexpected server response' }; }
+    return { status: res.status, data: data };
+  }
+
+  /* ---------- 人机验证 ---------- */
+  var captcha = { login: {}, reg: {} };
+
+  async function loadCaptcha(which) {
+    var qEl = $(which === 'login' ? 'captchaQLogin' : 'captchaQReg');
+    var aEl = $(which === 'login' ? 'captchaALogin' : 'captchaAReg');
+    if (cfg.turnstile) { qEl.parentNode.classList.add('hide'); return; }
+    qEl.textContent = 'Loading…';
+    if (aEl) aEl.value = '';
+    try {
+      var r = await api('/api/captcha');
+      if (r.data && r.data.ok && r.data.mode === 'math') {
+        captcha[which] = { id: r.data.id };
+        qEl.textContent = r.data.question;
+      } else {
+        qEl.textContent = 'Failed to load verification, click ↻ to retry';
+      }
+    } catch (e) {
+      qEl.textContent = 'Network error, click ↻ to retry';
+    }
+  }
+
+  /* ---------- 邮箱即时校验 ---------- */
+  var emailTimer = null;
+  $('regEmail').addEventListener('input', function () {
+    var el = $('emailHint');
+    var v = this.value.trim();
+    clearTimeout(emailTimer);
+    if (!v) { el.textContent = ''; el.className = 'hint'; return; }
+    emailTimer = setTimeout(async function () {
+      try {
+        var r = await api('/api/email-check', { method: 'POST', body: { email: v } });
+        if (r.data.ok) {
+          el.textContent = '✓ This email is available';
+          el.className = 'hint ok';
+        } else {
+          el.textContent = '✕ ' + r.data.message;
+          el.className = 'hint bad';
+        }
+      } catch (e) { el.textContent = ''; el.className = 'hint'; }
+    }, 320);
+  });
+
+  /* ---------- 发送验证码 ---------- */
+  var sendTimer = 0;
+  $('btnSendCode').addEventListener('click', async function () {
+    var btn = this;
+    var email = $('regEmail').value.trim();
+    var hint = $('emailHint');
+
+    if (!email) {
+      hint.textContent = '✕ Please enter your email first';
+      hint.className = 'hint bad';
+      return;
+    }
+    if (cfg.turnstile && !window.turnstileAnswered) {
+      show($('msgReg'), 'Please complete the human verification first', 'err');
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Sending…';
+    var payload = { email: email };
+    if (cfg.turnstile) payload.turnstileToken = window.turnstileAnswered || '';
+    else {
+      payload.captchaId = captcha.reg.id;
+      payload.captchaAnswer = $('captchaAReg').value;
+    }
+
+    var r = await api('/api/send-code', { method: 'POST', body: payload });
+
+    if (r.data.ok) {
+      show($('msgReg'), r.data.message || 'Verification code sent', 'ok');
+      sendTimer = 60;
+      tick();
+      loadCaptcha('reg'); /* 用完即换，防重放 */
+    } else {
+      show($('msgReg'), r.data.message || 'Failed to send', 'err');
+      btn.disabled = false;
+      btn.textContent = 'Send verification code';
+      loadCaptcha('reg');
+    }
+  });
+
+  function tick() {
+    var btn = $('btnSendCode');
+    if (sendTimer <= 0) {
+      btn.disabled = false;
+      btn.textContent = 'Send verification code';
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = sendTimer + 's to resend';
+    sendTimer--;
+    setTimeout(tick, 1000);
+  }
+
+  /* ---------- 登录 ---------- */
+  $('formLogin').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    var btn = $('btnLogin');
+    var msg = $('msgLogin');
+    hide(msg);
+
+    var payload = {
+      account: $('loginAccount').value.trim(),
+      password: $('loginPassword').value
+    };
+    if (cfg.turnstile) payload.turnstileToken = window.turnstileAnswered || '';
+    else {
+      payload.captchaId = captcha.login.id;
+      payload.captchaAnswer = $('captchaALogin').value;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Logging in…';
+    var r = await api('/api/login', { method: 'POST', body: payload });
+
+    if (r.data.ok) {
+      show(msg, 'Logged in, redirecting…', 'ok');
+      setTimeout(function () { location.href = SITE + '/en_us/'; }, 700);
+    } else if (r.data.needDeviceKey) {
+      // 没有邮箱的账户：改用「管理员给的密钥」确认身份
+      show(msg, r.data.message || 'We cannot verify your identity. Please enter the key the admin gave you.', 'err');
+      deviceKeyStep(r.data.ticket, btn);
+    } else if (r.data.blocked) {
+      // 检测到 VPN / 代理：账号已被封停，弹出专用提示
+      if (window.zrfengProxyBlock) window.zrfengProxyBlock(r.data.message);
+      show(msg, 'VPN or proxy detected; the account has been suspended', 'err');
+      btn.disabled = false;
+      btn.textContent = 'Log in';
+      if (!cfg.turnstile) loadCaptcha('login');
+    } else if (r.data.needDeviceVerify) {
+      // 新设备：账号密码已通过，还要输一次发到邮箱的验证码
+      show(msg, r.data.message || 'This is a new device, please enter the email verification code', 'ok');
+      deviceStep(r.data.ticket, btn);
+    } else {
+      show(msg, r.data.message || 'Login failed', 'err');
+      btn.disabled = false;
+      btn.textContent = 'Log in';
+      if (!cfg.turnstile) loadCaptcha('login');
+    }
+  });
+
+  /* ---------- 新设备登录验证 ---------- */
+  var devTicket = null;
+
+  function deviceStep(ticket, loginBtn) {
+    devTicket = ticket;
+    var wrap = document.createElement('div');
+    wrap.id = 'devBox';
+    wrap.style.cssText = 'margin-top:14px;padding:14px;border:1px solid rgba(0,255,140,.35);border-radius:12px;background:rgba(0,255,140,.05)';
+    wrap.innerHTML =
+      '<div style="font-size:13px;color:#a9c6b8;margin-bottom:8px">This device is logging in for the first time. Please enter the 6-digit code sent to your email:</div>' +
+      '<input id="devCode" inputmode="numeric" maxlength="6" placeholder="000000" ' +
+      'style="width:100%;padding:11px 13px;border-radius:9px;border:1px solid rgba(0,255,140,.4);background:rgba(0,0,0,.45);color:#e8f5ee;font-size:18px;letter-spacing:7px;text-align:center;font-family:ui-monospace,monospace;margin-bottom:10px">' +
+      '<div style="display:flex;gap:10px">' +
+      '<button type="button" id="devResend" style="flex:1;padding:10px 0;border-radius:9px;border:1px solid rgba(0,255,140,.45);background:transparent;color:#00ff8c;font-size:13px;font-family:inherit;cursor:pointer">Resend</button>' +
+      '<button type="button" id="devOk" style="flex:1;padding:10px 0;border-radius:9px;border:none;background:linear-gradient(135deg,#00ff8c,#00c96e);color:#04140c;font-weight:700;font-size:14px;font-family:inherit;cursor:pointer">Verify and log in</button>' +
+      '</div>';
+    var host = loginBtn.closest('form') || loginBtn.parentNode;
+    host.appendChild(wrap);
+    if (loginBtn) { loginBtn.disabled = true; }
+    var input = document.getElementById('devCode');
+    if (input) input.focus();
+    document.getElementById('devOk').onclick = function () { doDeviceVerify(); };
+    document.getElementById('devResend').onclick = function () { resendDeviceCode(this); };
+    if (input) input.onkeydown = function (e) { if (e.key === 'Enter') doDeviceVerify(); };
+  }
+
+  async function doDeviceVerify() {
+    var msg = $('msgLogin');
+    var code = (document.getElementById('devCode') || {}).value || '';
+    if (!/^\d{6}$/.test(code.trim())) { if (msg) show(msg, 'Please enter the 6-digit code', 'err'); return; }
+    var btn = document.getElementById('devOk');
+    if (btn) btn.disabled = true;
+    try {
+      var r = await api('/api/login/verify', { method: 'POST', body: { ticket: devTicket, code: code.trim() } });
+      if (r.data.ok) {
+        if (msg) show(msg, 'Verified, redirecting…', 'ok');
+        setTimeout(function () { location.href = SITE + '/en_us/'; }, 700);
+      } else {
+        if (msg) show(msg, r.data.message || 'Verification failed', 'err');
+        if (btn) btn.disabled = false;
+      }
+    } catch (e) {
+      if (msg) show(msg, 'Network error', 'err');
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async function resendDeviceCode(el) {
+    var msg = $('msgLogin');
+    el.disabled = true;
+    try {
+      var r = await api('/api/login/verify', { method: 'POST', body: { ticket: devTicket, resend: true } });
+      if (msg) show(msg, r.data.message || 'Resent', r.data.ok ? 'ok' : 'err');
+    } catch (e) {
+      if (msg) show(msg, 'Network error', 'err');
+    }
+    setTimeout(function () { el.disabled = false; }, 3000);
+  }
+
+  /* ---------- 无邮箱账户：管理员密钥 ---------- */
+  function deviceKeyStep(ticket, loginBtn) {
+    devTicket = ticket;
+    var wrap = document.createElement('div');
+    wrap.id = 'devKeyBox';
+    wrap.style.cssText = 'margin-top:14px;padding:14px;border:1px solid rgba(255,120,120,.4);border-radius:12px;background:rgba(255,80,80,.05)';
+    wrap.innerHTML =
+      '<div style="font-size:13px;color:#e0b0b0;margin-bottom:10px;line-height:1.7">' +
+        'This account has no email bound, so no verification code can be sent.<br>Please enter <b>the key the admin gave you</b> to confirm your identity:' +
+      '</div>' +
+      '<input id="devKey" placeholder="Key from the admin" autocomplete="off" ' +
+      'style="width:100%;padding:11px 13px;border-radius:9px;border:1px solid rgba(255,120,120,.45);background:rgba(0,0,0,.45);color:#e8f5ee;font-size:15px;margin-bottom:10px">' +
+      '<button type="button" id="devKeyOk" style="width:100%;padding:11px 0;border-radius:9px;border:none;background:linear-gradient(135deg,#00ff8c,#00c96e);color:#04140c;font-weight:700;font-size:14px;font-family:inherit;cursor:pointer">Confirm identity</button>';
+    var host = loginBtn.closest('form') || loginBtn.parentNode;
+    host.appendChild(wrap);
+    if (loginBtn) loginBtn.disabled = true;
+    var input = document.getElementById('devKey');
+    if (input) { input.focus(); input.onkeydown = function (e) { if (e.key === 'Enter') doDeviceKey(); }; }
+    document.getElementById('devKeyOk').onclick = function () { doDeviceKey(); };
+  }
+
+  async function doDeviceKey() {
+    var msg = $('msgLogin');
+    var key = ((document.getElementById('devKey') || {}).value || '').trim();
+    if (!key) { if (msg) show(msg, 'Please enter the key', 'err'); return; }
+    var btn = document.getElementById('devKeyOk');
+    if (btn) btn.disabled = true;
+    try {
+      var r = await api('/api/login/verify', { method: 'POST', body: { ticket: devTicket, key: key } });
+      if (r.data.ok) {
+        if (msg) show(msg, 'Identity confirmed, redirecting…', 'ok');
+        setTimeout(function () { location.href = SITE + '/en_us/'; }, 700);
+      } else {
+        if (msg) show(msg, r.data.message || 'You are not allowed to access this', 'err');
+        if (btn) btn.disabled = false;
+      }
+    } catch (e) {
+      if (msg) show(msg, 'Network error', 'err');
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  /* ---------- 忘记密码 ---------- */
+  var forgotCaptcha = { id: '', answer: '' };
+
+  function showForgot(on) {
+    $('formLogin').className = on ? 'hide' : '';
+    $('formReg').className = 'hide';
+    $('formForgot').className = on ? '' : 'hide';
+    $('tabLogin').className = 'tab' + (on ? '' : ' on');
+    $('tabReg').className = 'tab';
+    if (on) {
+      loadForgotCaptcha();
+      var el = $('rcInput');
+      if (el) el.focus();
+    }
+  }
+
+  function switchForgot(which) {
+    var isCode = which === 'code';
+    $('fmCode').className = 'tab' + (isCode ? ' on' : '');
+    $('fmMail').className = 'tab' + (isCode ? '' : ' on');
+    $('paneCode').className = isCode ? '' : 'hide';
+    $('paneMail').className = isCode ? 'hide' : '';
+  }
+
+  async function loadForgotCaptcha() {
+    if (cfg.turnstile) return;
+    try {
+      var r = await api('/api/captcha');
+      forgotCaptcha.id = r.data.id;
+      $('captchaQForgot').textContent = r.data.question;
+      $('captchaAForgot').value = '';
+    } catch (e) { /* 忽略 */ }
+  }
+
+  $('forgotLink').addEventListener('click', function (e) { e.preventDefault(); showForgot(true); });
+  $('forgotBack').addEventListener('click', function (e) { e.preventDefault(); showForgot(false); });
+  $('fmCode').addEventListener('click', function () { switchForgot('code'); });
+  $('fmMail').addEventListener('click', function () { switchForgot('mail'); });
+  $('refreshForgot').addEventListener('click', loadForgotCaptcha);
+
+  /* 方式一：恢复代码 */
+  $('rcSubmit').addEventListener('click', async function () {
+    var btn = this, msg = $('msgForgotCode');
+    hide(msg);
+    var code = $('rcInput').value.trim();
+    var p1 = $('rcNew').value, p2 = $('rcNew2').value;
+    if (!code) { show(msg, 'Please enter your recovery code', 'err'); return; }
+    if (p1.length < 6) { show(msg, 'The new password must be at least 6 characters', 'err'); return; }
+    if (p1 !== p2) { show(msg, 'The two new passwords do not match', 'err'); return; }
+    btn.disabled = true;
+    try {
+      var r = await api('/api/recover/code', { method: 'POST', body: { code: code, password: p1 } });
+      if (r.data.ok) {
+        show(msg, 'Password reset! Returning to the log in page…', 'ok');
+        setTimeout(function () {
+          showForgot(false);
+          $('loginAccount').value = r.data.username || $('loginAccount').value;
+          $('loginPassword').value = '';
+          $('loginPassword').focus();
+          btn.disabled = false;
+          $('rcInput').value = ''; $('rcNew').value = ''; $('rcNew2').value = '';
+        }, 1200);
+      } else {
+        show(msg, r.data.message || 'Reset failed', 'err');
+        btn.disabled = false;
+      }
+    } catch (e) { show(msg, 'Network error', 'err'); btn.disabled = false; }
+  });
+
+  /* 方式二：邮箱验证码 */
+  $('fmSend').addEventListener('click', async function () {
+    var btn = this, msg = $('msgForgotMail');
+    hide(msg);
+    var acc = $('fmAccount').value.trim();
+    if (!acc) { show(msg, 'Please enter your username or email', 'err'); return; }
+    var payload = { account: acc };
+    if (cfg.turnstile) payload.turnstileToken = window.turnstileAnswered || '';
+    else {
+      payload.captchaId = forgotCaptcha.id;
+      payload.captchaAnswer = $('captchaAForgot').value.trim();
+    }
+    btn.disabled = true;
+    try {
+      var r = await api('/api/recover/email/request', { method: 'POST', body: payload });
+      if (r.data.ok) {
+        show(msg, r.data.message || 'Verification code sent', 'ok');
+        $('fmMailStep2').className = '';
+        var el = $('fmCodeInput');
+        if (el) el.focus();
+      } else {
+        show(msg, r.data.message || 'Failed to send', 'err');
+        if (!cfg.turnstile) loadForgotCaptcha();
+      }
+    } catch (e) { show(msg, 'Network error', 'err'); }
+    btn.disabled = false;
+  });
+
+  $('fmConfirm').addEventListener('click', async function () {
+    var btn = this, msg = $('msgForgotMail');
+    hide(msg);
+    var acc = $('fmAccount').value.trim();
+    var code = $('fmCodeInput').value.trim();
+    var p1 = $('fmNew').value, p2 = $('fmNew2').value;
+    if (!/^\d{6}$/.test(code)) { show(msg, 'Please enter the 6-digit code', 'err'); return; }
+    if (p1.length < 6) { show(msg, 'The new password must be at least 6 characters', 'err'); return; }
+    if (p1 !== p2) { show(msg, 'The two new passwords do not match', 'err'); return; }
+    btn.disabled = true;
+    try {
+      var r = await api('/api/recover/email/confirm', { method: 'POST', body: { account: acc, code: code, password: p1 } });
+      if (r.data.ok) {
+        show(msg, 'Password reset! Returning to the log in page…', 'ok');
+        setTimeout(function () {
+          showForgot(false);
+          $('loginAccount').value = r.data.username || acc;
+          $('loginPassword').value = '';
+          $('loginPassword').focus();
+          btn.disabled = false;
+          $('fmMailStep2').className = 'hide';
+          $('fmCodeInput').value = ''; $('fmNew').value = ''; $('fmNew2').value = '';
+        }, 1200);
+      } else {
+        show(msg, r.data.message || 'Reset failed', 'err');
+        btn.disabled = false;
+      }
+    } catch (e) { show(msg, 'Network error', 'err'); btn.disabled = false; }
+  });
+
+  /* ---------- 注册 ---------- */
+  $('formReg').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    var btn = $('btnReg');
+    var msg = $('msgReg');
+    hide(msg);
+
+    var payload = {
+      email: $('regEmail').value.trim(),
+      code: $('regCode').value.trim(),
+      username: $('regUser').value.trim(),
+      password: $('regPass').value
+    };
+    if (cfg.turnstile) payload.turnstileToken = window.turnstileAnswered || '';
+    else {
+      payload.captchaId = captcha.reg.id;
+      payload.captchaAnswer = $('captchaAReg').value;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Signing up…';
+    var r = await api('/api/register', { method: 'POST', body: payload });
+
+    if (r.data.ok) {
+      show(msg, 'Signed up, redirecting…', 'ok');
+      setTimeout(function () { location.href = SITE + '/en_us/'; }, 700);
+    } else if (r.data.blocked) {
+      // 注册时检测到 VPN / 代理：账号已建但立即封停
+      if (window.zrfengProxyBlock) window.zrfengProxyBlock(r.data.message);
+      show(msg, 'VPN or proxy detected; the account has been suspended', 'err');
+      btn.disabled = false;
+      btn.textContent = 'Sign up';
+      if (!cfg.turnstile) loadCaptcha('reg');
+    } else {
+      show(msg, r.data.message || 'Sign up failed', 'err');
+      btn.disabled = false;
+      btn.textContent = 'Sign up';
+      if (!cfg.turnstile) loadCaptcha('reg');
+    }
+  });
+
+  /* ---------- 切换登录/注册 ---------- */
+  function switchTo(which) {
+    var isLogin = which === 'login';
+    $('tabLogin').className = 'tab' + (isLogin ? ' on' : '');
+    $('tabReg').className = 'tab' + (isLogin ? '' : ' on');
+    $('formLogin').className = isLogin ? '' : 'hide';
+    $('formReg').className = isLogin ? 'hide' : '';
+    $('title').textContent = isLogin ? 'Welcome back' : 'Create account';
+    $('subtitle').textContent = isLogin ? 'Log in to download resources' : 'Only .com .cn .net .top emails are supported';
+    hide($('msgLogin')); hide($('msgReg'));
+  }
+  $('tabLogin').addEventListener('click', function () { switchTo('login'); });
+  $('tabReg').addEventListener('click', function () { switchTo('reg'); });
+
+  /* ---------- 换题 ---------- */
+  $('refreshLogin').addEventListener('click', function () { loadCaptcha('login'); });
+  $('refreshReg').addEventListener('click', function () { loadCaptcha('reg'); });
+
+  /* ---------- 初始化 ---------- */
+  (async function init() {
+    try {
+      var r = await api('/api/config');
+      if (r.data && r.data.ok) {
+        cfg.turnstile = !!r.data.turnstile;
+        cfg.turnstileSiteKey = r.data.turnstileSiteKey || '';
+      }
+    } catch (e) { /* 用默认的算术题 */ }
+
+    if (cfg.turnstile && cfg.turnstileSiteKey) {
+      /* 用 Cloudflare Turnstile */
+      var s = document.createElement('script');
+      s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+      s.async = true; s.defer = true;
+      s.onload = function () {
+        ['turnstileLogin', 'turnstileReg'].forEach(function (id) {
+          var box = $(id);
+          box.classList.remove('hide');
+          window.turnstile.render(box, {
+            sitekey: cfg.turnstileSiteKey,
+            callback: function (token) { window.turnstileAnswered = token; }
+          });
+        });
+      };
+      document.head.appendChild(s);
+    } else {
+      loadCaptcha('login');
+      loadCaptcha('reg');
+    }
+
+    /* 已登录的话直接跳走 */
+    try {
+      var me = await api('/api/me');
+      if (me.data && me.data.loggedIn) {
+        location.href = SITE + '/en_us/';
+      }
+    } catch (e) { /* 忽略 */ }
+  })();
+})();
+</script>
+  <script src="/en_us/status.js" defer></script>
+  <p style="text-align:center;font-size:12px;margin:16px 0"><a href="/login/?lang=zh" style="color:#7fa893;text-decoration:none">中文</a></p>
+</body>
+</html>

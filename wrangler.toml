@@ -2,14 +2,16 @@ name = "zrfeng"
 compatibility_date = "2026-10-01"
 
 # Worker 入口：提供 /api/* 接口（注册、登录、验证码、下载门控），
-# 其余请求交给静态资源。run_worker_first 让 /api/* 优先命中 Worker。
+# 其余请求交给静态资源。
 main = "worker.js"
 
 [assets]
 directory = "./"
 binding = "ASSETS"
-# 仅路径以 /api/ 开头时才先走 Worker，其余直接由静态资源处理（更快）。
-run_worker_first = ["/api/*"]
+# 所有请求先过 Worker：除了 /api/*，还要靠它判断「美国 IP → /en_us/」的地区跳转
+# 和 ?lang= 语种 Cookie。非 API 请求在 Worker 里直接 env.ASSETS.fetch(request)
+# 原样转给静态资源，行为和以前一致，只是多一次函数调用。
+run_worker_first = true
 
 # ---------------------------------------------------------------------------
 # KV 命名空间（存用户、会话、验证码）

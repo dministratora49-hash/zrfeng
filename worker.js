@@ -3725,10 +3725,274 @@ async function handleDeviceVerify(env, request) {
   );
 }
 
+/* ========================== 中英文分站 ========================== */
+
+/**
+ * 语种偏好 Cookie。只有用户在页面上点了「中文 / English」才会写，
+ * 用来盖过地区判断 —— 美国 IP 不想看英文时点一下中文，以后就不再被跳走。
+ */
+const LANG_COOKIE = 'zrfeng-lang';
+const LANG_COOKIE_MAX_AGE = 60 * 60 * 24 * 180; // 半年
+
+/** 读单个 Cookie（不引第三方库，写死这里够用） */
+function readCookie(header, name) {
+  if (!header) return null;
+  for (const part of String(header).split(';')) {
+    const i = part.indexOf('=');
+    if (i < 0) continue;
+    if (part.slice(0, i).trim() !== name) continue;
+    try {
+      return decodeURIComponent(part.slice(i + 1).trim());
+    } catch {
+      return part.slice(i + 1).trim();
+    }
+  }
+  return null;
+}
+
+/** 只有「页面」才参与地区跳转，静态资源（js/css/图片/字体…）一律不碰 */
+function isPagePath(path) {
+  return !/\.(js|css|json|txt|xml|map|png|jpe?g|gif|svg|webp|avif|ico|bmp|woff2?|ttf|otf|eot|mp4|webm|mp3|pdf|zip|gz)$/i.test(path);
+}
+
+/** 302 跳转，带 no-store 免得 CDN 把某个地区的结果缓存给所有人 */
+function redirectTo(location, cookieValue) {
+  const headers = { location, 'cache-control': 'no-store' };
+  if (cookieValue) {
+    headers['set-cookie'] =
+      LANG_COOKIE + '=' + cookieValue + '; Path=/; Max-Age=' + LANG_COOKIE_MAX_AGE + '; SameSite=Lax';
+  }
+  return new Response(null, { status: 302, headers });
+}
+
+/**
+ * ?lang=zh / ?lang=en：记住选择，然后跳到去掉该参数的原路径。
+ * 中英文页面上的切换链接都指向这里。
+ */
+function handleLangSwitch(request, url) {
+  const want = (url.searchParams.get('lang') || '').toLowerCase();
+  if (want !== 'zh' && want !== 'en') return null;
+  const clean = new URL(url.toString());
+  clean.searchParams.delete('lang');
+  return redirectTo(clean.toString(), want);
+}
+
+/**
+ * 地区跳转：美国 IP 默认进英文站（/en_us/ + 原路径）。
+ * 不跳的情况：已经在 /en_us/、用户手动选过中文、非页面请求。
+ */
+function handleGeoRedirect(request, url) {
+  const path = url.pathname;
+  if (path === '/en_us' || path.startsWith('/en_us/')) return null;
+  if (readCookie(request.headers.get('Cookie'), LANG_COOKIE) === 'zh') return null;
+
+  const country = (request.cf && request.cf.country) || '';
+  if (country !== 'US') return null;
+
+  const dest = new URL(url.toString());
+  dest.pathname = '/en_us' + (path === '/' ? '/' : path === '/index.html' ? '/' : path);
+  // 顺手记下「英文」，后面 /api/* 的提示语就知道该出英文（用户点中文会被 cookie 覆盖）
+  return redirectTo(dest.toString(), 'en');
+}
+
+/* ---------------------- 接口文案的英文化 ---------------------- */
+
+/**
+ * 英文站（/en_us/）用的是同一套 /api/*，所以服务端返回的提示语也要跟着换语种，
+ * 否则状态栏、登录报错还是中文。
+ *
+ * 判定顺序：Cookie（点过「中文 / English」或被地区跳转写过）→ ?lang= → Accept-Language。
+ * 没有英文化词条的一律原样返回中文，宁可保留原文也不要给出半截翻译。
+ */
+function resolveLang(request) {
+  const url = new URL(request.url);
+  const q = (url.searchParams.get('lang') || '').toLowerCase();
+  if (q === 'zh' || q === 'en') return q;
+
+  const cookie = readCookie(request.headers.get('Cookie'), LANG_COOKIE);
+  if (cookie === 'zh' || cookie === 'en') return cookie;
+
+  const al = (request.headers.get('Accept-Language') || '').toLowerCase();
+  if (!al) return 'zh';
+  const first = al.split(',')[0].trim();
+  return first.startsWith('en') ? 'en' : 'zh';
+}
+
+/** 完整匹配的词条（面向普通访客的路径：登录注册、工单、公告、下载门控） */
+const EN_MESSAGES = {
+  '账号或密码错误': 'Incorrect account or password',
+  '请输入账号和密码': 'Please enter your account and password',
+  '请输入用户名或邮箱': 'Please enter your username or email',
+  '请输入邮箱': 'Please enter your email',
+  '请输入密码': 'Please enter your password',
+  '邮箱格式不正确': 'Invalid email address',
+  '邮箱长度超出限制': 'Email address is too long',
+  '密码至少 6 位': 'Password must be at least 6 characters',
+  '密码过长': 'Password is too long',
+  '密码不正确': 'Incorrect password',
+  '密码已重设，请用新密码登录': 'Password reset. Please log in with your new password',
+  '用户名需 3-20 位，仅字母数字下划线连字符': 'Username must be 3–20 characters: letters, digits, underscore or hyphen only',
+  '该用户名已被注册': 'That username is already taken',
+  '该用户名已被占用': 'That username is already taken',
+  '该用户名刚被占用，请重新发起修改': 'That username was just taken. Please start the change again',
+  '该用户名为系统保留，请换一个': 'That username is reserved. Please choose another',
+  '该邮箱已被注册': 'That email is already registered',
+  '该邮箱已被其他账户使用': 'That email is used by another account',
+  '该邮箱已注销，不可再次注册': 'That email was deleted and cannot be registered again',
+  '该邮箱已注销，不可使用': 'That email was deleted and cannot be used',
+  '该账户已被封禁': 'This account is banned',
+  '该账户已被封禁，请联系管理员': 'This account is banned. Please contact the admin',
+  '该账户已被封禁，请先解封再设为管理员': 'This account is banned. Unban it before making it an admin',
+  '该账户没有绑定邮箱，无法发送确认邮件': 'This account has no email bound, so no confirmation email can be sent',
+  '该账户没有绑定邮箱，无法通过邮箱验证': 'This account has no email bound, so it cannot be verified by email',
+  '该账户还没有邮箱，请使用「添加邮箱」': 'This account has no email yet. Use “Add email”',
+  '该账户已有邮箱，请使用「更改邮箱」': 'This account already has an email. Use “Change email”',
+  '账户不存在': 'Account does not exist',
+  '账户已注销': 'Account deleted',
+  '账户试用期已到，请联系管理员以激活账户': 'Your trial has ended. Please contact the admin to activate your account',
+  '管理员账户不可注销': 'Admin accounts cannot be deleted',
+  '试用账户不可注销': 'Trial accounts cannot be deleted',
+  '验证码不正确': 'Incorrect verification code',
+  '验证码已过期，请重新获取': 'Verification code expired. Please request a new one',
+  '验证码刚发过，请稍后再试': 'A code was just sent. Please try again shortly',
+  '验证码刚发过，请稍后再试或查看邮箱': 'A code was just sent. Please wait or check your inbox',
+  '验证码已发送，请查收邮件（含垃圾箱）': 'Verification code sent. Please check your inbox (including spam)',
+  '确认码不正确': 'Incorrect confirmation code',
+  '确认码已过期，请重新获取': 'Confirmation code expired. Please request a new one',
+  '确认码刚发过，请稍后再试或查看邮箱': 'A code was just sent. Please wait or check your inbox',
+  '请输入 6 位验证码': 'Please enter the 6-digit verification code',
+  '请输入 6 位确认码': 'Please enter the 6-digit confirmation code',
+  '请输入恢复代码': 'Please enter your recovery code',
+  '恢复代码不正确': 'Incorrect recovery code',
+  '请输入密钥': 'Please enter the key',
+  '请输入访问密钥': 'Please enter the access key',
+  '验证已过期，请重新登录': 'Verification expired. Please log in again',
+  '登录票据无效，请重新登录': 'Invalid login ticket. Please log in again',
+  '验证通过，登录成功': 'Verified. You are now logged in',
+  '登录成功': 'Logged in',
+  '注册成功': 'Registered successfully',
+  '尝试次数过多，请重新获取验证码': 'Too many attempts. Please request a new code',
+  '尝试次数过多，请重新获取确认码': 'Too many attempts. Please request a new confirmation code',
+  '邮件服务未配置，请联系管理员': 'Email service is not configured. Please contact the admin',
+  '邮件发送失败': 'Failed to send email',
+  '邮件发送异常': 'Email sending error',
+  '请先登录': 'Please log in first',
+  '请先登录后再下载': 'Please log in before downloading',
+  '无权访问，仅管理员可用': 'Access denied. Admins only',
+  '工单编号不正确': 'Invalid ticket ID',
+  '找不到这条工单': 'Ticket not found',
+  '这不是你提交的工单，不能在这里回复': 'This ticket is not yours, so you cannot reply here',
+  '请先写点什么再发送': 'Please write something first',
+  '请填写标题和正文内容': 'Please fill in both title and body',
+  '工单已提交，我会尽快查看。': 'Ticket submitted. I will look into it soon.',
+  '回复已发送': 'Reply sent',
+  '回复没能保存，请稍后再试': 'Could not save the reply. Please try again later',
+  '参数不正确': 'Invalid parameters',
+  '不支持的邮箱操作': 'Unsupported email action',
+  '不支持的修改类型': 'Unsupported change type',
+  '接口不存在': 'Endpoint not found',
+  '服务器内部错误': 'Internal server error',
+  '请选择开始时间和结束时间': 'Please choose a start and end time',
+  '结束时间必须晚于开始时间': 'End time must be later than start time',
+  '封禁结束时间必须晚于开始时间': 'Ban end time must be later than start time',
+  '维护时段最长 30 天': 'A maintenance window cannot exceed 30 days',
+  '访问密钥长度需在 4–64 个字符之间': 'Access key must be 4–64 characters',
+  '没能记录，请稍后再试': 'Could not save it. Please try again later',
+  '缺少文件内容': 'Missing file content',
+  '缺少用户名': 'Missing username',
+  '账户异常': 'Account restricted',
+  '账户正常': 'Account active',
+  '登录以享受服务': 'Log in to use this site',
+  '未激活，试用期已到': 'Trial period over',
+};
+
+/** 带可变尾部/前缀的词条：命中前缀后拼上剩下的原文 */
+const EN_PREFIXES = [
+  ['这是一台新设备，验证码已发送到 ', 'This is a new device. A verification code was sent to '],
+  ['验证码已重新发送到 ', 'Verification code re-sent to '],
+  ['验证码已发送到 ', 'Verification code sent to '],
+  ['确认码已发送到 ', 'Confirmation code sent to '],
+  ['维护时间已设置（', 'Maintenance scheduled ('],
+  ['已清空 ', 'Cleared '],
+  ['标题至少要 ', 'Title must be at least '],
+  ['正文至少要 ', 'Body must be at least '],
+  ['正文最多 ', 'Body must be at most '],
+  ['回复太长了，最多 ', 'Reply is too long (max '],
+  ['警告内容最多 ', 'Warning text is too long (max '],
+];
+
+/** 试用期倒计时这类带数字的标签，用正则单独处理（尾部还有量词「天」） */
+const EN_LABEL_RULES = [
+  [/^未激活，试用期仅剩(\d+)天$/, (m) => 'Inactive, trial ends in ' + m[1] + ' days'],
+  [/^未激活，试用期仅剩(\d+)天/, (m) => 'Inactive, trial ends in ' + m[1] + ' days'],
+];
+
+/** 单条文案英文化；翻不出来就原样返回中文 */
+function localizeText(text, lang) {
+  if (lang !== 'en') return text;
+  const s = String(text);
+  const exact = EN_MESSAGES[s];
+  if (exact) return exact;
+  for (const [re, fn] of EN_LABEL_RULES) {
+    const m = s.match(re);
+    if (m) return fn(m);
+  }
+  for (const [pre, en] of EN_PREFIXES) {
+    if (s.startsWith(pre)) return en + s.slice(pre.length);
+  }
+  return s;
+}
+
+/**
+ * 把 /api/* 的 JSON 响应里用户会看到的文案换成英文。
+ * 只动 message / error / detail / hint 和 account.label 这几个字段，其余原样。
+ * 不是 JSON、或者语种是中文，直接原响应返回（零开销穿透）。
+ */
+async function localizeResponse(res, request) {
+  const lang = resolveLang(request);
+  if (lang !== 'en') return res;
+  const ct = res.headers.get('content-type') || '';
+  if (!ct.includes('application/json')) return res;
+
+  let data = null;
+  try {
+    data = await res.clone().json();
+  } catch {
+    return res;
+  }
+  if (!data || typeof data !== 'object') return res;
+
+  let changed = false;
+  for (const key of ['message', 'error', 'detail', 'hint']) {
+    if (typeof data[key] === 'string') {
+      const out = localizeText(data[key], lang);
+      if (out !== data[key]) {
+        data[key] = out;
+        changed = true;
+      }
+    }
+  }
+  if (data.account && typeof data.account === 'object' && typeof data.account.label === 'string') {
+    const out = localizeText(data.account.label, lang);
+    if (out !== data.account.label) {
+      data.account.label = out;
+      changed = true;
+    }
+  }
+  if (!changed) return res;
+
+  const headers = new Headers(res.headers);
+  headers.delete('content-length');
+  return new Response(JSON.stringify(data), {
+    status: res.status,
+    statusText: res.statusText,
+    headers,
+  });
+}
+
 /* ========================== 主入口 ========================== */
 
-export default {
-  async fetch(request, env) {
+async function handleRequest(request, env) {
     const url = new URL(request.url);
     const path = url.pathname;
     const ip = request.headers.get('CF-Connecting-IP') || '';
@@ -4169,8 +4433,23 @@ export default {
       }
     }
 
-    // 非 API：交给静态资源
+    // 非 API：先处理语种与地区跳转，再原样交给静态资源
+    if (method === 'GET' || method === 'HEAD') {
+      if (isPagePath(path)) {
+        const switched = handleLangSwitch(request, url);
+        if (switched) return switched;
+        const geo = handleGeoRedirect(request, url);
+        if (geo) return geo;
+      }
+    }
+
     if (env.ASSETS) return env.ASSETS.fetch(request);
     return new Response('Not Found', { status: 404 });
+}
+
+export default {
+  async fetch(request, env) {
+    const res = await handleRequest(request, env);
+    return await localizeResponse(res, request);
   },
 };

@@ -393,6 +393,26 @@ python -m http.server 8000
 └── wrangler.toml     # Cloudflare 部署配置
 ```
 
+## 🌏 英文站（/en_us/）
+
+站点有一份完整的英文镜像，放在 `en_us/`，目录结构与根目录一一对应：
+
+```
+en_us/
+├── index.html            # 英文首页
+├── aboutus/ guide/ file/ sponsorship/ time/
+├── contact/ login/ console/ netcheck/ notice/
+└── status.js             # 英文版状态栏（文案英化，逻辑与原版一致）
+```
+
+- 中文原站**完全不动**，两套页面共用 `/theme.css`、`/api/*` 和 KV 数据（账户、公告、工单都是同一套）。
+- 页面底部有「中文」链接，指向 `<原中文路径>?lang=zh`，会写 `zrfeng-lang=zh` Cookie。
+- **地区跳转**：`worker.js` 检测到 `request.cf.country === 'US'` 且用户没选过中文时，302 到 `/en_us/` + 原路径（只跳页面，不跳 `/api/*` 和静态资源）。
+- **接口文案**：`/api/*` 按 `zrfeng-lang` Cookie → `?lang=` → `Accept-Language` 判定语种，返回 JSON 里的 `message` / `error` / `detail` / `account.label` 会自动英化（词表见 `worker.js` 的 `EN_MESSAGES`，翻不出来的保留中文原文）。
+- `wrangler.toml` 的 `run_worker_first = true` 是为了让页面请求先进 Worker 做地区判断；非 API 请求在 Worker 里原样 `env.ASSETS.fetch(request)` 交回静态资源。
+
+> 注意：公告正文、工单内容这些**管理员发布的文本**不会被翻译，英文站上原样显示中文。
+
 ## ⭐ 支持我
 
 如果这个项目对你有启发：

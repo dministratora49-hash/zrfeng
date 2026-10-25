@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>/* 尽早落地亮/暗色主题，避免刷新时先闪一下深色（切换按钮在顶部状态栏里） */(function(){var t='dark';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
+<title>Beijing Time · Synced with Alibaba Time Server</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { min-height:100vh;
+    background: radial-gradient(circle at 20% 20%, #06120c 0%, #030805 60%, #010302 100%);
+    color:#00e676; font-family:"Consolas","JetBrains Mono",monospace;
+    display:flex; align-items:center; justify-content:center; padding:16px; }
+  .card { border:1px solid rgba(0,230,118,.25); background:rgba(0,20,10,.55);
+    border-radius:14px; padding:28px 22px; max-width:720px; width:100%;
+    box-shadow:0 0 40px rgba(0,230,118,.12); }
+  .badge { display:inline-block; border:1px solid rgba(0,230,118,.4); border-radius:20px;
+    padding:4px 14px; font-size:12px; letter-spacing:2px; background:rgba(0,230,118,.08); }
+  h1 { font-size:22px; margin:18px 0 6px; color:#e8ffe8; }
+  .sub { font-size:12px; color:rgba(0,230,118,.6); margin-bottom:22px; }
+  .big { font-size:clamp(38px,10vw,72px); color:#00ff88;
+    text-shadow:0 0 18px rgba(0,255,136,.5); margin-bottom:8px;
+    font-variant-numeric:tabular-nums; }
+  .big small { font-size:.42em; color:rgba(0,255,136,.75); }
+  .ampm { font-size:.35em; color:#bdfccf; letter-spacing:2px; margin-left:6px; }
+  .date { font-size:17px; color:#bdfccf; letter-spacing:3px; margin-bottom:22px; }
+  .grid { display:flex; gap:8px; flex-wrap:wrap; }
+  .cell { flex:1; min-width:74px; border:1px solid rgba(0,230,118,.25);
+    background:rgba(0,30,15,.4); border-radius:8px; text-align:center; padding:10px 4px; }
+  .cell .v { font-size:24px; color:#00ff88; font-variant-numeric:tabular-nums; }
+  .cell .l { font-size:11px; color:rgba(0,230,118,.55); margin-top:4px; }
+  .status { margin-top:18px; font-size:12px; color:rgba(0,230,118,.6); line-height:1.6;
+    word-break:break-all; }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#00ff88;
+    box-shadow:0 0 8px #00ff88; margin-right:6px; animation:pulse 1.5s infinite; }
+  .dot.red { background:#ff5555; box-shadow:0 0 8px #ff5555; }
+  @keyframes pulse { 50% { opacity:.35; } }
+  .btn-row { display:flex; gap:10px; margin-top:22px; }
+  .btn { flex:1; text-align:center; padding:12px;
+    border:1px solid rgba(0,230,118,.4); border-radius:8px;
+    background:rgba(0,230,118,.08); color:#00e676;
+    text-decoration:none; font-size:14px; letter-spacing:4px;
+    cursor:pointer; user-select:none; -webkit-tap-highlight-color:transparent; transition:.2s; }
+  .btn:active { background:rgba(0,230,118,.25); box-shadow:0 0 14px rgba(0,255,136,.4); }
+</style>
+<link rel="stylesheet" href="/theme.css">
+</head>
+<body>
+<div class="card">
+  <span class="badge">⏱ Beijing Time (synced with Alibaba time server)</span>
+  <h1>Beijing Time</h1>
+  <div class="sub">UTC+8 · Syncs with Alibaba time server on startup, includes network latency compensation, recalibrates every 10 minutes</div>
+
+  <div class="big"><span id="t-main">--:--:--</span><small id="t-frac">.0000</small><span class="ampm" id="t-ampm"></span></div>
+  <div class="date" id="date">----/--/-- ---</div>
+
+  <div class="grid">
+    <div class="cell"><div class="v" id="y">----</div><div class="l">Year</div></div>
+    <div class="cell"><div class="v" id="mo">--</div><div class="l">Month</div></div>
+    <div class="cell"><div class="v" id="d">--</div><div class="l">Day</div></div>
+    <div class="cell"><div class="v" id="h">--</div><div class="l">Hour</div></div>
+    <div class="cell"><div class="v" id="mi">--</div><div class="l">Min</div></div>
+    <div class="cell"><div class="v" id="s">--</div><div class="l">Sec</div></div>
+    <div class="cell"><div class="v" id="ms">.0000</div><div class="l">Fraction</div></div>
+  </div>
+
+  <div class="status">
+    <span class="dot" id="dot"></span><span id="sync">Syncing with Alibaba time server…</span>
+    <div id="detail" style="opacity:.7;margin-top:6px;"></div>
+  </div>
+
+  <div class="btn-row">
+    <div class="btn" id="fmtBtn">Switch to 12-hour</div>
+    <a class="btn" href="/en_us/guide/">← Back</a>
+  </div>
+</div>
+
+<script>
+'use strict';
+var offset = 0;
+var use12 = (function(){ try{ return localStorage.getItem('clockUse12')==='1'; }catch(e){ return false; } })();
+var syncTimer = null;
+
+var pad = function(n){ return String(n).padStart(2,'0'); };
+var $ = function(id){ return document.getElementById(id); };
+var week = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+var p = 0;
+
+/* ===== 12/24小时制切换（事件委托，只绑一次） ===== */
+document.addEventListener('click', function(ev){
+  var t = ev.target;
+  if (t && t.id === 'fmtBtn') {
+    use12 = !use12;
+    try{ localStorage.setItem('clockUse12', use12?'1':'0'); }catch(e){}
+    var btn = $('fmtBtn');
+    if (btn) btn.textContent = use12 ? 'Switch to 24-hour' : 'Switch to 12-hour';
+  }
+});
+
+/* ===== 时间同步：阿里 → timeapi.io → 代理转发 ===== */
+function jsonp(url, timeout){
+  return new Promise(function(res, rej){
+    var cb='_cb'+(++p), s=document.createElement('script');
+    var t=setTimeout(function(){ cleanup(); rej('Timeout'); }, timeout||6000);
+    function cleanup(){ clearTimeout(t); try{delete window[cb];}catch(e){} if(s.parentNode)s.parentNode.removeChild(s); }
+    window[cb]=function(d){ cleanup(); res(d); };
+    s.onerror=function(){ cleanup(); rej('Load failed'); };
+    s.src=url+(url.indexOf('?')>=0?'&':'?')+'callback='+cb;
+    document.head.appendChild(s);
+  });
+}
+
+function ok(msg){ $('dot').classList.remove('red'); $('sync').textContent=msg; $('detail').textContent=''; }
+function fail(msg,detail){ $('dot').classList.add('red'); $('sync').textContent=msg; $('detail').textContent=detail; }
+
+function syncTime(){
+  var logs=[];
+  return jsonp('https://acs.m.taobao.com/gw/mtop.common.getTimestamp/')
+    .then(function(j){
+      offset=(+j.data.t)-Date.now();
+      ok('✔ Synced (Alibaba time server), offset '+offset.toFixed(1)+'ms · recalibrating in 10 minutes');
+    })
+    .catch(function(){
+      logs.push('Alibaba: failed');
+      var t0=Date.now();
+      return fetch('https://www.timeapi.io/api/Time/current/zone?timeZone=Asia/Shanghai',{cache:'no-store'})
+        .then(function(r){return r.json();})
+        .then(function(j){
+          var rtt=Date.now()-t0;
+          offset=new Date(j.dateTime+'Z').getTime()-8*3600e3+rtt/2-Date.now();
+          ok('✔ Synced (timeapi.io fallback), offset '+offset.toFixed(1)+'ms');
+        });
+    })
+    .catch(function(){
+      logs.push('timeapi: failed');
+      var t0=Date.now();
+      return fetch('https://api.allorigins.win/raw?url='+encodeURIComponent('https://acs.m.taobao.com/gw/mtop.common.getTimestamp/'),{cache:'no-store'})
+        .then(function(r){return r.json();})
+        .then(function(j){
+          var rtt=Date.now()-t0;
+          offset=(+j.data.t)+rtt/2-Date.now();
+          ok('✔ Synced (Alibaba via proxy), offset '+offset.toFixed(1)+'ms');
+        });
+    })
+    .catch(function(){
+      logs.push('proxy: failed');
+      fail('⚠ All channels failed, using local time for now, retrying in 30 seconds','Failure details: '+logs.join(' | '));
+      setTimeout(syncTime, 30000);
+    });
+}
+
+function startSync(){
+  if(syncTimer) return;
+  syncTime();
+  syncTimer = setInterval(syncTime, 10*60*1000);
+}
+
+/* ===== 渲染 ===== */
+function render(){
+  var d=new Date(Date.now()+offset);
+  var frac=(d.getMilliseconds()/1000).toFixed(4).slice(1);
+  var h=d.getHours(), ap='';
+  if(use12){ ap = h<12?'AM':'PM'; h=h%12; if(h===0)h=12; }
+  $('t-main').textContent=pad(h)+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
+  $('t-frac').textContent=frac;
+  $('t-ampm').textContent=ap;
+  $('date').textContent=d.getFullYear()+'/'+pad(d.getMonth()+1)+'/'+pad(d.getDate())+' '+week[d.getDay()];
+  $('y').textContent=d.getFullYear();
+  $('mo').textContent=pad(d.getMonth()+1);
+  $('d').textContent=pad(d.getDate());
+  $('h').textContent=pad(h);
+  $('mi').textContent=pad(d.getMinutes());
+  $('s').textContent=pad(d.getSeconds());
+  $('ms').textContent=frac;
+  requestAnimationFrame(render);
+}
+
+$('fmtBtn').textContent = use12 ? 'Switch to 24-hour' : 'Switch to 12-hour';
+render();
+startSync();
+</script>
+  <script src="/en_us/status.js" defer></script>
+  <p style="text-align:center;font-size:12px;margin:16px 0"><a href="/time/?lang=zh" style="color:#7fa893;text-decoration:none">中文</a></p>
+</body>
+</html>

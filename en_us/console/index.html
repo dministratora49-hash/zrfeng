@@ -1,0 +1,1397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>/* 尽早落地亮/暗色主题，避免刷新时先闪一下深色（切换按钮在顶部状态栏里） */(function(){var t='dark';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
+<title>Console · zrfeng</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    min-height: 100vh;
+    padding: 56px 16px 40px;
+    background: #050807;
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    color: #e8f5ee;
+    font-size: 14px;
+  }
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,255,140,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,255,140,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+  }
+  .wrap { position: relative; max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 24px; color: #00ff8c; letter-spacing: 1px; margin-bottom: 6px; }
+  .sub { font-size: 12px; color: #7fa893; margin-bottom: 22px; }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 10px; margin-bottom: 22px; }
+  .stat {
+    padding: 14px 10px; text-align: center;
+    border: 1px solid rgba(0,255,140,0.22); border-radius: 12px; background: rgba(10,18,14,0.7);
+  }
+  .stat b { display: block; font-size: 22px; color: #00ff8c; font-family: Orbitron, monospace; }
+  .stat span { font-size: 11px; color: #7fa893; }
+
+  .card {
+    border: 1px solid rgba(0,255,140,0.35); border-radius: 16px;
+    background: rgba(10,18,14,0.9); padding: 20px 18px; margin-bottom: 18px;
+  }
+  .card h2 { font-size: 15px; color: #00ff8c; margin-bottom: 14px; font-weight: 600; }
+
+  .row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 11px 0; border-bottom: 1px solid rgba(0,255,140,0.1); flex-wrap: wrap;
+  }
+  .row:last-child { border-bottom: none; }
+  .info { flex: 1; min-width: 140px; }
+  .name { font-size: 14px; color: #e8f5ee; word-break: break-all; }
+  .meta { font-size: 11px; color: #7fa893; margin-top: 3px; word-break: break-all; }
+
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; margin-left: 6px; vertical-align: middle; }
+  .tag.active  { background: rgba(0,255,140,0.15); color: #00ff8c; border: 1px solid rgba(0,255,140,0.4); }
+  .tag.trial   { background: rgba(255,204,0,0.15); color: #ffcc00; border: 1px solid rgba(255,204,0,0.4); }
+  .tag.blocked { background: rgba(255,77,77,0.15); color: #ff5c5c; border: 1px solid rgba(255,77,77,0.45); }
+  .tag.admin   { background: rgba(0,200,255,0.15); color: #4dd2ff; border: 1px solid rgba(0,200,255,0.4); }
+  .tag.banned  { background: rgba(255,68,68,0.18); color: #ff4444; border: 1px solid rgba(255,68,68,0.55); }
+  .tag.super   { background: rgba(255,215,0,0.18); color: #ffd700; border: 1px solid rgba(255,215,0,0.5); }
+  .tag.sub     { background: rgba(170,120,255,0.18); color: #b98cff; border: 1px solid rgba(170,120,255,0.5); }
+
+  button {
+    padding: 7px 13px; border-radius: 8px;
+    border: 1px solid rgba(0,255,140,0.45); background: rgba(0,255,140,0.08);
+    color: #00ff8c; font-size: 12px; cursor: pointer; font-family: inherit; white-space: nowrap;
+  }
+  button:active { opacity: .65; }
+  button:disabled { opacity: .35; cursor: default; }
+  button.warn { border-color: rgba(255,77,77,0.5); background: rgba(255,77,77,0.1); color: #ff8a8a; }
+  button.mute { border-color: rgba(127,168,147,0.4); background: transparent; color: #7fa893; }
+
+  /* 通知条：左边文字，右边「已读」 */
+  .notice {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    border: 1px solid rgba(255,204,0,0.5); border-radius: 14px;
+    background: rgba(255,204,0,0.07); padding: 14px 16px; margin-bottom: 18px;
+  }
+  .notice .nt-l { flex: 1; min-width: 0; }
+  .notice .nt-t { font-size: 14px; color: #ffcc00; font-weight: 600; }
+  .notice .nt-s { font-size: 11px; color: #a9a07a; margin-top: 4px; }
+  .notice button { border-color: rgba(255,204,0,0.55); background: rgba(255,204,0,0.12); color: #ffcc00; }
+
+  .dellist { border-top: 1px solid rgba(255,204,0,0.18); padding-top: 10px; margin-bottom: 18px; }
+  .delrow { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; color: #b9b09a; padding: 5px 0; }
+  .delrow .d-u { color: #e8d9a0; word-break: break-all; }
+  .delrow .d-t { color: #7fa893; white-space: nowrap; font-size: 11px; }
+
+  .msg { font-size: 12px; margin-top: 12px; min-height: 16px; }
+  .msg.ok { color: #00ff8c; }
+  .msg.err { color: #ff5c5c; }
+  .center { text-align: center; color: #7fa893; padding: 30px 0; line-height: 1.9; }
+  .center a { color: #00ff8c; }
+
+  .kv { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; }
+  .kv div { color: #7fa893; }
+  .kv b { color: #e8f5ee; font-weight: 500; }
+
+  /* 维护时间面板 */
+  .maint {
+    border: 1px solid rgba(255,170,0,0.4); border-radius: 16px;
+    background: rgba(18,14,6,0.9); padding: 20px 18px; margin-bottom: 18px;
+  }
+  .maint h2 { font-size: 15px; color: #ffb020; margin-bottom: 6px; font-weight: 600; }
+  .maint .m-stat { font-size: 12px; color: #b9a888; margin-bottom: 14px; line-height: 1.8; }
+  .maint .m-stat b { color: #ffb020; }
+  .m-field { margin-bottom: 12px; }
+  .m-field label { display: block; font-size: 12px; color: #a89b7c; margin-bottom: 5px; }
+  .m-field input {
+    width: 100%; padding: 10px 12px; border-radius: 9px;
+    border: 1px solid rgba(255,170,0,0.35); background: rgba(0,0,0,0.45);
+    color: #f0e8d8; font-size: 14px; font-family: inherit;
+  }
+  .m-field input:focus { outline: none; border-color: rgba(255,170,0,0.8); }
+  /* 警告内容用多行文本框（管理员自己写） */
+  .m-field textarea {
+    width: 100%; padding: 10px 12px; border-radius: 9px; font-size: 13.5px;
+    border: 1px solid rgba(255,170,0,0.35); background: rgba(0,0,0,0.45);
+    color: #f0e8d8; font-family: inherit; line-height: 1.7; resize: vertical;
+  }
+  .m-field textarea:focus { outline: none; border-color: rgba(255,170,0,0.8); }
+  /* 页面维护勾选框 */
+  .m-pages { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
+  .m-page {
+    display: flex; align-items: center; gap: 7px; cursor: pointer;
+    padding: 8px 11px; border-radius: 10px; font-size: 12px;
+    border: 1px solid rgba(255,170,0,0.28); background: rgba(0,0,0,0.35); color: #b9a888;
+  }
+  .m-page.on { border-color: rgba(255,170,0,0.85); background: rgba(255,170,0,0.14); color: #ffcc66; }
+  .m-page input { width: 15px; height: 15px; accent-color: #ffb020; margin: 0; }
+  .m-page em { font-style: normal; font-size: 10px; color: #8a8060; }
+  .m-page.on em { color: #c9a75c; }
+  .m-hint { font-size: 11px; color: #8a8060; line-height: 1.8; margin-top: 8px; }
+  .m-acts { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+  .m-acts button { flex: 1; min-width: 110px; border-color: rgba(255,170,0,0.5); background: rgba(255,170,0,0.1); color: #ffc55c; }
+  .m-quick { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 14px; }
+  .m-quick button { font-size: 11px; padding: 5px 10px; border-color: rgba(255,170,0,0.3); background: transparent; color: #c9b48a; }
+  .m-now { font-size: 11px; color: #8a8060; margin-top: 10px; }
+
+  /* 工单卡片 */
+  .tk-new {
+    display: inline-block; padding: 1px 8px; border-radius: 20px; font-size: 11px;
+    margin-left: 6px; vertical-align: middle;
+    background: rgba(0,200,255,0.15); color: #4dd2ff; border: 1px solid rgba(0,200,255,0.45);
+  }
+  .tk-meta { font-size: 11px; color: #7fa893; line-height: 1.9; margin-bottom: 12px; }
+  .tk-list { display: flex; flex-direction: column; gap: 10px; }
+  .tk-item {
+    padding: 12px 13px; border-radius: 12px;
+    border: 1px solid rgba(0,255,140,0.18); background: rgba(5,8,7,0.6);
+  }
+  .tk-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .tk-title { font-size: 14px; color: #e8f5ee; word-break: break-all; }
+  .tk-time { font-size: 11px; color: #7fa893; white-space: nowrap; }
+  .tk-who { font-size: 11px; color: #7fa893; margin-top: 3px; word-break: break-all; }
+  .tk-body {
+    margin: 8px 0 10px; font-size: 13px; line-height: 1.8; color: #cfe8dc;
+    white-space: pre-wrap; word-break: break-word; max-height: 220px; overflow: auto;
+  }
+  .tk-acts { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+  .tk-acts button { flex: 1; min-width: 120px; }
+  /* 匿名工单：标出来，并且整条压暗一点（它排在最后） */
+  .tk-item-anon { opacity: 0.78; border-style: dashed; }
+  .tk-anon-tag {
+    display: inline-block; padding: 1px 7px; border-radius: 20px; font-size: 10px;
+    background: rgba(255,176,32,0.14); color: #ffb020; border: 1px solid rgba(255,176,32,0.4);
+  }
+  /* 回复线程 */
+  .tk-thread {
+    margin: 10px 0; padding-left: 10px; border-left: 2px solid rgba(0,255,140,0.18);
+  }
+  .tk-reply { padding: 6px 0; }
+  .tk-reply-who { font-size: 10.5px; color: #7fa893; margin-bottom: 3px; }
+  .tk-reply-who.admin { color: #00ff8c; }
+  .tk-reply-text { font-size: 12.5px; line-height: 1.8; color: #cfe8dc; white-space: pre-wrap; word-break: break-word; }
+  .tk-pending {
+    display: inline-block; padding: 1px 7px; border-radius: 20px; font-size: 10px;
+    background: rgba(255,80,80,0.14); color: #ff7b7b; border: 1px solid rgba(255,80,80,0.4);
+    white-space: nowrap;
+  }
+  .tk-rep { font-size: 10.5px; color: #7fa893; white-space: nowrap; }
+  .tk-reply-form { display: flex; gap: 8px; margin: 10px 0; }
+  .tk-reply-form input {
+    flex: 1; min-width: 0; padding: 8px 10px; border-radius: 8px; font-size: 12.5px;
+    border: 1px solid rgba(0,255,140,0.22); background: rgba(0,0,0,0.4);
+    color: #e8f5ee; font-family: inherit;
+  }
+  .tk-reply-form input:focus { outline: none; border-color: rgba(0,255,140,0.55); }
+  .tk-reply-form button { flex: none; padding: 8px 14px; font-size: 12.5px; }
+
+  /* 弹窗 */
+  .mask {
+    position: fixed; inset: 0; z-index: 100000; background: rgba(0,0,0,.78);
+    display: flex; align-items: center; justify-content: center; padding: 18px;
+  }
+  .mask.hidden { display: none; }
+  .modal {
+    width: 100%; max-width: 380px; padding: 24px 20px;
+    background: rgba(16,10,10,.99); border: 1px solid rgba(255,77,77,.5);
+    border-radius: 16px; box-shadow: 0 0 40px rgba(255,77,77,.16);
+  }
+  .modal h3 { font-size: 17px; color: #ff5c5c; margin-bottom: 8px; }
+  .modal p { font-size: 13px; line-height: 1.85; color: #d8c8c8; margin-bottom: 14px; }
+  .modal p.small { font-size: 12px; color: #a08f8f; }
+  .modal input {
+    width: 100%; padding: 11px 13px; margin-bottom: 12px;
+    border: 1px solid rgba(255,77,77,.4); border-radius: 9px;
+    background: rgba(0,0,0,.45); color: #f0e8e8; font-size: 15px; font-family: inherit;
+  }
+  .modal input:focus { outline: none; border-color: rgba(255,77,77,.85); }
+  .modal input.code { letter-spacing: 7px; text-align: center; font-family: ui-monospace, monospace; font-size: 20px; }
+  .modal .acts { display: flex; gap: 10px; }
+  .modal .acts button { flex: 1; padding: 10px 0; font-size: 13px; }
+  .modal .err { color: #ff7b7b; font-size: 12px; min-height: 17px; margin-bottom: 6px; }
+  .step-hint { font-size: 11px; color: #a08f8f; margin-bottom: 12px; }
+  .modal .m-field { margin-bottom: 10px; }
+  .modal .m-field label { color: #a08f8f; }
+  .modal .m-field input {
+    width: 100%; padding: 10px 12px; border-radius: 9px; font-size: 14px; font-family: inherit;
+    border: 1px solid rgba(255,77,77,.4); background: rgba(0,0,0,.45); color: #f0e8e8;
+  }
+  .modal .m-field input:focus { outline: none; border-color: rgba(255,77,77,.85); }
+  .modal .m-quick { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 0; }
+  .modal .m-quick button {
+    flex: 1; min-width: 62px; font-size: 11px; padding: 6px 8px;
+    border-color: rgba(255,77,77,.35); background: transparent; color: #e0a0a0;
+  }
+
+  @media (max-width: 520px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    h1 { font-size: 20px; }
+  }
+</style>
+<link rel="stylesheet" href="/theme.css">
+</head>
+<body>
+<div class="wrap">
+  <h1>Console</h1>
+  <div class="sub" id="who">Loading…</div>
+  <div id="notices"></div>
+  <div id="maint"></div>
+  <div id="me"></div>
+  <div id="app"></div>
+</div>
+
+<!-- 注销弹窗：密码 → 邮件确认码 → 二次确认 -->
+<div class="mask hidden" id="delMask">
+  <div class="modal">
+    <h3 id="dmTitle">Delete account</h3>
+    <div class="step-hint" id="dmStep">Step 1 / 2</div>
+    <div id="dmBody"></div>
+    <div class="err" id="dmErr"></div>
+    <div class="acts" id="dmActs"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var who = document.getElementById('who');
+  var noticesEl = document.getElementById('notices');
+  var maintEl = document.getElementById('maint');
+  /** 服务端下发的「可维护页面」表，渲染勾选框和中文名都用它 */
+  var maintPageList = [];
+  var meEl = document.getElementById('me');
+  var app = document.getElementById('app');
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function p2(n) { return n < 10 ? '0' + n : '' + n; }
+  function fmtDate(ts) {
+    if (!ts) return '—';
+    var d = new Date(ts);
+    return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate());
+  }
+  function fmtTime(ts) {
+    if (!ts) return '—';
+    var d = new Date(ts);
+    return p2(d.getMonth() + 1) + '-' + p2(d.getDate()) + ' ' + p2(d.getHours()) + ':' + p2(d.getMinutes());
+  }
+  function fmtClock(ts) { return fmtTime(ts); }
+  /** 时间戳 → <input type="datetime-local"> 需要的本地格式 */
+  function toLocalInput(ts) {
+    var d = new Date(ts);
+    return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate()) +
+      'T' + p2(d.getHours()) + ':' + p2(d.getMinutes());
+  }
+  function fromLocalInput(v) { return v ? new Date(v).getTime() : NaN; }
+
+  function tagOf(u) {
+    if (u.role === 'super') return '<span class="tag super">Super admin</span>';
+    if (u.role === 'sub') return '<span class="tag sub">Sub-admin</span>';
+    if (u.banned) return '<span class="tag banned">Banned</span>';
+    if (u.state === 'active') return '<span class="tag active">Activated</span>';
+    if (u.state === 'blocked') return '<span class="tag blocked">Trial period ended</span>';
+    return '<span class="tag trial">Inactive ' + (u.days != null ? u.days + ' days' : '') + '</span>';
+  }
+
+  /* ===================== 我的账户 ===================== */
+  var ME = null;
+
+  function renderMe(j) {
+    var u = j.user || {};
+    var acc = j.account || {};
+    var dotColor = acc.dot === 'green' ? '#00ff8c' : (acc.dot === 'yellow' ? '#ffcc00' : '#ff4d4d');
+    var html =
+      '<div class="card"><h2>My account</h2>' +
+      '<div class="kv">' +
+      '<div>Username: <b>' + esc(u.username) + '</b></div>' +
+      '<div>Email: <b>' + esc(u.email || '(Not linked)') + '</b></div>' +
+      '<div>Status: <b style="color:' + dotColor + '">' + esc(acc.label || '—') + '</b></div>' +
+      '</div>' +
+      '<div class="msg" id="meMsg"></div>';
+
+    if (u.canDelete) {
+      html +=
+        '<div class="row" style="margin-top:14px;border-top:1px solid rgba(0,255,140,0.1);border-bottom:none">' +
+        '<div class="info"><div class="name">Delete account</div>' +
+        '<div class="meta">Requires an email confirmation code; once deleted, this email can never register again and the data cannot be recovered</div></div>' +
+        '<button class="warn" id="delBtn">Delete account</button>' +
+        '</div>';
+    } else if (u.isAdmin) {
+      html += '<div class="msg" style="color:#7fa893">Admin accounts cannot be deleted.</div>';
+    } else if (u.isTrial) {
+      html += '<div class="msg" style="color:#7fa893">Trial accounts cannot be deleted.</div>';
+    }
+    html += '</div>';
+
+    // 账户安全：改用户名 / 改密码，两者都必须过邮箱验证码
+    var sec = '';
+    if (u.canChangeUsername) {
+      sec += '<div class="row"><div class="info">' +
+        '<div class="name">Change username</div>' +
+        '<div class="meta">Requires an email verification code; this device stays signed in after the change, other devices must sign in again</div></div>' +
+        '<button data-ch="username">Change</button></div>';
+    }
+    if (u.canChangePassword) {
+      sec += '<div class="row"><div class="info">' +
+        '<div class="name">Change password</div>' +
+        '<div class="meta">Requires an email verification code; other devices will be signed out after the change</div></div>' +
+        '<button data-ch="password">Change</button></div>';
+    }
+    if (u.canAddEmail) {
+      sec += '<div class="row"><div class="info">' +
+        '<div class="name">Add email</div>' +
+        '<div class="meta">This account has no email yet. Once an email is linked and verified, the account is activated (you only need to verify the new email + password)</div></div>' +
+        '<button data-em="add">Add and activate</button></div>';
+    }
+    sec += '<div class="row"><div class="info">' +
+      '<div class="name">Recovery code</div>' +
+      '<div class="meta">Use it to reset your password if you forget it. Format: key--username:email:password--32 random characters (case-sensitive)</div></div>' +
+      '<button data-rc="show">' + (u.recoveryCode ? 'View' : 'Generate') + '</button></div>';
+    if (u.canChangeEmail) {
+      sec += '<div class="row"><div class="info">' +
+        '<div class="name">Change email</div>' +
+        '<div class="meta">Current: ' + esc(u.email || '') + '. You must verify the current email first, then the new one</div></div>' +
+        '<button data-em="change">Change</button></div>';
+    }
+    if (sec) html += '<div class="card"><h2>Account security</h2>' + sec + '</div>';
+    meEl.innerHTML = html;
+
+    var b = document.getElementById('delBtn');
+    if (b) b.onclick = openDelete;
+    meEl.querySelectorAll('button[data-ch]').forEach(function (x) {
+      x.onclick = function () { openChange(x.dataset.ch); };
+    });
+    meEl.querySelectorAll('button[data-em]').forEach(function (x) {
+      x.onclick = function () { openEmail(x.dataset.em); };
+    });
+    meEl.querySelectorAll('button[data-rc]').forEach(function (x) {
+      x.onclick = function () { openRecoveryCode(); };
+    });
+  }
+
+  /* ===================== 修改用户名 / 修改密码 ===================== */
+  var changeField = null;
+
+  function openChange(field) {
+    changeField = field;
+    var isName = field === 'username';
+    setErr('');
+    dmTitle.textContent = isName ? 'Change username' : 'Change password';
+    dmStep.textContent = 'Step 1 / 2 · ' + (isName ? 'Enter a new username' : 'Enter a new password');
+    dmBody.innerHTML = isName
+      ? '<p>The new username takes effect only after <b>email verification</b>.</p>' +
+        '<p class="small">3-20 characters, letters, digits, underscores and hyphens only. This device stays signed in after the change, other devices must sign in again.</p>' +
+        '<input type="text" id="chVal" placeholder="New username" autocomplete="off">'
+      : '<p>The new password takes effect only after <b>email verification</b>.</p>' +
+        '<p class="small">At least 6 characters. Other devices will be signed out after the change, this device stays signed in.</p>' +
+        '<input type="password" id="chVal" placeholder="New password" autocomplete="new-password">' +
+        '<input type="password" id="chVal2" placeholder="Re-enter new password" autocomplete="new-password">';
+    dmActs.innerHTML =
+      '<button class="mute" id="chCancel">Cancel</button>' +
+      '<button id="chSend">Send code</button>';
+    delMask.className = 'mask';
+    document.getElementById('chCancel').onclick = closeModal;
+    document.getElementById('chSend').onclick = sendChange;
+    var v = document.getElementById('chVal');
+    if (v) v.focus();
+  }
+
+  function sendChange() {
+    var isName = changeField === 'username';
+    var v1 = (document.getElementById('chVal') || {}).value || '';
+    if (!v1) { setErr(isName ? 'Please enter a new username' : 'Please enter a new password'); return; }
+    if (!isName) {
+      var v2 = (document.getElementById('chVal2') || {}).value || '';
+      if (v1 !== v2) { setErr('The passwords do not match'); return; }
+      if (v1.length < 6) { setErr('Password must be at least 6 characters'); return; }
+    }
+    var btn = document.getElementById('chSend');
+    btn.disabled = true;
+    setErr('');
+    fetch('/api/account/change/request', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ field: changeField, value: v1 }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j.ok) { setErr(j.message || 'Failed to send'); btn.disabled = false; return; }
+        openChangeStep2(j.message || '');
+      })
+      .catch(function () { setErr('Network error'); btn.disabled = false; });
+  }
+
+  function openChangeStep2(sentMsg) {
+    var isName = changeField === 'username';
+    setErr('');
+    dmTitle.textContent = isName ? 'Change username' : 'Change password';
+    dmStep.textContent = 'Step 2 / 2 · Enter the email code';
+    dmBody.innerHTML =
+      '<p>' + esc(sentMsg) + '</p>' +
+      '<p class="small">Valid for 10 minutes. If you did not receive it, check your spam folder.</p>' +
+      '<input type="text" class="code" id="chCode" inputmode="numeric" maxlength="6" placeholder="000000">';
+    dmActs.innerHTML =
+      '<button class="mute" id="chBack">Back</button>' +
+      '<button id="chConfirm">Confirm change</button>';
+    document.getElementById('chBack').onclick = function () { openChange(changeField); };
+    document.getElementById('chConfirm').onclick = doChange;
+    var c = document.getElementById('chCode');
+    if (c) { c.focus(); c.onkeydown = function (e) { if (e.key === 'Enter') doChange(); }; }
+  }
+
+  function doChange() {
+    var code = ((document.getElementById('chCode') || {}).value || '').trim();
+    if (!/^\d{6}$/.test(code)) { setErr('Please enter the 6-digit code'); return; }
+    var btn = document.getElementById('chConfirm');
+    btn.disabled = true;
+    setErr('');
+    fetch('/api/account/change/confirm', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ field: changeField, code: code }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j.ok) { setErr(j.message || 'Change failed'); btn.disabled = false; return; }
+        dmTitle.textContent = 'Changed successfully';
+        dmStep.textContent = 'Done';
+        dmBody.innerHTML = '<p>' + esc(j.message) + '</p>';
+        dmActs.innerHTML = '<button id="chDone">OK</button>';
+        document.getElementById('chDone').onclick = function () { closeModal(); loadMe(); };
+        setTimeout(function () { closeModal(); loadMe(); }, 1800);
+      })
+      .catch(function () { setErr('Network error'); btn.disabled = false; });
+  }
+
+  /* ===================== 注销流程（两步） ===================== */
+  var delMask = document.getElementById('delMask');
+  var dmTitle = document.getElementById('dmTitle');
+  var dmStep = document.getElementById('dmStep');
+  var dmBody = document.getElementById('dmBody');
+  var dmErr = document.getElementById('dmErr');
+  var dmActs = document.getElementById('dmActs');
+  var sentTo = '';
+
+  function closeModal() { delMask.className = 'mask hidden'; }
+
+  // 兜底：点弹窗外的背景、或按 Esc，都能关掉弹窗。
+  // （每个弹窗本来都该有「关闭」按钮，这一层是防止再出现点不出去的情况）
+  delMask.addEventListener('click', function (e) {
+    if (e.target === delMask) closeModal();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && delMask.className.indexOf('hidden') === -1) closeModal();
+  });
+  function setErr(t) { dmErr.textContent = t || ''; }
+
+  function openDelete() {
+    setErr('');
+    dmTitle.textContent = 'Delete account';
+    dmStep.textContent = 'Step 1 / 2 · Verify password';
+    dmBody.innerHTML =
+      '<p>Deleting is irreversible. After you confirm, a <b>6-digit confirmation code</b> will be sent to your email; ' +
+      'you must enter it to complete the deletion.</p>' +
+      '<p class="small">After deletion this email <b>cannot be registered again</b>.</p>' +
+      '<input type="password" id="dmPwd" placeholder="Enter your current password" autocomplete="current-password">';
+    dmActs.innerHTML =
+      '<button class="mute" id="dmCancel">Cancel</button>' +
+      '<button class="warn" id="dmSend">Send confirmation code</button>';
+    delMask.className = 'mask';
+    document.getElementById('dmCancel').onclick = closeModal;
+    document.getElementById('dmSend').onclick = sendCode;
+    var p = document.getElementById('dmPwd');
+    if (p) { p.focus(); p.onkeydown = function (e) { if (e.key === 'Enter') sendCode(); }; }
+  }
+
+  function sendCode() {
+    var p = document.getElementById('dmPwd');
+    var pwd = p ? p.value : '';
+    if (!pwd) { setErr('Please enter your password'); return; }
+    var btn = document.getElementById('dmSend');
+    btn.disabled = true;
+    setErr('');
+    fetch('/api/account/delete/request', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ password: pwd }),
+    })
+      .then(function (r) { return r.json().then(function (j) { return { s: r.status, j: j }; }); })
+      .then(function (res) {
+        if (!res.j.ok) { setErr(res.j.message || 'Failed to send'); btn.disabled = false; return; }
+        sentTo = res.j.message || '';
+        step2();
+      })
+      .catch(function () { setErr('Network error'); btn.disabled = false; });
+  }
+
+  function step2() {
+    setErr('');
+    dmTitle.textContent = 'Confirm deletion';
+    dmStep.textContent = 'Step 2 / 2 · Enter the email confirmation code';
+    dmBody.innerHTML =
+      '<p>' + esc(sentTo) + '</p>' +
+      '<p class="small">Valid for 10 minutes. If you did not receive it, check your spam folder.</p>' +
+      '<input type="text" class="code" id="dmCode" inputmode="numeric" maxlength="6" placeholder="000000">';
+    dmActs.innerHTML =
+      '<button class="mute" id="dmBack">Back</button>' +
+      '<button class="warn" id="dmConfirm">Confirm deletion</button>';
+    document.getElementById('dmBack').onclick = openDelete;
+    document.getElementById('dmConfirm').onclick = doConfirm;
+    var c = document.getElementById('dmCode');
+    if (c) { c.focus(); c.onkeydown = function (e) { if (e.key === 'Enter') doConfirm(); }; }
+  }
+
+  function doConfirm() {
+    var c = document.getElementById('dmCode');
+    var code = c ? c.value.trim() : '';
+    if (!/^\d{6}$/.test(code)) { setErr('Please enter the 6-digit confirmation code'); return; }
+    var btn = document.getElementById('dmConfirm');
+    btn.disabled = true;
+    setErr('');
+    fetch('/api/account/delete/confirm', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ code: code }),
+    })
+      .then(function (r) { return r.json().then(function (j) { return { s: r.status, j: j }; }); })
+      .then(function (res) {
+        if (!res.j.ok) { setErr(res.j.message || 'Deletion failed'); btn.disabled = false; return; }
+        dmTitle.textContent = 'Account deleted';
+        dmStep.textContent = 'Done';
+        dmBody.innerHTML =
+          '<p>' + esc(res.j.message) + '</p><p class="small">' + esc(res.j.detail || '') + '</p>' +
+          '<p class="small">Returning to the main site…</p>';
+        dmActs.innerHTML = '<button id="dmHome">Back to main site</button>';
+        document.getElementById('dmHome').onclick = function () { location.href = '/en_us/'; };
+        setTimeout(function () { location.href = '/en_us/'; }, 2600);
+      })
+      .catch(function () { setErr('Network error'); btn.disabled = false; });
+  }
+
+  /* ===================== 管理员：注销通知 ===================== */
+  function renderNotices(n) {
+    if (!n || !n.count) { noticesEl.innerHTML = ''; return; }
+    var rows = n.deletions.slice(0, 10).map(function (d) {
+      return '<div class="delrow"><span class="d-u">' + esc(d.username) +
+        (d.email ? ' · ' + esc(d.email) : '') + '</span>' +
+        '<span class="d-t">' + fmtTime(d.at) + '</span></div>';
+    }).join('');
+    noticesEl.innerHTML =
+      '<div class="notice">' +
+      '<div class="nt-l">' +
+      '<div class="nt-t">Recently deleted: ' + n.count + '</div>' +
+      '<div class="nt-s">This message disappears once you click "Mark read"; it reappears when more accounts are deleted</div>' +
+      '</div>' +
+      '<button id="readBtn">Mark read</button>' +
+      '</div>' +
+      '<div class="dellist">' + rows + '</div>';
+    document.getElementById('readBtn').onclick = function () {
+      var b = document.getElementById('readBtn');
+      b.disabled = true;
+      fetch('/api/admin/notices/read', { method: 'POST' })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          if (j.ok) { noticesEl.innerHTML = ''; loadAdmin(); }
+          else { b.disabled = false; }
+        })
+        .catch(function () { b.disabled = false; });
+    };
+  }
+
+  /* ===================== 管理员：账户管理 ===================== */
+  /** 我是不是主管理员（只有主管理员能改别人的管理员权限） */
+  function amSuper() { return !!(ME && ME.user && ME.user.isSuper); }
+
+  /**
+   * 某一行账户的操作按钮。权限规则与服务端一致：
+   *   主管理员账户 —— 任何人都不能操作
+   *   副管理员账户 —— 只有主管理员能操作（副管理员之间互相不能动）
+   *   普通用户     —— 主/副管理员都能操作
+   *   设/解除副管理员 —— 仅主管理员
+   */
+  function rowButtons(u, iAmSuper) {
+    if (u.role === 'super') return '<button class="mute" disabled>Not available</button>';
+
+    var canManage = iAmSuper || u.role === 'user';
+    if (!canManage) return '<button class="mute" disabled>Sub-admin</button>';
+
+    var un = esc(u.username);
+    var out = '';
+    if (u.role === 'user') {
+      if (u.state === 'active') out += '<button class="warn" data-act="deactivate" data-u="' + un + '">Deactivate</button>';
+      else out += '<button data-act="activate" data-u="' + un + '">Activate</button>';
+      out += '<button data-act="extend" data-u="' + un + '">Extend 7 days</button>';
+    }
+    out += u.banned
+      ? '<button data-act="unban" data-u="' + un + '">Unban</button>'
+      : '<button class="warn" data-act="ban" data-u="' + un + '">Ban</button>';
+    // 警告：内容由管理员自己填，按下后发给该账户
+    out += '<button class="warn" data-act="warn" data-u="' + un + '">Warn</button>';
+    if (iAmSuper) {
+      out += u.role === 'sub'
+        ? '<button class="mute" data-act="demote" data-u="' + un + '">Remove admin</button>'
+        : '<button data-act="promote" data-u="' + un + '">Make sub-admin</button>';
+    }
+    return out;
+  }
+
+  var USERS = [];
+
+  /* ===================== 管理员：工单 ===================== */
+  /**
+   * 工单卡片。「联系我们」页提交的工单存两份都没有——只在 KV 里，
+   * 垃圾工单在服务端就地销毁，所以这里只会看到正常工单。
+   */
+  function renderTicketCard(tk) {
+    if (!tk || !tk.ok) return '';
+
+    var h = '<div class="card"><h2>Tickets' +
+      (tk.unread ? '<span class="tk-new">' + tk.unread + ' new</span>' : '') +
+      (tk.pendingCount ? '<span class="tk-new">' + tk.pendingCount + ' awaiting reply</span>' : '') +
+      '</h2>' +
+      '<div class="tk-meta">Stored: ' + (tk.count || 0) + ' · Received today: ' + (tk.today || 0) +
+      ' / ' + (tk.dailyMax || 0) + ' · Max kept: ' + (tk.maxKeep || 0) +
+      (tk.anonymousCount ? ' · Anonymous: ' + tk.anonymousCount + ' (listed last)' : '') + '<br>' +
+      '(Tickets with a title under 3 characters, a body under 10 characters, or content made up entirely of digits / punctuation are destroyed on the server and never stored)<br>' +
+      '(After you reply, the user will see it in "<a href="/en_us/notice/" target="_blank" style="color:#00ff8c">Notices → My messages</a>")' +
+      '</div>';
+
+    if (!tk.tickets || !tk.tickets.length) {
+      return h + '<div class="center">No tickets yet</div></div>';
+    }
+
+    h += '<div class="tk-list">';
+    tk.tickets.forEach(function (t) {
+      // 三种署名：已登录 → 用户名；没登录 → 未登录用户；勾了匿名 → 已匿名（不显示用户名）
+      var who;
+      if (t.anonymous) {
+        who = '<span class="tk-anon-tag">Anonymous</span>';
+      } else if (t.account) {
+        who = 'Account ' + esc(t.account);
+      } else {
+        who = 'Not signed in';
+      }
+      if (t.contact) who += ' · Contact: ' + esc(t.contact);
+      // 回复线程：用户的留言 + 管理员的回复，按时间排
+      var reps = t.replies || [];
+      var thread = '';
+      if (reps.length) {
+        thread = '<div class="tk-thread">';
+        reps.forEach(function (r) {
+          var isAdmin = r.by === 'admin';
+          thread += '<div class="tk-reply">' +
+            '<div class="tk-reply-who' + (isAdmin ? ' admin' : '') + '">' + (isAdmin ? 'Admin' : 'User') +
+            ' · ' + fmtTime(r.at) + '</div>' +
+            '<div class="tk-reply-text">' + esc(r.text) + '</div>' +
+            '</div>';
+        });
+        thread += '</div>';
+      }
+      h += '<div class="tk-item' + (t.anonymous ? ' tk-item-anon' : '') + '">' +
+        '<div class="tk-head"><span class="tk-title">' + esc(t.title) + '</span>' +
+        (t.pending ? '<span class="tk-pending">Awaiting reply</span>' : '') +
+        (t.replyCount ? '<span class="tk-rep">' + t.replyCount + ' replies</span>' : '') +
+        '<span class="tk-time">' + fmtTime(t.at) + '</span></div>' +
+        '<div class="tk-who">' + who + '</div>' +
+        '<div class="tk-body">' + esc(t.body) + '</div>' +
+        thread +
+        '<div class="tk-reply-form">' +
+        '<input type="text" maxlength="1000" placeholder="Reply to this ticket (the user will see it in Notices)" data-tk-input="' + esc(t.id) + '">' +
+        '<button data-tk-send="' + esc(t.id) + '">Send</button>' +
+        '</div>' +
+        '<button class="warn" data-tk="' + esc(t.id) + '">Delete</button>' +
+        '</div>';
+    });
+    h += '</div>';
+
+    h += '<div class="tk-acts">' +
+      (tk.unread ? '<button id="tkRead">Mark read</button>' : '') +
+      '<button class="warn" id="tkClear">Clear all</button>' +
+      '</div></div>';
+    return h;
+  }
+
+  /** 工单相关的写操作：做完重新拉一次列表 */
+  function ticketPost(url, body, btn) {
+    if (btn) btn.disabled = true;
+    fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) { if (j && j.ok) loadAdmin(); else if (btn) btn.disabled = false; })
+      .catch(function () { if (btn) btn.disabled = false; });
+  }
+
+  function wireTickets() {
+    var readBtn = document.getElementById('tkRead');
+    if (readBtn) readBtn.onclick = function () { ticketPost('/api/admin/tickets/read', {}, readBtn); };
+
+    var clearBtn = document.getElementById('tkClear');
+    if (clearBtn) clearBtn.onclick = function () {
+      if (typeof confirm === 'function' && !confirm('Clear all tickets? This cannot be undone.')) return;
+      ticketPost('/api/admin/tickets/delete', { all: true }, clearBtn);
+    };
+
+    app.querySelectorAll('button[data-tk]').forEach(function (b) {
+      b.onclick = function () {
+        if (typeof confirm === 'function' && !confirm('Delete this ticket?')) return;
+        ticketPost('/api/admin/tickets/delete', { id: b.dataset.tk }, b);
+      };
+    });
+
+    // 回复工单：回复写进工单，并在「通知板块 → 我的消息」里通知提交者
+    var sendReply = function (id, btn) {
+      var input = app.querySelector('input[data-tk-input="' + id + '"]');
+      var text = input ? String(input.value || '').trim() : '';
+      if (!text) { if (input) input.focus(); return; }
+      if (btn) btn.disabled = true;
+      fetch('/api/admin/tickets/reply', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id: id, text: text }),
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          if (j && j.ok) { if (input) input.value = ''; loadAdmin(); }
+          else { if (btn) btn.disabled = false; alert((j && j.message) || 'Reply failed'); }
+        })
+        .catch(function () { if (btn) btn.disabled = false; alert('Network error, please try again later'); });
+    };
+    app.querySelectorAll('button[data-tk-send]').forEach(function (b) {
+      b.onclick = function () { sendReply(b.dataset.tkSend, b); };
+    });
+    app.querySelectorAll('input[data-tk-input]').forEach(function (inp) {
+      inp.onkeydown = function (e) {
+        if (e.key === 'Enter') {
+          var btn = app.querySelector('button[data-tk-send="' + inp.dataset.tkInput + '"]');
+          if (btn) sendReply(inp.dataset.tkInput, btn);
+        }
+      };
+    });
+  }
+
+  function renderUsers(data, tk) {
+    var s = data.stats || {};
+    var iAmSuper = amSuper();
+    USERS = data.users || [];
+    var html =
+      '<div class="stats">' +
+      '<div class="stat"><b>' + (s.total || 0) + '</b><span>Total accounts</span></div>' +
+      '<div class="stat"><b>' + (s.active || 0) + '</b><span>Activated</span></div>' +
+      '<div class="stat"><b>' + (s.trial || 0) + '</b><span>Trial period</span></div>' +
+      '<div class="stat"><b style="color:#ff5c5c">' + (s.blocked || 0) + '</b><span>Expired</span></div>' +
+      '<div class="stat"><b style="color:#ff4444">' + (s.banned || 0) + '</b><span>Banned</span></div>' +
+      '</div>' +
+      renderTicketCard(tk) +
+      '<div class="card"><h2>Account management</h2>';
+
+    if (!data.users.length) {
+      html += '<div class="center">No accounts</div>';
+    } else {
+      data.users.forEach(function (u) {
+        var meta = (u.email || '(No email)') + ' · Registered ' + fmtDate(u.createdAt);
+        if (u.banned) {
+          // 完整的封禁起止时间：开始 →（结束 或 永久）
+          meta += ' · Ban period: ' + (u.banFrom ? fmtTime(u.banFrom) : '—') +
+            ' → ' + (u.banUntil ? fmtTime(u.banUntil) + ' (auto-unban at that time)' : 'Permanent');
+        }
+        if (u.warnCount) {
+          meta += ' · Warnings: ' + u.warnCount + (u.lastWarnAt ? ' (latest ' + fmtTime(u.lastWarnAt) + ')' : '');
+        }
+        html += '<div class="row"><div class="info">' +
+          '<div class="name">' + esc(u.username) + tagOf(u) + '</div>' +
+          '<div class="meta">' + esc(meta) + '</div></div>' +
+          rowButtons(u, iAmSuper);
+        html += '</div>';
+      });
+    }
+    html += '</div><div class="msg" id="msg"></div>';
+    app.innerHTML = html;
+
+    app.querySelectorAll('button[data-act]').forEach(function (b) { b.onclick = function () { act(b); }; });
+    wireTickets();
+  }
+
+  function note(text, ok) {
+    var m = document.getElementById('msg');
+    if (!m) return;
+    m.textContent = text;
+    m.className = 'msg ' + (ok ? 'ok' : 'err');
+  }
+
+  function act(btn) {
+    var action = btn.dataset.act;
+    var username = btn.dataset.u;
+
+    // 封禁需要先选起止时间，弹窗里再提交
+    if (action === 'ban') {
+      var target = USERS.filter(function (x) { return x.username === username; })[0];
+      openBan(target || { username: username });
+      return;
+    }
+
+    // 警告需要先写内容，弹窗里再提交
+    if (action === 'warn') {
+      var wtarget = USERS.filter(function (x) { return x.username === username; })[0];
+      openWarn(wtarget || { username: username });
+      return;
+    }
+
+    var url, body;
+    if (action === 'extend') {
+      url = '/api/admin/extend';
+      body = { username: username, days: 7 };
+    } else if (action === 'activate' || action === 'deactivate') {
+      url = '/api/admin/activate';
+      body = { username: username, activate: action === 'activate' };
+    } else if (action === 'promote' || action === 'demote') {
+      url = '/api/admin/role';
+      body = { username: username, admin: action === 'promote' };
+    } else {
+      // ban / unban
+      url = '/api/admin/ban';
+      body = { username: username, banned: action === 'ban' };
+    }
+    btn.disabled = true;
+    fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        note(j.message || (j.ok ? 'Done' : 'Failed'), !!j.ok);
+        if (j.ok) loadAdmin(); else btn.disabled = false;
+      })
+      .catch(function () { note('Network error', false); btn.disabled = false; });
+  }
+
+  /* ===================== 恢复代码 ===================== */
+  function openRecoveryCode() {
+    setErr('');
+    var code = (ME && ME.user && ME.user.recoveryCode) || '';
+    dmTitle.textContent = 'Recovery code';
+    dmStep.textContent = 'Write this down and keep it safe';
+
+    if (!code) {
+      dmBody.innerHTML =
+        '<p>This account has no recovery code yet.</p>' +
+        '<p class="small">A recovery code is generated <b>when you set your password</b>. Your account predates this feature, ' +
+        'so it does not have one yet — <b>go to "Change password" and change it once</b> and one will be generated automatically.</p>';
+      dmActs.innerHTML = '<button id="rcClose">Got it</button>';
+      delMask.className = 'mask';
+      document.getElementById('rcClose').onclick = closeModal;
+      return;
+    }
+
+    dmBody.innerHTML =
+      '<p>Use it to reset your password if you forget it.</p>' +
+      '<p class="small">⚠️ This code <b>contains your password</b> — it is like a spare key. Do not send it to anyone and do not share screenshots of it.</p>' +
+      '<div id="rcBox" style="margin:14px 0;padding:12px;border-radius:10px;background:rgba(0,0,0,.45);' +
+      'border:1px solid rgba(0,255,140,.35);font-family:ui-monospace,monospace;font-size:12px;' +
+      'color:#cfe8dc;word-break:break-all;line-height:1.7;user-select:all">' +
+      esc(code.replace(/(key--.*?--)([A-Za-z0-9]{8,})/, function (m, a, b) { return a + b.slice(0, 6) + '••••••••'; })) +
+      '</div>' +
+      '<p class="small" id="rcHint">Hidden by default; click "Show full" to reveal it.</p>';
+    dmActs.innerHTML =
+      '<button class="mute" id="rcClose">Close</button>' +
+      '<button class="mute" id="rcToggle">Show full</button>' +
+      '<button id="rcCopy">Copy</button>';
+    delMask.className = 'mask';
+    document.getElementById('rcClose').onclick = closeModal;
+
+    var shown = false;
+    document.getElementById('rcToggle').onclick = function () {
+      shown = !shown;
+      document.getElementById('rcBox').textContent = shown ? code : code.replace(/(key--.*?--)([A-Za-z0-9]{8,})/, function (m, a, b) { return a + b.slice(0, 6) + '••••••••'; });
+      this.textContent = shown ? 'Hide' : 'Show full';
+    };
+    document.getElementById('rcCopy').onclick = function () {
+      var b = this;
+      navigator.clipboard.writeText(code).then(function () {
+        b.textContent = 'Copied ✓';
+        setTimeout(function () { b.textContent = 'Copy'; }, 1500);
+      }).catch(function () {
+        var box = document.getElementById('rcBox');
+        box.textContent = code;
+        var r = document.createRange(); r.selectNodeContents(box);
+        var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+        b.textContent = 'Press and hold to select and copy';
+      });
+    };
+  }
+
+  /* ===================== 添加邮箱 / 更改邮箱 ===================== */
+  var emailAction = null;
+
+  function openEmail(action) {
+    emailAction = action;
+    setErr('');
+    if (action === 'add') return openEmailAdd();
+    return openEmailChangeOld();
+  }
+
+  /** 添加邮箱（账户还没有邮箱）：验证新邮箱 + 密码 → 激活 */
+  function openEmailAdd() {
+    dmTitle.textContent = 'Add email and activate';
+    dmStep.textContent = 'Step 1 / 2 · New email + password';
+    dmBody.innerHTML =
+      '<p>Once the email is linked and verified, the account is <b>activated</b> (the status turns green).</p>' +
+      '<p class="small">Only the new email needs verification; to confirm it is really you, you also need to enter your current password.</p>' +
+      '<input type="email" id="emMail" placeholder="Email to link" autocomplete="email">' +
+      '<input type="password" id="emPwd" placeholder="Current password" autocomplete="current-password">';
+    dmActs.innerHTML =
+      '<button class="mute" id="emCancel">Cancel</button>' +
+      '<button id="emSend">Send code</button>';
+    delMask.className = 'mask';
+    document.getElementById('emCancel').onclick = closeModal;
+    document.getElementById('emSend').onclick = sendEmailCode;
+    var m = document.getElementById('emMail');
+    if (m) m.focus();
+  }
+
+  /** 更改邮箱 · 第 1 步：先验证当前（旧）邮箱 */
+  function openEmailChangeOld() {
+    dmTitle.textContent = 'Change email';
+    dmStep.textContent = 'Step 1 / 2 · Verify current email';
+    dmBody.innerHTML =
+      '<p>For security, changing your email requires <b>verifying the current email</b> first, then the new one.</p>' +
+      '<p class="small">Click the button below and we will send a code to the email you currently have linked.</p>';
+    dmActs.innerHTML =
+      '<button class="mute" id="emCancel">Cancel</button>' +
+      '<button id="emSendOld">Send code to current email</button>';
+    delMask.className = 'mask';
+    document.getElementById('emCancel').onclick = closeModal;
+    document.getElementById('emSendOld').onclick = function () {
+      var b = document.getElementById('emSendOld');
+      b.disabled = true;
+      setErr('');
+      emailPost({ action: 'change', step: 'old' }, function (j) {
+        emailCodeStep('change', j.message || '', 'Current email code', 'Confirm and continue');
+      }, function () { b.disabled = false; });
+    };
+  }
+
+  function sendEmailCode() {
+    var mail = (document.getElementById('emMail') || {}).value || '';
+    var pwd = (document.getElementById('emPwd') || {}).value || '';
+    if (!mail.trim()) { setErr('Please enter your email'); return; }
+    if (!pwd) { setErr('Please enter your password'); return; }
+    var b = document.getElementById('emSend');
+    b.disabled = true;
+    setErr('');
+    emailPost(
+      { action: emailAction, step: 'new', email: mail.trim(), password: pwd },
+      function (j) { emailCodeStep(emailAction, j.message || '', emailAction === 'add' ? 'New email code' : 'New email code', emailAction === 'add' ? 'Confirm and activate' : 'Confirm change'); },
+      function () { b.disabled = false; }
+    );
+  }
+
+  /** 通用的「输入验证码」步骤 */
+  function emailCodeStep(action, sentMsg, label, okText) {
+    setErr('');
+    dmStep.textContent = 'Step 2 / 2 · ' + label;
+    dmBody.innerHTML =
+      '<p>' + esc(sentMsg) + '</p>' +
+      '<p class="small">Valid for 10 minutes. If you did not receive it, check your spam folder.</p>' +
+      '<input type="text" class="code" id="emCode" inputmode="numeric" maxlength="6" placeholder="000000">';
+    dmActs.innerHTML =
+      '<button class="mute" id="emBack">Back</button>' +
+      '<button id="emOk">' + esc(okText) + '</button>';
+    document.getElementById('emBack').onclick = function () { openEmail(action); };
+    document.getElementById('emOk').onclick = function () { confirmEmail(action, this); };
+    var c = document.getElementById('emCode');
+    if (c) { c.focus(); c.onkeydown = function (e) { if (e.key === 'Enter') confirmEmail(action, null); }; }
+  }
+
+  function emailPost(body, onOk, onErr) {
+    fetch('/api/account/email/request', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j.ok) { setErr(j.message || 'Failed to send'); if (onErr) onErr(); return; }
+        onOk(j);
+      })
+      .catch(function () { setErr('Network error'); if (onErr) onErr(); });
+  }
+
+  function confirmEmail(action, btn) {
+    var code = ((document.getElementById('emCode') || {}).value || '').trim();
+    if (!/^\d{6}$/.test(code)) { setErr('Please enter the 6-digit code'); return; }
+    if (btn) btn.disabled = true;
+    setErr('');
+    fetch('/api/account/email/confirm', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: action, code: code }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j.ok) { setErr(j.message || 'Verification failed'); if (btn) btn.disabled = false; return; }
+
+        // 旧邮箱通过 → 继续输入新邮箱
+        if (j.needNewEmail) {
+          dmTitle.textContent = 'Change email';
+          dmStep.textContent = 'Step 2 / 2 · Enter the new email';
+          dmBody.innerHTML =
+            '<p>' + esc(j.message || 'Current email verified') + '</p>' +
+            '<p class="small">The code will be sent to this new email; the change takes effect only after verification.</p>' +
+            '<input type="email" id="emMail" placeholder="New email address" autocomplete="email">' +
+            '<input type="hidden" id="emPwd" value="x">';
+          dmActs.innerHTML =
+            '<button class="mute" id="emBack">Back</button>' +
+            '<button id="emSend">Send code to new email</button>';
+          document.getElementById('emBack').onclick = function () { openEmailChangeOld(); };
+          document.getElementById('emSend').onclick = function () {
+            var mail = (document.getElementById('emMail') || {}).value || '';
+            if (!mail.trim()) { setErr('Please enter the new email'); return; }
+            var b = document.getElementById('emSend');
+            b.disabled = true;
+            setErr('');
+            emailPost({ action: 'change', step: 'new', email: mail.trim() },
+              function (j2) { emailCodeStep('change', j2.message || '', 'New email code', 'Confirm change'); },
+              function () { b.disabled = false; });
+          };
+          var m = document.getElementById('emMail');
+          if (m) m.focus();
+          return;
+        }
+
+        // 完成
+        dmTitle.textContent = 'Done';
+        dmStep.textContent = '';
+        dmBody.innerHTML = '<p>' + esc(j.message || 'Completed') + '</p>';
+        dmActs.innerHTML = '<button id="emDone">OK</button>';
+        document.getElementById('emDone').onclick = function () { closeModal(); loadMe(); };
+        setTimeout(function () { closeModal(); loadMe(); }, 1800);
+      })
+      .catch(function () { setErr('Network error'); if (btn) btn.disabled = false; });
+  }
+
+  /* ===================== 管理员：封禁（可设起止时间） ===================== */
+  var banTarget = null;
+
+  function toLocalMinute(ts) {
+    var d = new Date(ts);
+    return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate()) +
+      'T' + p2(d.getHours()) + ':' + p2(d.getMinutes());
+  }
+  function parseLocalMinute(v) { return v ? new Date(v).getTime() : NaN; }
+
+  function openBan(u) {
+    banTarget = u;
+    setErr('');
+    dmTitle.textContent = 'Ban account';
+    dmStep.textContent = u.username;
+    var untilVal = u.banUntil ? toLocalMinute(u.banUntil) : '';
+    dmBody.innerHTML =
+      '<p>Once banned, this account cannot download anything, and after signing in it will see <b>You are banned</b> on every page.</p>' +
+      '<p class="small">Leave "End time" empty for a <b>permanent ban</b>; if you fill it in, the ban is lifted automatically when it expires — no further action needed.</p>' +
+      '<div class="m-field"><label>Start time</label>' +
+      '<input type="datetime-local" id="banFrom" value="' + toLocalMinute(Date.now()) + '"></div>' +
+      '<div class="m-field"><label>End time (empty = permanent)</label>' +
+      '<input type="datetime-local" id="banUntil" value="' + untilVal + '"></div>' +
+      '<div class="m-quick">' +
+      '<button data-banq="1440">1 day</button>' +
+      '<button data-banq="10080">7 days</button>' +
+      '<button data-banq="43200">30 days</button>' +
+      '<button data-banq="0">Permanent</button>' +
+      '</div>';
+    dmActs.innerHTML =
+      '<button class="mute" id="banCancel">Cancel</button>' +
+      '<button class="warn" id="banOk">Confirm ban</button>';
+    delMask.className = 'mask';
+    document.getElementById('banCancel').onclick = closeModal;
+    document.getElementById('banOk').onclick = doBan;
+    dmBody.querySelectorAll('button[data-banq]').forEach(function (b) {
+      b.onclick = function () {
+        var mins = Number(b.dataset.banq);
+        var el = document.getElementById('banUntil');
+        el.value = mins > 0 ? toLocalMinute(Date.now() + mins * 60000) : '';
+      };
+    });
+  }
+
+  function doBan() {
+    if (!banTarget) return;
+    var from = parseLocalMinute(document.getElementById('banFrom').value);
+    var untilRaw = document.getElementById('banUntil').value;
+    var until = untilRaw ? parseLocalMinute(untilRaw) : 0;
+    if (!isFinite(from)) { setErr('Please choose a start time'); return; }
+    if (until && until <= Math.max(from, Date.now())) { setErr('End time must be later than start time'); return; }
+
+    var btn = document.getElementById('banOk');
+    btn.disabled = true;
+    setErr('');
+    fetch('/api/admin/ban', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username: banTarget.username, banned: true, from: from, until: until || 0 }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j.ok) { setErr(j.message || 'Ban failed'); btn.disabled = false; return; }
+        closeModal();
+        note(j.message, true);
+        loadAdmin();
+      })
+      .catch(function () { setErr('Network error'); btn.disabled = false; });
+  }
+
+  /* ===================== 管理员：警告（内容自己填） ===================== */
+  var warnTarget = null;
+
+  function openWarn(u) {
+    warnTarget = u;
+    setErr('');
+    dmTitle.textContent = 'Warn account';
+    dmStep.textContent = u.username;
+    dmBody.innerHTML =
+      '<p>The warning is <b>shown to this account immediately</b> (on every page, as an amber card) and also goes to their "Notices → My messages".</p>' +
+      '<p class="small">After they click "Got it" it stops popping up, but the message stays in Notices so they can review it anytime.</p>' +
+      '<div class="m-field"><label>Warning text (write your own)</label>' +
+      '<textarea id="warnText" maxlength="500" rows="5" placeholder="For example: Please stop uploading duplicate files, otherwise your downloads will be restricted."></textarea></div>' +
+      '<div class="m-quick">' +
+      '<button data-warnq="t1">Heads-up</button>' +
+      '<button data-warnq="t2">Final warning</button>' +
+      '<button data-warnq="t3">Stop the violation</button>' +
+      '</div>';
+    dmActs.innerHTML =
+      '<button class="mute" id="warnCancel">Cancel</button>' +
+      '<button class="warn" id="warnOk">Send warning</button>';
+    delMask.className = 'mask';
+    document.getElementById('warnCancel').onclick = closeModal;
+    document.getElementById('warnOk').onclick = doWarn;
+
+    var presets = {
+      t1: 'Please note: your recent activity does not follow the site rules. Kindly review it — thank you for your cooperation.',
+      t2: 'This is the final reminder: if the same issue occurs again, this account will be restricted.',
+      t3: 'Please stop the current violation immediately, otherwise an administrator will ban this account.',
+    };
+    dmBody.querySelectorAll('button[data-warnq]').forEach(function (b) {
+      b.onclick = function () {
+        var el = document.getElementById('warnText');
+        if (el && !el.value.trim()) el.value = presets[b.dataset.warnq] || '';
+        if (el) el.focus();
+      };
+    });
+  }
+
+  function doWarn() {
+    if (!warnTarget) return;
+    var el = document.getElementById('warnText');
+    var text = el ? String(el.value || '').trim() : '';
+    if (!text) { setErr('Please enter the warning text'); return; }
+    var btn = document.getElementById('warnOk');
+    btn.disabled = true;
+    setErr('');
+    fetch('/api/admin/warn', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username: warnTarget.username, text: text }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j.ok) { setErr(j.message || 'Warning failed'); btn.disabled = false; return; }
+        closeModal();
+        note(j.message, true);
+        loadAdmin();
+      })
+      .catch(function () { setErr('Network error'); btn.disabled = false; });
+  }
+
+  /* ===================== 管理员：维护时间 ===================== */
+  function renderMaintenance(m) {
+    if (!m) m = { set: false, active: false };
+    var now = Date.now();
+    var list = m.pageList || [];
+    maintPageList = list;
+
+    var status, color;
+    if (!m.set) { status = 'Not set (site is open as usual)'; color = '#7fa893'; }
+    else if (m.active) {
+      status = 'In maintenance — ' + (m.pages && m.pages.length ? 'these pages only: ' + pageNames(m.pages) : 'all pages site-wide');
+      color = '#ffb020';
+    }
+    else if (now < m.start) { status = 'Scheduled, starts automatically at ' + fmtClock(m.start); color = '#ffcc00'; }
+    else { status = 'Ended'; color = '#7fa893'; }
+
+    var checked = {};
+    (m.pages || []).forEach(function (id) { checked[id] = true; });
+
+    maintEl.innerHTML =
+      '<div class="maint"><h2>Maintenance window</h2>' +
+      '<div class="m-stat">Current status: <b style="color:' + color + '">' + esc(status) + '</b>' +
+      (m.set ? '<br>Maintenance window: ' + fmtClock(m.start) + ' → ' + fmtClock(m.end) : '') +
+      '</div>' +
+      '<div class="m-field"><label>Start time (at this moment the maintenance popup starts on the pages checked below)</label>' +
+      '<input type="datetime-local" id="mStart" value="' + (m.set ? toLocalInput(m.start) : '') + '"></div>' +
+      '<div class="m-field"><label>End time (at this moment the maintenance popup closes automatically)</label>' +
+      '<input type="datetime-local" id="mEnd" value="' + (m.set ? toLocalInput(m.end) : '') + '"></div>' +
+      '<div class="m-field"><label>Page maintenance (checked pages are inaccessible during maintenance; check none = site-wide maintenance)</label>' +
+      '<div class="m-pages" id="mPages">' +
+      list.map(function (p) {
+        return '<label class="m-page' + (checked[p.id] ? ' on' : '') + '">' +
+          '<input type="checkbox" data-page="' + esc(p.id) + '"' + (checked[p.id] ? ' checked' : '') + '>' +
+          '<span>' + esc(p.name) + '</span>' +
+          '<em>' + esc(p.path) + '</em></label>';
+      }).join('') +
+      '</div>' +
+      '<div class="m-hint">Checked pages show the maintenance popup and appear as Offline on the directory page; unchecked pages stay accessible.' +
+      '<br>"Contact us" is not in this list — it always stays available, since banned users rely on it to reach you.</div>' +
+      '</div>' +
+      '<div class="m-field"><label>Access key for this maintenance (lets staff preview during maintenance; can be changed anytime; empty = none)</label>' +
+      '<input type="text" id="mKey" placeholder="' + (m.keySet ? 'Already set · leave empty to keep the existing key' : 'e.g. zrfeng-staff-2026') + '" autocomplete="off"></div>' +
+      '<div class="m-stat" style="margin:6px 0 12px">' +
+      (m.keySet
+        ? 'Access key: <b>set</b> (destroyed automatically when maintenance ends; the key itself is never echoed back; while maintenance is running, anyone holding it can preview any page)'
+        : 'Access key: <b>not set</b> (without one, nobody can get in during maintenance)') +
+      '</div>' +
+      '<div class="m-quick">' +
+      '<button data-quick="30">Start now · 30 minutes</button>' +
+      '<button data-quick="60">Start now · 1 hour</button>' +
+      '<button data-quick="120">Start now · 2 hours</button>' +
+      '</div>' +
+      '<div class="m-acts">' +
+      '<button id="mSave">Save maintenance window</button>' +
+      '<button class="mute" id="mClear">Clear maintenance window</button>' +
+      '</div>' +
+      '<div class="msg" id="mMsg"></div>' +
+      '<div class="m-now">Current local time: ' + new Date().toLocaleString('en-US') + '</div>' +
+      '</div>';
+
+    // 勾上高亮，手机上看得清哪几个被勾了
+    var pageBox = document.getElementById('mPages');
+    if (pageBox) {
+      pageBox.addEventListener('change', function (e) {
+        var cb = e.target;
+        if (!cb || cb.type !== 'checkbox') return;
+        var lab = cb.parentNode;
+        if (lab) lab.className = 'm-page' + (cb.checked ? ' on' : '');
+      });
+    }
+
+    /** 收集当前勾选的页面 id */
+    function pickedPages() {
+      var out = [];
+      maintEl.querySelectorAll('#mPages input[type=checkbox]').forEach(function (cb) {
+        if (cb.checked) out.push(cb.getAttribute('data-page'));
+      });
+      return out;
+    }
+
+    document.getElementById('mSave').onclick = function () {
+      var s = fromLocalInput(document.getElementById('mStart').value);
+      var e = fromLocalInput(document.getElementById('mEnd').value);
+      if (!isFinite(s) || !isFinite(e)) { mNote('Please choose start and end times', false); return; }
+      if (e <= s) { mNote('End time must be later than start time', false); return; }
+      var keyEl = document.getElementById('mKey');
+      var keyVal = keyEl ? keyEl.value.trim() : '';
+      saveMaint({ start: s, end: e, key: keyVal, keepKey: !keyVal, pages: pickedPages() }, this);
+    };
+    document.getElementById('mClear').onclick = function () {
+      saveMaint({ clear: true }, this);
+    };
+    maintEl.querySelectorAll('button[data-quick]').forEach(function (b) {
+      b.onclick = function () {
+        var mins = Number(b.dataset.quick);
+        var s = Date.now();
+        var kEl = document.getElementById('mKey');
+        var kv = kEl ? kEl.value.trim() : '';
+        saveMaint({ start: s, end: s + mins * 60000, key: kv, keepKey: !kv, pages: pickedPages() }, b);
+      };
+    });
+  }
+
+  /** 页面 id → 中文名（表由服务端在 maintenance.pageList 里下发） */
+  function pageNames(ids) {
+    return (ids || []).map(function (id) {
+      for (var i = 0; i < maintPageList.length; i++) {
+        if (maintPageList[i].id === id) return maintPageList[i].name;
+      }
+      return id;
+    }).join(', ');
+  }
+
+  function mNote(text, ok) {
+    var el = document.getElementById('mMsg');
+    if (!el) return;
+    el.textContent = text;
+    el.className = 'msg ' + (ok ? 'ok' : 'err');
+  }
+
+  function saveMaint(body, btn) {
+    if (btn) btn.disabled = true;
+    fetch('/api/admin/maintenance', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        mNote(j.message || (j.ok ? 'Saved' : 'Save failed'), !!j.ok);
+        // 保存接口只回维护状态、不回页面表，把刚才那份表带上，免得勾选框消失
+        if (j.ok) {
+          renderMaintenance(Object.assign({}, j.maintenance, {
+            pageList: (j.maintenance && j.maintenance.pageList) || maintPageList,
+          }));
+        }
+        else if (btn) btn.disabled = false;
+      })
+      .catch(function () { mNote('Network error', false); if (btn) btn.disabled = false; });
+  }
+
+  function loadAdmin() {
+    // 账户列表和工单一起拉（工单列表单独一个接口，互不影响）
+    return Promise.all([
+      fetch('/api/admin/users', { cache: 'no-store' })
+        .then(function (r) { return r.json(); })
+        .catch(function () { return { ok: false }; }),
+      fetch('/api/admin/tickets', { cache: 'no-store' })
+        .then(function (r) { return r.json(); })
+        .catch(function () { return { ok: false }; }),
+    ])
+      .then(function (res) {
+        var j = res[0], tk = res[1];
+        if (!j.ok) {
+          noticesEl.innerHTML = '';
+          maintEl.innerHTML = '';
+          app.innerHTML = '';
+          return;
+        }
+        renderNotices(j.notices);
+        renderMaintenance(j.maintenance);
+        renderUsers(j, tk);
+      })
+      .catch(function () { /* 静默 */ });
+  }
+
+  /* ===================== 入口 ===================== */
+  function loadMe() {
+    return fetch('/api/me', { cache: 'no-store' })
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      if (!j.loggedIn) {
+        who.textContent = 'Not signed in';
+        meEl.innerHTML = '<div class="card"><div class="center">Please <a href="/en_us/login/">sign in</a> before accessing the Console.</div></div>';
+        return;
+      }
+      ME = j;
+      var u = j.user || {};
+      who.textContent = u.isSuper
+        ? 'Super admin view · manage accounts, set admins and maintenance windows'
+        : (u.isAdmin
+            ? 'Sub-admin view · manage regular users and set maintenance windows (cannot act on admin accounts)'
+            : 'Account view · view your status and delete your account');
+      renderMe(j);
+      if (u.isAdmin) loadAdmin();
+    })
+    .catch(function () {
+      who.textContent = 'Failed to load';
+      meEl.innerHTML = '<div class="card"><div class="center">Network error, please try again later.</div></div>';
+    });
+  }
+
+  loadMe();
+})();
+</script>
+  <script src="/en_us/status.js" defer></script>
+  <p style="text-align:center;font-size:12px;margin:16px 0"><a href="/console/?lang=zh" style="color:#7fa893;text-decoration:none">中文</a></p>
+</body>
+</html>

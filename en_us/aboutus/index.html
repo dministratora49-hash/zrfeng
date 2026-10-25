@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script>/* 尽早落地亮/暗色主题，避免刷新时先闪一下深色（切换按钮在顶部状态栏里） */(function(){var t='dark';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
+  <title>About the Project Team · zrfeng.top</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family:"Microsoft YaHei","PingFang SC",sans-serif;
+      background:linear-gradient(135deg,#0a101c 0%,#0d2818 100%);
+      min-height:100vh; display:flex; align-items:center;
+      justify-content:center; padding:20px; color:#e8f0f0;
+    }
+    .card {
+      background:rgba(10,16,28,.92);
+      border:1px solid rgba(0,255,170,.15);
+      border-radius:16px; max-width:600px; width:100%;
+      padding:32px 28px; box-shadow:0 0 40px rgba(0,255,170,.06);
+    }
+    header { text-align:center; margin-bottom:24px; }
+    header h1 { color:#00ffaa; font-size:24px; margin-bottom:8px; }
+    header p { color:#8899aa; font-size:13px; }
+    p { line-height:1.9; font-size:15px; color:#cdd8d8; margin-bottom:14px; }
+    .hl { color:#00ffaa; font-weight:600; }
+    .logo { width:128px; height:128px; object-fit:cover; border-radius:22px; margin:0 auto 16px; display:block;
+            border:1px solid rgba(0,255,170,.2); box-shadow:0 0 24px rgba(0,255,170,.10); }
+    .team { color:#fff; font-size:20px; margin:0 0 10px; }
+    .intro { color:#cdd8d8; }
+    .team-sub { color:#8899aa; font-size:14px; margin:22px 0 10px; }
+    .founder { width:88px; height:88px; object-fit:cover; border-radius:18px; margin:0 0 14px; display:block;
+               border:1px solid rgba(0,255,170,.18); }
+    .back { text-align:center; margin-top:28px; }
+    .back a {
+      display:inline-block; padding:10px 36px;
+      border:1px solid rgba(0,255,170,.3); border-radius:24px;
+      color:#00ffaa; text-decoration:none; font-size:14px;
+      transition:all .2s;
+    }
+    .back a:hover { background:rgba(0,255,170,.08); }
+    footer { text-align:center; color:#5a6a7a; font-size:12px;
+             margin-top:20px; }
+  </style>
+<link rel="stylesheet" href="/theme.css">
+</head>
+<body>
+  <div class="card">
+    <header>
+      <h1>About the Project Team</h1>
+      <p>About the Team</p>
+      <img class="logo" src="/aboutus/logo.jpg" alt="Serene Cube">
+      <h2 class="team">Serene Cube Studio</h2>
+      <p class="intro">Serene Cube Studio builds this website. The studio was founded on <span class="hl">October 22, 2026 at 18:15</span>.</p>
+      <h2 class="team-sub">About the founder</h2>
+    </header>
+
+    <img class="founder" src="/aboutus/founder.jpg" alt="Founder of the studio">
+    <p>My online name is <span class="hl">Summer</span>, a <span class="hl">13-year-old</span> developer from Jiangsu.</p>
+
+    <p>Most of my time is taken up by homework and tutoring classes, but I spend every remaining minute writing code, reading about aviation, listening to Luo Tianyi — and, of course, tinkering with this website.</p>
+
+    <p>Every page you are looking at was built by me on <span class="hl">a single phone</span>: writing the code, configuring DNS, deploying it live — all without ever touching a computer.</p>
+
+    <p>If it is of even a little use or inspiration to you, then this small effort was worth it.</p>
+
+    <div class="back">
+      <a href="/en_us/guide/">← Back to Directory</a>
+    </div>
+
+    <footer>© 2026 zrfeng.top · The natural breeze is blowing 🍃</footer>
+  </div>
+  <script src="/en_us/status.js" defer></script>
+  <p style="text-align:center;font-size:12px;margin:16px 0"><a href="/aboutus/?lang=zh" style="color:#7fa893;text-decoration:none">中文</a></p>
+</body>
+</html>
