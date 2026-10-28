@@ -857,6 +857,7 @@
     ['/file', 'file'],
     ['/login', 'login'],
     ['/console', 'console'],
+    ['/chat', 'chat'],
   ];
 
   /**

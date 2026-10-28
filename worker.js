@@ -1893,6 +1893,240 @@ async function handleAdminTicketsDelete(env, request) {
   return json({ ok: true, message: '已删除该工单', deleted: 1 });
 }
 
+/* ========================== 聊天室 ========================== */
+
+/**
+ * 聊天室：KV 轮询式，不依赖 Durable Objects。
+ *
+ * 键：chat:<15 位时间戳>-<随机>，字典序即时间序。
+ * 前端带 ?since=<最后一条 id> 只拉增量，避免每 2 秒把整屋拉一遍。
+ * 上限 CHAT_MAX_KEEP 条，超出的从最旧的删，防止把 KV 写爆。
+ * 在线状态用 chat:online:<who> 键 + TTL 自动过期，不需要定时清理。
+ */
+const CHAT_PREFIX = 'chat:';
+
+/** 聊天室最多保留多少条消息 */
+const CHAT_MAX_KEEP = 300;
+
+/** 单次拉取最多返回多少条 */
+const CHAT_PAGE_MAX = 60;
+
+/** 一条消息最长多少字 */
+const CHAT_TEXT_MAX = 500;
+
+/** 昵称最长多少字 */
+const CHAT_NAME_MAX = 24;
+
+/** 同一个人两条消息的最小间隔（毫秒），挡住刷屏 */
+const CHAT_COOLDOWN_MS = 1500;
+
+/** 同一个 IP 一分钟最多发多少条 */
+const CHAT_IP_PER_MIN = 20;
+
+/** 在线状态键前缀与过期时间（秒） */
+const CHAT_ONLINE_PREFIX = 'chat:online:';
+const CHAT_ONLINE_TTL = 90;
+
+/** 取出最近 limit 条消息，新的在前（键字典序倒排） */
+async function listChat(env, limit = CHAT_PAGE_MAX) {
+  let keys = [];
+  try {
+    const r = await env.USERS.list({ prefix: CHAT_PREFIX, limit });
+    keys = (r && r.keys) || [];
+  } catch {
+    return [];
+  }
+  keys = keys.filter((k) => !k.name.startsWith(CHAT_ONLINE_PREFIX));
+  keys.sort((a, b) => (a.name < b.name ? 1 : a.name > b.name ? -1 : 0));
+  const out = [];
+  for (const k of keys) {
+    let m = null;
+    try {
+      m = await env.USERS.get(k.name, 'json');
+    } catch {
+      m = null;
+    }
+    if (!m || typeof m !== 'object') continue;
+    out.push(Object.assign({ id: k.name.slice(CHAT_PREFIX.length) }, m));
+  }
+  return out;
+}
+
+/**
+ * 聊天室身份：登录用户用账户名，未登录按设备 cookie 派生一个 guest 昵称。
+ * who 是稳定内部标识，只用来判断「这条是不是我发的」，不对外暴露设备 id。
+ */
+async function chatIdentity(env, request) {
+  let account = '';
+  let role = 'guest';
+  let isAdmin = false;
+  try {
+    const s = await getSession(env, request);
+    if (s) {
+      const u = await sessionUser(env, s);
+      account = (u && u.username) || s.username || '';
+      role = u ? roleOf(u) : 'user';
+      isAdmin = !!u && isAdminRole(role);
+    }
+  } catch {
+    account = '';
+  }
+
+  if (account) {
+    return { who: 'u:' + account.toLowerCase(), name: account, account, isAdmin, role, loggedIn: true };
+  }
+  const device = deviceIdOf(request) || 'anon';
+  return {
+    who: 'd:' + device,
+    name: 'guest-' + String(device).slice(0, 4),
+    account: '',
+    isAdmin: false,
+    role: 'guest',
+    loggedIn: false,
+  };
+}
+
+/** 轮询时维持「在线」标记 */
+async function touchOnline(env, identity) {
+  try {
+    await env.USERS.put(
+      CHAT_ONLINE_PREFIX + identity.who,
+      JSON.stringify({ name: identity.name, at: Date.now() }),
+      { expirationTtl: CHAT_ONLINE_TTL }
+    );
+  } catch {
+    /* 在线状态丢了不影响聊天 */
+  }
+}
+
+/** 数在线人数（键自动过期，不用清理） */
+async function countOnline(env) {
+  try {
+    const r = await env.USERS.list({ prefix: CHAT_ONLINE_PREFIX, limit: 200 });
+    return ((r && r.keys) || []).length;
+  } catch {
+    return 0;
+  }
+}
+
+/** GET /api/chat?since=…：拉消息 + 在线人数 + 我的身份 */
+async function handleChatList(env, request) {
+  const url = new URL(request.url);
+  const identity = await chatIdentity(env, request);
+  await touchOnline(env, identity);
+
+  const all = await listChat(env, CHAT_MAX_KEEP);
+  const since = String(url.searchParams.get('since') || '').trim();
+  const fresh = since ? all.filter((m) => m.id > since) : all.slice(0, CHAT_PAGE_MAX);
+  const ordered = fresh.slice().reverse().slice(-CHAT_PAGE_MAX);
+
+  return json({
+    ok: true,
+    messages: ordered.map((m) => ({
+      id: m.id,
+      at: Number(m.at) || 0,
+      name: String(m.name || ''),
+      text: String(m.text || ''),
+      admin: !!m.admin,
+      mine: m.who === identity.who,
+    })),
+    online: await countOnline(env),
+    me: { name: identity.name, loggedIn: identity.loggedIn, isAdmin: identity.isAdmin },
+    max: CHAT_TEXT_MAX,
+  });
+}
+
+/** POST /api/chat：发一条消息 */
+async function handleChatPost(env, request, ip) {
+  const body = await readJson(request);
+  const text = capText(String(body.text || '').trim(), CHAT_TEXT_MAX + 1);
+  if (!text) return json({ ok: false, message: '消息不能为空' }, 400);
+  if (Array.from(text).length > CHAT_TEXT_MAX) {
+    return json({ ok: false, message: '消息太长了，最多 ' + CHAT_TEXT_MAX + ' 个字' }, 400);
+  }
+
+  const identity = await chatIdentity(env, request);
+
+  // 登录用户可以顺手改昵称，不填就沿用账户名；guest 只能用派生的昵称
+  let name = identity.name;
+  const rawName = capText(String(body.name || '').trim(), CHAT_NAME_MAX + 1);
+  if (rawName && identity.loggedIn) name = rawName;
+
+  const now = Date.now();
+
+  // 同一个人 1.5 秒一条
+  const cdKey = 'chatcd:' + identity.who;
+  try {
+    const last = Number(await env.USERS.get(cdKey)) || 0;
+    if (now - last < CHAT_COOLDOWN_MS) {
+      return json({ ok: false, message: '发得太快了，缓一缓再发' }, 429);
+    }
+  } catch {
+    /* 读不到就不拦 */
+  }
+
+  // 同一个 IP 每分钟 20 条
+  if (ip) {
+    const ipKey = 'chatip:' + ip + ':' + Math.floor(now / 60000);
+    try {
+      const n = Number(await env.USERS.get(ipKey)) || 0;
+      if (n >= CHAT_IP_PER_MIN) {
+        return json({ ok: false, message: '发送过于频繁，请稍后再试' }, 429);
+      }
+      await env.USERS.put(ipKey, String(n + 1), { expirationTtl: 120 });
+    } catch {
+      /* 忽略 */
+    }
+  }
+
+  // 时间戳严格递增：同一毫秒连发两条也能保证顺序稳定
+  const all = await listChat(env, CHAT_MAX_KEEP + 20);
+  const lastAt = all.reduce((mx, m) => Math.max(mx, Number(m.at) || 0), 0);
+  const at = Math.max(now, lastAt + 1);
+  const id = String(at).padStart(15, '0') + '-' + randomHex(3);
+
+  const rec = { at, name, text, who: identity.who };
+  if (identity.account) rec.account = identity.account;
+  if (identity.isAdmin) rec.admin = true;
+
+  try {
+    await env.USERS.put(CHAT_PREFIX + id, JSON.stringify(rec));
+    await env.USERS.put(cdKey, String(now), { expirationTtl: 10 });
+  } catch {
+    return json({ ok: false, message: '消息没能保存，请稍后再试' }, 500);
+  }
+
+  // 只留最近 CHAT_MAX_KEEP 条
+  const keep = [id].concat(all.map((m) => m.id));
+  for (const old of keep.slice(CHAT_MAX_KEEP)) {
+    try {
+      await env.USERS.delete(CHAT_PREFIX + old);
+    } catch {
+      /* 忽略 */
+    }
+  }
+
+  await touchOnline(env, identity);
+  return json({ ok: true, message: '已发送', id, at });
+}
+
+/** 管理员清空聊天室 */
+async function handleChatClear(env, request) {
+  const guard = await requireAdmin(env, request);
+  if (guard.error) return guard.error;
+  const all = await listChat(env, CHAT_MAX_KEEP + 50);
+  let n = 0;
+  for (const m of all) {
+    try {
+      await env.USERS.delete(CHAT_PREFIX + m.id);
+      n++;
+    } catch {
+      /* 忽略 */
+    }
+  }
+  return json({ ok: true, message: '已清空 ' + n + ' 条消息', deleted: n });
+}
+
 /* ========================== 通知板块 ========================== */
 
 /** 把时间戳格式化成「MM-DD HH:MM」（北京时间，东八区） */
@@ -2788,6 +3022,7 @@ const MAINT_PAGES = [
   { id: 'file', name: '资源库', nameEn: 'Files', path: '/file' },
   { id: 'login', name: '登录 / 注册', nameEn: 'Log in / Sign up', path: '/login' },
   { id: 'console', name: '控制台', nameEn: 'Console', path: '/console' },
+  { id: 'chat', name: '聊天室', nameEn: 'Chat Room', path: '/chat' },
 ];
 
 const MAINT_PAGE_IDS = MAINT_PAGES.map((p) => p.id);
@@ -4740,6 +4975,17 @@ async function handleRequest(request, env) {
         // 提交工单：不需要登录（被封禁的人就是靠这里联系管理员）
         if (path === '/api/ticket' && method === 'POST') {
           return await handleTicketSubmit(env, request, ip);
+        }
+
+        // 聊天室（KV 轮询）
+        if (path === '/api/chat' && method === 'GET') {
+          return await handleChatList(env, request);
+        }
+        if (path === '/api/chat' && method === 'POST') {
+          return await handleChatPost(env, request, ip);
+        }
+        if (path === '/api/admin/chat/clear' && method === 'POST') {
+          return await handleChatClear(env, request);
         }
         if (path === '/api/logout' && method === 'POST') {
           return await handleLogout(env, request);
