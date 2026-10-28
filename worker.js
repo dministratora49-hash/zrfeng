@@ -2091,11 +2091,16 @@ async function handleChatPost(env, request, ip) {
 
   try {
     await env.USERS.put(CHAT_PREFIX + id, JSON.stringify(rec));
-    // KV 的 expirationTtl 最小是 60 秒，写 10 会直接抛错（连带消息都存不上）。
-    // 冷却只有 1.5 秒，60 秒的键过期后重新来过完全够用。
-    await env.USERS.put(cdKey, String(now), { expirationTtl: 60 });
   } catch {
     return json({ ok: false, message: '消息没能保存，请稍后再试' }, 500);
+  }
+
+  // 冷却键单独写、单独兜底：它写失败只影响防刷屏，绝不能让已经存好的消息
+  // 被报成「发送失败」（这个坑真踩过一次：TTL 低于 KV 下限导致这里抛错）。
+  try {
+    await env.USERS.put(cdKey, String(now), { expirationTtl: 60 });
+  } catch {
+    /* 冷却没记上就算了 */
   }
 
   // 只留最近 CHAT_MAX_KEEP 条
