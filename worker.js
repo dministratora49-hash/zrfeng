@@ -2091,7 +2091,9 @@ async function handleChatPost(env, request, ip) {
 
   try {
     await env.USERS.put(CHAT_PREFIX + id, JSON.stringify(rec));
-    await env.USERS.put(cdKey, String(now), { expirationTtl: 10 });
+    // KV 的 expirationTtl 最小是 60 秒，写 10 会直接抛错（连带消息都存不上）。
+    // 冷却只有 1.5 秒，60 秒的键过期后重新来过完全够用。
+    await env.USERS.put(cdKey, String(now), { expirationTtl: 60 });
   } catch {
     return json({ ok: false, message: '消息没能保存，请稍后再试' }, 500);
   }
