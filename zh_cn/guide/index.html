@@ -160,6 +160,11 @@
         <span class="status"><span class="dot"></span>Online</span>
       </a>
 
+      <a class="box" href="/zh_cn/updates" data-page="updates" data-default="Online">
+        <span class="label">剩余更新清单</span>
+        <span class="status"><span class="dot"></span>Online</span>
+      </a>
+
       <a class="box" href="/zh_cn/contact">
         <span class="label">联系我们</span>
         <span class="status"><span class="dot"></span>Online</span>
@@ -183,5 +188,26 @@
   </div>
   <script src="/status.js" defer></script>
 <p style="text-align:center;font-size:12px;margin:16px 0"><a href="/en_us/guide/?lang=en" style="color:#7fa893;text-decoration:none">English</a></p>
+<script>
+// 导航页卡片按拼音首字母排序（中文站）
+(function(){
+  var boxes = document.querySelectorAll('.boxes .box');
+  if (!boxes.length) return;
+  var labels = [];
+  for (var i = 0; i < boxes.length; i++) {
+    var l = boxes[i].querySelector('.label');
+    labels.push(l ? l.textContent.trim() : '');
+  }
+  // Intl.Collator 对中文会按拼音排序（大多数浏览器/运行时都支持）
+  var collator = new Intl.Collator('zh-Hans-CN', { sensitivity: 'base', numeric: true });
+  var sorted = boxes.slice().sort(function(a, b) {
+    var la = (a.querySelector('.label') || {}).textContent || '';
+    var lb = (b.querySelector('.label') || {}).textContent || '';
+    return collator.compare(la, lb);
+  });
+  var parent = boxes[0].parentNode;
+  for (var j = 0; j < sorted.length; j++) parent.appendChild(sorted[j]);
+})();
+</script>
 </body>
 </html>

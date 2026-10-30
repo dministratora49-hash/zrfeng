@@ -385,7 +385,8 @@ python -m http.server 8000
 │   ├── login/        # 登录 / 注册
 │   ├── console/      # 控制台（账户激活管理）
 │   ├── file/         # 资源库（novel/romancenovel/）
-│   └── chat/         # 聊天室（公开频道，KV 轮询）
+│   ├── chat/         # 聊天室（公开频道，KV 轮询）
+│   └── updates/      # 剩余更新清单（管理员登记未上线的功能）
 ├── en_us/            # 英文站（/en_us/），结构与 zh_cn/ 一一对应
 ├── aboutus/          # 两个语种共用的图片资源（logo.jpg / founder.jpg）
 ├── status.js         # 中文版全站账户状态栏（en_us/status.js 是英文版）
@@ -468,6 +469,27 @@ en_us/
 - 已登记进 `MAINT_PAGES` 和 `status.js` 的 `PAGE_PATHS`，可以在控制台单独对它做「页面维护」
 
 > 只是「不建议用」的提示，**不是**安全背书：消息明文存 KV，管理员和 Cloudflare 都能看到。
+
+## 📌 剩余更新清单
+
+`/zh_cn/updates/`（英文 `/en_us/updates/`），公开可看，管理员可以维护。
+
+**流程**：管理员在文本框添加待办项 → 项出现在「待处理」区，带 ✓（上线）和 ✗（拒绝）两个按钮 →
+点击 ✓ 标记为 `deployed`，自动移到「已处理」区底部并显示「已上线」；
+点击 ✗ 标记为 `rejected`，显示「已拒绝」；管理员还可以删除单条或清空全部。
+
+- 键 `upd:<15 位时间戳>-<随机>`，最多留 100 条
+- `status: pending | deployed | rejected`，`decidedAt` 记录处理时间
+- 接口：`GET /api/updates`（公开）、`POST /api/updates`（管理员添加）、
+  `POST /api/updates/decide`（管理员 ✓/✗）、`POST /api/updates/delete`、`POST /api/updates/clear`
+
+## 🧭 导航页排序
+
+导航站卡片按名称首字母排序：
+- **英文站**按英文字母 A–Z（`Intl.Collator('en')`）
+- **中文站**按拼音首字母（`Intl.Collator('zh-Hans-CN')`，浏览器原生支持）
+
+排序在前端脚本里完成，排序后重新 `appendChild` 到 `.boxes` 容器，不涉及服务端改动。
 
 ## ⭐ 支持我
 

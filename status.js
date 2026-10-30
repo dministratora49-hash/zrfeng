@@ -858,6 +858,7 @@
     ['/login', 'login'],
     ['/console', 'console'],
     ['/chat', 'chat'],
+    ['/updates', 'updates'],
   ];
 
   /**

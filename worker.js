@@ -2134,6 +2134,111 @@ async function handleChatClear(env, request) {
   return json({ ok: true, message: '已清空 ' + n + ' 条消息', deleted: n });
 }
 
+/* ========================== 剩余更新清单 ========================== */
+
+/**
+ * 剩余更新清单：管理员登记还没上线的更新，公开可看。
+ * 键 upd:<15 位时间戳>-<随机>，字典序即时间序。
+ * status: pending（待处理）| deployed（已上线）| rejected（被拒绝）
+ */
+const UPD_PREFIX = 'upd:';
+const UPD_MAX_KEEP = 100;
+const UPD_TEXT_MAX = 2000;
+
+async function listUpdates(env, limit = UPD_MAX_KEEP) {
+  let keys = [];
+  try {
+    const r = await env.USERS.list({ prefix: UPD_PREFIX, limit });
+    keys = (r && r.keys) || [];
+  } catch { return []; }
+  keys.sort((a, b) => (a.name < b.name ? 1 : a.name > b.name ? -1 : 0));
+  const out = [];
+  for (const k of keys) {
+    let u = null;
+    try { u = await env.USERS.get(k.name, 'json'); } catch { u = null; }
+    if (!u || typeof u !== 'object') continue;
+    out.push(Object.assign({ id: k.name.slice(UPD_PREFIX.length) }, u));
+  }
+  return out;
+}
+
+/** GET /api/updates：列表（pending 在前，decided 在后） */
+async function handleUpdates(env, request) {
+  const all = await listUpdates(env, UPD_MAX_KEEP);
+  const pending = all.filter((u) => u.status === 'pending');
+  const decided = all.filter((u) => u.status !== 'pending');
+  return json({ ok: true, total: all.length, pending: pending.length, decided: decided.length, items: all.map((u) => ({
+    id: u.id, text: String(u.text || ''), status: String(u.status || 'pending'),
+    at: Number(u.at) || 0, decidedAt: Number(u.decidedAt) || 0, by: String(u.by || ''),
+  })) });
+}
+
+/** POST /api/updates：管理员添加一条待处理更新 */
+async function handleUpdateAdd(env, request) {
+  const guard = await requireAdmin(env, request);
+  if (guard.error) return guard.error;
+  const body = await readJson(request);
+  const text = capText(String(body.text || '').trim(), UPD_TEXT_MAX + 1);
+  if (Array.from(text).length < 2) return json({ ok: false, message: '内容至少要 2 个字' }, 400);
+  if (Array.from(text).length > UPD_TEXT_MAX) return json({ ok: false, message: '内容最多 ' + UPD_TEXT_MAX + ' 个字' }, 400);
+
+  const now = Date.now();
+  const all = await listUpdates(env, UPD_MAX_KEEP + 20);
+  const lastAt = all.reduce((mx, u) => Math.max(mx, Number(u.at) || 0), 0);
+  const at = Math.max(now, lastAt + 1);
+  const id = String(at).padStart(15, '0') + '-' + randomHex(3);
+  await env.USERS.put(UPD_PREFIX + id, JSON.stringify({ at, text, status: 'pending' }));
+
+  const keep = [id].concat(all.map((u) => u.id));
+  for (const old of keep.slice(UPD_MAX_KEEP)) {
+    try { await env.USERS.delete(UPD_PREFIX + old); } catch {}
+  }
+  return json({ ok: true, message: '已添加', id });
+}
+
+/** POST /api/updates/decide：管理员点 ✓ 或 ✗ */
+async function handleUpdateDecide(env, request) {
+  const guard = await requireAdmin(env, request);
+  if (guard.error) return guard.error;
+  const body = await readJson(request);
+  const id = String(body.id || '').trim();
+  const decision = String(body.decision || '').trim();
+  if (!id) return json({ ok: false, message: '缺少编号' }, 400);
+  if (decision !== 'approve' && decision !== 'reject') return json({ ok: false, message: '操作不正确' }, 400);
+
+  let u = null;
+  try { u = await env.USERS.get(UPD_PREFIX + id, 'json'); } catch {}
+  if (!u) return json({ ok: false, message: '找不到这条更新' }, 404);
+  if (u.status !== 'pending') return json({ ok: false, message: '这条已经处理过了' }, 409);
+
+  u.status = decision === 'approve' ? 'deployed' : 'rejected';
+  u.decidedAt = Date.now();
+  u.by = guard.session.username;
+  await env.USERS.put(UPD_PREFIX + id, JSON.stringify(u));
+  return json({ ok: true, message: u.status === 'deployed' ? '已标记为上线' : '已标记为拒绝', id, status: u.status });
+}
+
+/** POST /api/updates/delete：管理员删除一条 */
+async function handleUpdateDelete(env, request) {
+  const guard = await requireAdmin(env, request);
+  if (guard.error) return guard.error;
+  const body = await readJson(request);
+  const id = String(body.id || '').trim();
+  if (!id) return json({ ok: false, message: '缺少编号' }, 400);
+  await env.USERS.delete(UPD_PREFIX + id);
+  return json({ ok: true, message: '已删除', deleted: 1 });
+}
+
+/** POST /api/updates/clear：管理员清空全部 */
+async function handleUpdateClear(env, request) {
+  const guard = await requireAdmin(env, request);
+  if (guard.error) return guard.error;
+  const all = await listUpdates(env, UPD_MAX_KEEP + 50);
+  let n = 0;
+  for (const u of all) { try { await env.USERS.delete(UPD_PREFIX + u.id); n++; } catch {} }
+  return json({ ok: true, message: '已清空 ' + n + ' 条', cleared: n });
+}
+
 /* ========================== 通知板块 ========================== */
 
 /** 把时间戳格式化成「MM-DD HH:MM」（北京时间，东八区） */
@@ -3030,6 +3135,7 @@ const MAINT_PAGES = [
   { id: 'login', name: '登录 / 注册', nameEn: 'Log in / Sign up', path: '/login' },
   { id: 'console', name: '控制台', nameEn: 'Console', path: '/console' },
   { id: 'chat', name: '聊天室', nameEn: 'Chat Room', path: '/chat' },
+  { id: 'updates', name: '剩余更新清单', nameEn: 'Pending Updates', path: '/updates' },
 ];
 
 const MAINT_PAGE_IDS = MAINT_PAGES.map((p) => p.id);
@@ -4993,6 +5099,23 @@ async function handleRequest(request, env) {
         }
         if (path === '/api/admin/chat/clear' && method === 'POST') {
           return await handleChatClear(env, request);
+        }
+
+        // 剩余更新清单
+        if (path === '/api/updates' && method === 'GET') {
+          return await handleUpdates(env, request);
+        }
+        if (path === '/api/updates' && method === 'POST') {
+          return await handleUpdateAdd(env, request);
+        }
+        if (path === '/api/updates/decide' && method === 'POST') {
+          return await handleUpdateDecide(env, request);
+        }
+        if (path === '/api/updates/delete' && method === 'POST') {
+          return await handleUpdateDelete(env, request);
+        }
+        if (path === '/api/updates/clear' && method === 'POST') {
+          return await handleUpdateClear(env, request);
         }
         if (path === '/api/logout' && method === 'POST') {
           return await handleLogout(env, request);

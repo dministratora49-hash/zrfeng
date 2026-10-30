@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>/* 尽早落地亮/暗色主题（切换按钮在顶部状态栏里） */(function(){var t='dark';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
+<title>剩余更新清单</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    min-height: 100vh;
+    background: #050807;
+    background-image:
+      radial-gradient(circle at 15% 10%, rgba(0, 255, 140, 0.07) 0%, transparent 45%),
+      radial-gradient(circle at 85% 85%, rgba(0, 255, 140, 0.05) 0%, transparent 45%);
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    color: #e8f5ee;
+    padding: 70px 16px 24px;
+  }
+
+  body::before {
+    content: "";
+    position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background-image:
+      linear-gradient(rgba(0,255,140,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,255,140,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  .wrap { position: relative; z-index: 1; max-width: 720px; margin: 0 auto; }
+
+  h1 {
+    font-size: 26px; text-align: center; margin-bottom: 6px;
+    background: linear-gradient(90deg, #ffffff, #00ff8c);
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .sub { text-align: center; color: #7fa893; font-size: 12px; letter-spacing: 1px; margin-bottom: 22px; }
+
+  .card {
+    background: rgba(10, 18, 14, 0.85);
+    border: 1px solid rgba(0, 255, 140, 0.22);
+    border-radius: 16px; padding: 18px; margin-bottom: 16px;
+    box-shadow: 0 0 18px rgba(0, 255, 140, 0.06);
+  }
+  .card h2 {
+    font-size: 14px; color: #00ff8c; letter-spacing: 1.5px;
+    display: flex; align-items: center; gap: 8px; margin-bottom: 14px;
+  }
+  .card h2 .bar { width: 3px; height: 15px; background: #00ff8c; border-radius: 2px; display: inline-block; }
+  .card h2 .count { margin-left: auto; font-size: 11px; color: #5d7a6c; font-family: ui-monospace, Menlo, Consolas, monospace; }
+
+  .empty { font-size: 13px; color: #5d7a6c; text-align: center; padding: 16px 0; }
+
+  .item {
+    border-bottom: 1px dashed rgba(0, 255, 140, 0.12);
+    padding: 12px 0;
+  }
+  .item:last-child { border-bottom: none; padding-bottom: 0; }
+  .item:first-child { padding-top: 0; }
+
+  .item-body { font-size: 13.5px; line-height: 1.85; color: #cfe8dc; white-space: pre-wrap; word-break: break-word; margin-bottom: 8px; }
+  .item-time { font-size: 11px; color: #5d7a6c; font-family: ui-monospace, Menlo, Consolas, monospace; }
+
+  .badge {
+    font-size: 10.5px; padding: 2px 9px; border-radius: 20px; letter-spacing: .5px;
+    display: inline-block;
+  }
+  .badge.pending { border: 1px solid rgba(255, 176, 32, 0.45); color: #ffb020; background: rgba(255, 176, 32, 0.1); }
+  .badge.deployed { border: 1px solid rgba(0, 255, 140, 0.4); color: #00ff8c; background: rgba(0, 255, 140, 0.08); }
+  .badge.rejected { border: 1px solid rgba(255, 107, 107, 0.4); color: #ff8a8a; background: rgba(255, 107, 107, 0.08); }
+
+  .item-acts { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .item-acts button {
+    padding: 6px 14px; border-radius: 9px; font-size: 12px; cursor: pointer; font-family: inherit;
+  }
+  .btn-ok { border: 1px solid rgba(0, 255, 140, 0.45); background: rgba(0, 255, 140, 0.12); color: #00ff8c; }
+  .btn-no { border: 1px solid rgba(255, 107, 107, 0.4); background: rgba(255, 107, 107, 0.1); color: #ff8a8a; }
+  .btn-del { border: 1px solid rgba(127, 168, 147, 0.3); background: transparent; color: #7fa893; }
+  .item-acts button:active { filter: brightness(1.3); }
+  .item-acts button:disabled { opacity: .35; cursor: default; }
+
+  .msg-line { font-size: 12px; min-height: 17px; margin-top: 10px; }
+  .msg-line.ok { color: #00ff8c; }
+  .msg-line.err { color: #ff7b7b; }
+
+  .fld { margin-bottom: 10px; }
+  .fld label { display: block; font-size: 12px; color: #7fa893; margin-bottom: 6px; }
+  .fld textarea {
+    width: 100%; padding: 10px 12px; border-radius: 10px; font-size: 13px;
+    border: 1px solid rgba(0, 255, 140, 0.25); background: rgba(0, 0, 0, 0.35);
+    color: #e8f5ee; font-family: inherit; resize: vertical; line-height: 1.7;
+  }
+  .fld textarea:focus { outline: none; border-color: rgba(0, 255, 140, 0.6); }
+
+  .btn {
+    display: inline-block; padding: 10px 18px; border-radius: 10px; font-size: 13px; cursor: pointer;
+    border: 1px solid rgba(0, 255, 140, 0.45); background: rgba(0, 255, 140, 0.12);
+    color: #00ff8c; font-family: inherit;
+  }
+  .btn:active { background: rgba(0, 255, 140, 0.25); }
+  .btn:disabled { opacity: .5; }
+  .btn.ghost { border-color: rgba(255, 107, 107, 0.4); color: #ff8a8a; background: rgba(255, 107, 107, 0.08); }
+  .btn.small { padding: 5px 12px; font-size: 12px; }
+
+  .links { text-align: center; margin-top: 20px; font-size: 12px; }
+  .links a { color: #7fa893; text-decoration: none; margin: 0 10px; }
+  .links a:hover { color: #00ff8c; }
+  footer { text-align: center; color: #3d5a4b; font-size: 11px; margin-top: 16px; letter-spacing: 1px; }
+</style>
+<link rel="stylesheet" href="/theme.css">
+</head>
+<body>
+<div class="wrap">
+  <h1>剩余更新清单</h1>
+  <p class="sub">还没上线的功能 · 管理员标记后自动移到底部</p>
+
+  <div class="card" id="pendingCard">
+    <h2><span class="bar"></span>待处理<span class="count" id="pendingCount"></span></h2>
+    <div id="pendingList"><div class="empty">正在加载…</div></div>
+  </div>
+
+  <div class="card" id="decidedCard" style="display:none">
+    <h2><span class="bar"></span>已处理<span class="count" id="decidedCount"></span></h2>
+    <div id="decidedList"></div>
+  </div>
+
+  <div class="card" id="adminCard" style="display:none">
+    <h2><span class="bar"></span>添加更新（管理员）</h2>
+    <div class="fld">
+      <label for="updText">内容</label>
+      <textarea id="updText" maxlength="2000" placeholder="写一下还没上线的功能，例如：文件批量下载"></textarea>
+    </div>
+    <button class="btn" id="updAdd" type="button">添加</button>
+    <button class="btn ghost small" id="updClear" type="button" style="margin-left:8px">清空全部</button>
+    <div class="msg-line" id="updMsg"></div>
+  </div>
+
+  <div class="links">
+    <a href="/zh_cn/guide/">导航站</a>
+    <a href="/zh_cn/">主站</a>
+    <a href="/zh_cn/notice/">通知板块</a>
+  </div>
+  <footer>zrfeng.top · 剩余更新清单</footer>
+  <p style="text-align:center;font-size:12px;margin:16px 0 0"><a href="/en_us/updates/?lang=en" style="color:#7fa893;text-decoration:none">English</a></p>
+</div>
+
+<script src="/zh_cn/status.js" defer></script>
+<script>
+(function () {
+  'use strict';
+
+  var el = function (id) { return document.getElementById(id); };
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+  function p2(n) { return n < 10 ? '0' + n : '' + n; }
+  function fmt(ts) {
+    var d = new Date(Number(ts));
+    return (d.getMonth() + 1) + '-' + d.getDate() + ' ' + p2(d.getHours()) + ':' + p2(d.getMinutes());
+  }
+
+  var IS_ADMIN = false;
+
+  /* ---------------- 渲染 ---------------- */
+  function badgeOf(status) {
+    if (status === 'deployed') return '<span class="badge deployed">已上线</span>';
+    if (status === 'rejected') return '<span class="badge rejected">已拒绝</span>';
+    return '<span class="badge pending">待处理</span>';
+  }
+
+  function renderItem(u, pending) {
+    var acts = '';
+    if (pending && IS_ADMIN) {
+      acts = '<div class="item-acts">' +
+        '<button class="btn-ok" data-act="approve" data-id="' + esc(u.id) + '" type="button">✓ 上线</button>' +
+        '<button class="btn-no" data-act="reject" data-id="' + esc(u.id) + '" type="button">✗ 拒绝</button>' +
+        '<button class="btn-del" data-act="del" data-id="' + esc(u.id) + '" type="button">删除</button>' +
+        '</div>';
+    }
+    return '<div class="item">' +
+      '<div class="item-body">' + esc(u.text) + '</div>' +
+      '<div>' + badgeOf(u.status) +
+      '<span class="item-time"> ' + fmt(u.at) + '</span>' +
+      (u.status !== 'pending' && u.decidedAt ? ' · ' + fmt(u.decidedAt) : '') +
+      '</div>' + acts +
+      '</div>';
+  }
+
+  function render(j) {
+    var items = (j && j.items) || [];
+    var pending = items.filter(function (u) { return u.status === 'pending'; });
+    var decided = items.filter(function (u) { return u.status !== 'pending'; });
+
+    var pBox = el('pendingList');
+    pBox.innerHTML = pending.length ? pending.map(function (u) { return renderItem(u, true); }).join('') : '<div class="empty">没有待处理的更新</div>';
+    el('pendingCount').textContent = pending.length ? '（' + pending.length + '）' : '';
+
+    var dBox = el('decidedList');
+    dBox.innerHTML = decided.length ? decided.map(function (u) { return renderItem(u, false); }).join('') : '';
+    el('decidedCard').style.display = decided.length ? 'block' : 'none';
+    el('decidedCount').textContent = decided.length ? '（' + decided.length + '）' : '';
+
+    var ac = el('adminCard');
+    ac.style.display = IS_ADMIN ? 'block' : 'none';
+    bindActs();
+  }
+
+  function bindActs() {
+    var btns = document.querySelectorAll('[data-act]');
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].onclick = function () {
+        var act = this.getAttribute('data-act');
+        var id = this.getAttribute('data-id');
+        this.disabled = true;
+        post('/api/updates/' + act, { id: id }, act === 'approve' ? '✓ 已标记为上线' : act === 'reject' ? '✗ 已标记为拒绝' : '已删除');
+      };
+    }
+  }
+
+  function post(path, body, okMsg) {
+    fetch(path, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify(body),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (j && j.ok) {
+          showMsg(okMsg, true);
+          load();
+        } else {
+          showMsg((j && j.message) || '操作失败', false);
+        }
+      })
+      .catch(function () { showMsg('网络错误', false); })
+      .then(function () { bindActs(); });
+  }
+
+  function showMsg(text, isOk) {
+    var m = el('updMsg');
+    m.textContent = text;
+    m.className = 'msg-line ' + (isOk ? 'ok' : 'err');
+  }
+
+  /* ---------------- 加载 ---------------- */
+  function load() {
+    fetch('/api/updates', { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (j && j.ok) {
+          render(j);
+        } else {
+          el('pendingList').innerHTML = '<div class="empty">加载失败，请刷新重试</div>';
+        }
+      })
+      .catch(function () {
+        el('pendingList').innerHTML = '<div class="empty">加载失败，请刷新重试</div>';
+      });
+  }
+
+  /* ---------------- 管理员操作 ---------------- */
+  function bindAdmin() {
+    el('updAdd').onclick = function () {
+      var t = el('updText');
+      var text = t.value.trim();
+      if (!text) { showMsg('内容不能为空', false); t.focus(); return; }
+      el('updAdd').disabled = true;
+      fetch('/api/updates', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ text: text }),
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          if (j && j.ok) {
+            t.value = '';
+            showMsg('已添加', true);
+            load();
+          } else {
+            showMsg((j && j.message) || '添加失败', false);
+          }
+        })
+        .catch(function () { showMsg('网络错误', false); })
+        .then(function () { el('updAdd').disabled = false; });
+    };
+
+    el('updClear').onclick = function () {
+      if (!confirm('确定要清空全部更新清单吗？')) return;
+      fetch('/api/updates/clear', { method: 'POST', credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          showMsg((j && j.message) || '已处理', true);
+          load();
+        })
+        .catch(function () { showMsg('网络错误', false); });
+    };
+  }
+
+  /* ---------------- 身份 ---------------- */
+  function loadIdentity() {
+    fetch('/api/status', { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        IS_ADMIN = !!(j && j.isAdmin);
+      })
+      .catch(function () { /* 读不到就当作普通用户 */ })
+      .then(load);
+  }
+
+  function boot() {
+    bindAdmin();
+    loadIdentity();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+})();
+</script>
+</body>
+</html>
