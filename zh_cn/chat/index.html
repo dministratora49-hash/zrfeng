@@ -202,6 +202,100 @@
     background: rgba(255, 176, 32, 0.14);
     color: #ffb020;
   }
+
+  /* ---------- 聊天室灯色覆盖（theme.css 没有聊天室的规则，这里自己补） ---------- */
+  html[data-theme="light"] body {
+    background: #f2f7f3;
+    background-image:
+      radial-gradient(circle at 15% 10%, rgba(0, 145, 88, 0.05) 0%, transparent 45%),
+      radial-gradient(circle at 85% 85%, rgba(0, 145, 88, 0.03) 0%, transparent 45%);
+    color: #10231a;
+  }
+  html[data-theme="light"] body::before {
+    background-image:
+      linear-gradient(rgba(0,145,88,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,145,88,0.03) 1px, transparent 1px);
+  }
+  html[data-theme="light"] h1 { color: #10231a; }
+  html[data-theme="light"] .sub { color: #5a7a68; }
+  html[data-theme="light"] .chat-card {
+    background: rgba(255, 255, 255, 0.9);
+    border-color: rgba(0, 145, 88, 0.2);
+  }
+  html[data-theme="light"] .chat-head {
+    border-color: rgba(0, 145, 88, 0.12);
+    color: #5a7a68;
+  }
+  html[data-theme="light"] .chat-head b { color: #009658; }
+  html[data-theme="light"] .linkbtn { color: #5a7a68; }
+  html[data-theme="light"] .linkbtn:hover { color: #009658; }
+  html[data-theme="light"] .msgs::-webkit-scrollbar-thumb { background: rgba(0,145,88,.2); }
+  html[data-theme="light"] .m-meta { color: #6a8a78; }
+  html[data-theme="light"] .m-meta .nm { color: #5a7a68; }
+  html[data-theme="light"] .m.admin .m-meta .nm { color: #b8860b; }
+  html[data-theme="light"] .m-bubble {
+    background: rgba(0, 145, 88, 0.06);
+    border-color: rgba(0, 145, 88, 0.14);
+    color: #2a4a3a;
+  }
+  html[data-theme="light"] .m.mine .m-bubble {
+    background: rgba(0, 145, 88, 0.12);
+    border-color: rgba(0, 145, 88, 0.28);
+    color: #10231a;
+  }
+  html[data-theme="light"] .empty { color: #7a9a88; }
+  html[data-theme="light"] .composer {
+    border-color: rgba(0, 145, 88, 0.12);
+    background: rgba(242, 247, 243, 0.5);
+  }
+  html[data-theme="light"] .composer textarea {
+    border-color: rgba(0, 145, 88, 0.2);
+    background: rgba(0, 0, 0, 0.03);
+    color: #10231a;
+  }
+  html[data-theme="light"] .composer textarea:focus { border-color: rgba(0, 145, 88, 0.5); }
+  html[data-theme="light"] .composer button.send {
+    border-color: rgba(0, 145, 88, 0.35);
+    background: rgba(0, 145, 88, 0.08);
+    color: #009658;
+  }
+  html[data-theme="light"] .composer .hint { color: #7a9a88; }
+  html[data-theme="light"] .composer .hint .err { color: #cc4444; }
+  html[data-theme="light"] .links a { color: #5a7a68; }
+  html[data-theme="light"] .links a:hover { color: #009658; }
+  html[data-theme="light"] footer { color: #9aaa98; }
+  html[data-theme="light"] .mask { background: rgba(242, 247, 243, 0.86); }
+  html[data-theme="light"] .dlg {
+    background: rgba(255, 255, 255, 0.98);
+    border-color: rgba(184, 134, 11, 0.3);
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.1);
+  }
+  html[data-theme="light"] .dlg.danger { border-color: rgba(204, 68, 68, 0.3); }
+  html[data-theme="light"] .dlg h2 { color: #b8860b; }
+  html[data-theme="light"] .dlg.danger h2 { color: #cc4444; }
+  html[data-theme="light"] .dlg p { color: #3a5a4a; }
+  html[data-theme="light"] .dlg p strong { color: #10231a; }
+  html[data-theme="light"] .dlg .warnbox {
+    background: rgba(184, 134, 11, 0.05);
+    border-left-color: rgba(184, 134, 11, 0.4);
+    color: #6a5a3a;
+  }
+  html[data-theme="light"] .dlg .check { color: #5a7a68; }
+  html[data-theme="light"] .dlg-acts button {
+    border-color: rgba(0, 145, 88, 0.35);
+    background: rgba(0, 145, 88, 0.08);
+    color: #009658;
+  }
+  html[data-theme="light"] .dlg-acts button.ghost {
+    border-color: rgba(0, 0, 0, 0.1);
+    background: transparent;
+    color: #5a7a68;
+  }
+  html[data-theme="light"] .dlg-acts button.primary-warn {
+    border-color: rgba(184, 134, 11, 0.45);
+    background: rgba(184, 134, 11, 0.1);
+    color: #b8860b;
+  }
 </style>
 <link rel="stylesheet" href="/theme.css">
 </head>
@@ -421,7 +515,7 @@
             if (!lastId || m.id > lastId) lastId = m.id;
           }
         });
-        if (initial && !added && !box.children.length) {
+        if (initial && !added) {
           box.innerHTML = '<div class="empty">还没有消息，来打个招呼吧</div>';
         }
         if (added && (stick || initial)) scrollDown(true);
