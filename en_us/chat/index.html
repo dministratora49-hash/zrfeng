@@ -291,6 +291,17 @@
     background: rgba(184, 134, 11, 0.1);
     color: #b8860b;
   }
+
+  /* CN 用户拦截弹窗 */
+  #cnBlockMask { z-index: 60; }
+  #cnBlockMask .dlg { border-color: rgba(255, 107, 107, 0.5); max-width: 420px; }
+  #cnBlockMask .dlg-icon { font-size: 36px; }
+  #cnBlockMask h2 { color: #ff7b7b; }
+  #cnBlockMask p { color: #b9d2c5; }
+  #cnBlockMask .cn-note {
+    font-size: 12px; color: #6d8a7b; margin-top: 10px; line-height: 1.7;
+    background: rgba(255,107,107,0.06); border-radius: 8px; padding: 8px 12px;
+  }
 </style>
 <link rel="stylesheet" href="/theme.css">
 </head>
@@ -415,6 +426,24 @@
     entered = true;
     load(true);
     pollTimer = setInterval(function () { if (!document.hidden) load(false); }, POLL_MS);
+  }
+
+  /* ---------------- CN block ---------------- */
+  function checkRegion() {
+    return fetch('/api/region', { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) { return j && j.country; })
+      .catch(function () { return null; });
+  }
+
+  function showCnBlock() {
+    el('warnMask').hidden = true;
+    el('bugMask').hidden = true;
+    var mask = el('cnBlockMask');
+    if (mask) mask.hidden = false;
+    lockBody(true);
+    var close = el('cnClose');
+    if (close) close.onclick = function () { location.href = '/en_us/guide/'; };
   }
 
   function bindGate() {
@@ -554,7 +583,9 @@
           input.value = '';
           touchCounter();
           setHint('Messages are public and are not end-to-end encrypted', false);
-          load(false);          // pull the message we just sent back immediately
+          appendMessage({ id: j.id, at: j.at, name: (j.me && j.me.name) || 'me', text: text, mine: true });
+          if (j.id && (!lastId || j.id > lastId)) lastId = j.id;
+          scrollDown(true);
         } else {
           setHint((j && j.message) || 'Failed to send', true);
         }
@@ -569,36 +600,19 @@
   /* ---------------- boot ---------------- */
   function boot() {
     bindGate();
-
-    var input = el('input');
-    input.addEventListener('input', function () { touchCounter(); });
-    input.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        send();
+    bindAdmin();
+    // Check region first: block CN, skip other gates
+    checkRegion().then(function (country) {
+      if (country === 'CN') {
+        showCnBlock();
+        return;
+      }
+      if (acked()) {
+        showBug();
+      } else {
+        showWarn();
       }
     });
-    el('sendBtn').onclick = send;
-    el('refreshBtn').onclick = function () { load(true); el('onDot').classList.remove('off'); };
-    el('clearBtn').onclick = function () {
-      if (!confirm('Clear all messages in this chat room?')) return;
-      fetch('/api/admin/chat/clear', { method: 'POST', credentials: 'same-origin' })
-        .then(function (r) { return r.json(); })
-        .then(function (j) {
-          alert((j && j.message) || 'Done');
-          el('msgs').innerHTML = '<div class="empty">Loading…</div>';
-          seen = {}; lastId = ''; load(true);
-        })
-        .catch(function () { alert('Network error'); });
-    };
-
-    // People who ticked "don't remind me again" skip the first gate,
-    // but the second one (bugs notice) is still shown once.
-    if (acked()) {
-      showBug();
-    } else {
-      showWarn();
-    }
   }
 
   if (document.readyState === 'loading') {
@@ -609,5 +623,19 @@
 })();
 </script>
 <p style="text-align:center;font-size:12px;margin:16px 0"><a href="/zh_cn/chat/?lang=zh" style="color:#7fa893;text-decoration:none">中文</a></p>
+
+<!-- China mainland block -->
+<div class="mask" id="cnBlockMask" hidden>
+  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="cnTitle">
+    <div class="dlg-icon">⛔</div>
+    <h2 id="cnTitle">Access denied</h2>
+    <p>Due to mainland China regulations, this chat room is not available to users in China.</p>
+    <p>If you believe this is incorrect, please contact the administrator.</p>
+    <div class="dlg-acts">
+      <button class="ghost" id="cnClose" type="button">Go back</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>

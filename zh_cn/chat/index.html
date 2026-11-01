@@ -296,6 +296,17 @@
     background: rgba(184, 134, 11, 0.1);
     color: #b8860b;
   }
+
+  /* CN 用户拦截弹窗 */
+  #cnBlockMask { z-index: 60; }
+  #cnBlockMask .dlg { border-color: rgba(255, 107, 107, 0.5); max-width: 420px; }
+  #cnBlockMask .dlg-icon { font-size: 36px; }
+  #cnBlockMask h2 { color: #ff7b7b; }
+  #cnBlockMask p { color: #b9d2c5; }
+  #cnBlockMask .cn-note {
+    font-size: 12px; color: #6d8a7b; margin-top: 10px; line-height: 1.7;
+    background: rgba(255,107,107,0.06); border-radius: 8px; padding: 8px 12px;
+  }
 </style>
 <link rel="stylesheet" href="/theme.css">
 </head>
@@ -425,6 +436,24 @@
     entered = true;
     load(true);
     pollTimer = setInterval(function () { if (!document.hidden) load(false); }, POLL_MS);
+  }
+
+  /* ---------------- CN 用户拦截 ---------------- */
+  function checkRegion() {
+    return fetch('/api/region', { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) { return j && j.country; })
+      .catch(function () { return null; });
+  }
+
+  function showCnBlock() {
+    el('warnMask').hidden = true;
+    el('bugMask').hidden = true;
+    var mask = el('cnBlockMask');
+    if (mask) mask.hidden = false;
+    lockBody(true);
+    var close = el('cnClose');
+    if (close) close.onclick = function () { location.href = '/zh_cn/guide/'; };
   }
 
   function bindGate() {
@@ -565,7 +594,9 @@
           input.value = '';
           touchCounter();
           setHint('消息会公开显示，且不做端到端加密', false);
-          load(false);          // 立刻把刚发的拉回来
+          appendMessage({ id: j.id, at: j.at, name: (j.me && j.me.name) || 'me', text: text, mine: true });
+          if (j.id && (!lastId || j.id > lastId)) lastId = j.id;
+          scrollDown(true);
         } else {
           setHint((j && j.message) || '发送失败', true);
         }
@@ -580,35 +611,19 @@
   /* ---------------- 初始化 ---------------- */
   function boot() {
     bindGate();
-
-    var input = el('input');
-    input.addEventListener('input', function () { touchCounter(); });
-    input.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        send();
+    bindAdmin();
+    // 先查地区：CN 直接拦截，不走其他 gate
+    checkRegion().then(function (country) {
+      if (country === 'CN') {
+        showCnBlock();
+        return;
+      }
+      if (acked()) {
+        showBug();
+      } else {
+        showWarn();
       }
     });
-    el('sendBtn').onclick = send;
-    el('refreshBtn').onclick = function () { load(true); el('onDot').classList.remove('off'); };
-    el('clearBtn').onclick = function () {
-      if (!confirm('确定要清空聊天室全部消息吗？')) return;
-      fetch('/api/admin/chat/clear', { method: 'POST', credentials: 'same-origin' })
-        .then(function (r) { return r.json(); })
-        .then(function (j) {
-          alert((j && j.message) || '已处理');
-          el('msgs').innerHTML = '<div class="empty">正在加载…</div>';
-          seen = {}; lastId = ''; load(true);
-        })
-        .catch(function () { alert('网络错误'); });
-    };
-
-    // 勾过「不再提醒」的人跳过第一道，但第二道（bug 提醒）仍然弹一次
-    if (acked()) {
-      showBug();
-    } else {
-      showWarn();
-    }
   }
 
   if (document.readyState === 'loading') {
@@ -619,5 +634,19 @@
 })();
 </script>
 <p style="text-align:center;font-size:12px;margin:16px 0"><a href="/en_us/chat/?lang=en" style="color:#7fa893;text-decoration:none">English</a></p>
+
+<!-- 中国大陆用户拦截 -->
+<div class="mask" id="cnBlockMask" hidden>
+  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="cnTitle">
+    <div class="dlg-icon">⛔</div>
+    <h2 id="cnTitle">无法访问</h2>
+    <p>未遵守中国大陆法律法规，本网站暂时不提供中国大陆聊天室。</p>
+    <p>如对此判定有异议，请联系管理员。</p>
+    <div class="dlg-acts">
+      <button class="ghost" id="cnClose" type="button">返回</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
