@@ -346,7 +346,7 @@
 </div>
 
 <!-- 第一道：未加密警告 -->
-<div class="mask" id="warnMask">
+<div class="mask" id="warnMask" hidden>
   <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="warnTitle">
     <div class="dlg-icon">⚠️</div>
     <h2 id="warnTitle">安全提醒</h2>
@@ -612,6 +612,12 @@
   function boot() {
     bindGate();
     bindAdmin();
+    // 先确认所有 mask 都是隐藏的，再按顺序显示
+    el('warnMask').hidden = true;
+    el('bugMask').hidden = true;
+    el('cnBlockMask').hidden = true;
+    lockBody(true);
+
     // 先查地区：CN 直接拦截，不走其他 gate
     checkRegion().then(function (country) {
       if (country === 'CN') {

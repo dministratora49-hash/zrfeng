@@ -341,7 +341,7 @@
 </div>
 
 <!-- First gate: no end-to-end encryption -->
-<div class="mask" id="warnMask">
+<div class="mask" id="warnMask" hidden>
   <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="warnTitle">
     <div class="dlg-icon">⚠️</div>
     <h2 id="warnTitle">Security notice</h2>
@@ -601,6 +601,12 @@
   function boot() {
     bindGate();
     bindAdmin();
+    // Hide all masks first, then show them in order
+    el('warnMask').hidden = true;
+    el('bugMask').hidden = true;
+    el('cnBlockMask').hidden = true;
+    lockBody(true);
+
     // Check region first: block CN, skip other gates
     checkRegion().then(function (country) {
       if (country === 'CN') {
