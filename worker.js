@@ -4373,9 +4373,12 @@ function handleLangSwitch(request, url) {
 const SITE_DOWN = true;
 const DOWN_PAGE = '/zh_cn/down/';        // 中英文案都在这一页上（正文以中文为准）
 
-/** 允许访问的路径前缀（停服期间唯一例外：通知板块） */
+/** 允许访问的路径（停服期间：通知板块 + 503 页本身，否则 503 页会重定向到自己） */
 function downAllowed(path) {
-  return path === '/zh_cn/notice' || path.startsWith('/zh_cn/notice/');
+  if (path === '/zh_cn/notice' || path.startsWith('/zh_cn/notice/')) return true;
+  if (path === '/zh_cn/down' || path.startsWith('/zh_cn/down/')) return true;
+  if (path === '/en_us/down' || path.startsWith('/en_us/down/')) return true;
+  return false;
 }
 
 /** 302 到 503 页 */
