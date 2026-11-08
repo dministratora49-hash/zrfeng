@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,8 +11,8 @@
     min-height: 100vh;
     display: flex; align-items: center; justify-content: center;
     padding: 24px;
-    background: #050807;
-    color: #e8f5ee;
+    background: #fdfefe;
+    color: #66ccff;
     font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   }
 
@@ -24,24 +24,40 @@
     letter-spacing: 6px;
     line-height: 1;
     margin-bottom: 18px;
-    background: linear-gradient(90deg, #ffffff, #ffb020);
-    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+    color: #66ccff;
   }
 
   p {
-    font-size: 14.5px; line-height: 2; color: #b9d2c5; margin-bottom: 10px;
-    word-break: break-all;
+    font-size: 14.5px; line-height: 2; color: #66ccff; margin-bottom: 10px;
+    word-break: break-word;
   }
-  p b { color: #ffb020; }
+  p b { color: #66ccff; }
 
   .meta {
-    margin-top: 26px; font-size: 11px; color: #3d5a4b;
+    margin-top: 26px; font-size: 11px; color: #66ccff; opacity: .7;
     letter-spacing: 1px; font-family: ui-monospace, Menlo, Consolas, monospace;
   }
 
-  html[data-theme="light"] body { background: #f2f7f3; color: #10231a; }
-  html[data-theme="light"] p { color: #3a5a4a; }
-  html[data-theme="light"] .meta { color: #9aaa98; }
+  .go {
+    display: inline-block;
+    margin-top: 32px;
+    padding: 11px 30px;
+    border: 1.5px solid #66ccff;
+    border-radius: 999px;
+    background: transparent;
+    color: #66ccff;
+    font-size: 14.5px;
+    font-weight: 700;
+    letter-spacing: .5px;
+    text-decoration: none;
+    transition: background .18s, transform .18s;
+  }
+  .go:hover, .go:focus-visible { background: rgba(102, 204, 255, .14); transform: translateY(-1px); }
+  .go:active { transform: translateY(0); }
+
+  .lang { margin-top: 18px; font-size: 12px; }
+  .lang a { color: #66ccff; opacity: .75; text-decoration: none; }
+  .lang a:hover { opacity: 1; }
 </style>
 </head>
 <body>
@@ -49,7 +65,8 @@
     <div class="code">503</div>
     <p>Due to a framework failure, this site <b>stopped serving on Nov 7, 2026, 20:30 (CST)</b>. <b>No ETA for recovery.</b></p>
     <div class="meta">zrfeng.top · 503 SERVICE UNAVAILABLE</div>
+    <a class="go" href="/en_us/notice/">Go to Notice Page</a>
+    <p class="lang"><a href="/zh_cn/down/">中文</a></p>
   </div>
-<p style="text-align:center;font-size:12px;margin:16px 0 0"><a href="/zh_cn/down/?lang=zh" style="color:#3d5a4b;text-decoration:none">中文</a></p>
 </body>
 </html>
