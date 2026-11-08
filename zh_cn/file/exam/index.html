@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>/* 尽早落地亮/暗色主题，避免刷新时先闪一下深色（切换按钮在顶部状态栏里） */(function(){var t='dark';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
+<title>试题 · zrfeng.top</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    min-height: 100vh;
+    background: #050807;
+    background-image:
+      radial-gradient(circle at 20% 20%, rgba(0, 255, 140, 0.06) 0%, transparent 50%),
+      radial-gradient(circle at 80% 80%, rgba(0, 255, 140, 0.05) 0%, transparent 50%);
+    display: flex; flex-direction: column; align-items: center;
+    padding: 70px 20px 24px;
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    color: #e8f5ee;
+  }
+  body::before {
+    content: ""; position: fixed; inset: 0; pointer-events: none;
+    background-image:
+      linear-gradient(rgba(0,255,140,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,255,140,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  .top { position: relative; width: 100%; max-width: 760px; }
+
+  h1 {
+    font-size: 28px; text-align: center; margin-bottom: 8px;
+    background: linear-gradient(90deg, #ffffff, #00ff8c);
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .sub { text-align: center; color: #7fa893; font-size: 12px; letter-spacing: 1px; margin-bottom: 26px; }
+
+  /* ---------- 选择区 ---------- */
+  .pick {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+    padding: 18px; margin-bottom: 20px;
+    border: 1px solid rgba(0, 255, 140, 0.3); border-radius: 14px;
+    background: rgba(10, 18, 14, 0.85);
+  }
+  .pick label { display: block; font-size: 11px; color: #7fa893; letter-spacing: 1px; margin-bottom: 6px; }
+  .pick select {
+    width: 100%; padding: 9px 10px; border-radius: 9px; font-size: 13px; font-family: inherit;
+    border: 1px solid rgba(0, 255, 140, 0.25); background: rgba(0, 0, 0, 0.35); color: #e8f5ee;
+  }
+  .pick select:focus { outline: none; border-color: rgba(0, 255, 140, 0.6); }
+  .pick .hint { font-size: 10.5px; color: #5d7a6c; margin-top: 5px; line-height: 1.5; }
+
+  /* ---------- 文件列表 ---------- */
+  .card {
+    border: 1px solid rgba(0, 255, 140, 0.25); border-radius: 14px;
+    background: rgba(10, 18, 14, 0.85); padding: 16px 18px;
+  }
+  .card h2 {
+    font-size: 14px; color: #00ff8c; letter-spacing: 1px; margin-bottom: 14px;
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  }
+  .card h2 .bar { width: 3px; height: 15px; background: #00ff8c; border-radius: 2px; }
+  .card h2 .cnt { margin-left: auto; font-size: 11px; color: #5d7a6c; font-family: ui-monospace, Menlo, Consolas, monospace; }
+
+  .sec {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 11px 0; border-bottom: 1px dashed rgba(0, 255, 140, 0.12);
+    flex-wrap: wrap;
+  }
+  .sec:last-child { border-bottom: none; padding-bottom: 0; }
+  .sec .t { font-size: 13.5px; color: #cfe8dc; }
+  .sec .t .no { color: #00ff8c; font-family: ui-monospace, Menlo, Consolas, monospace; margin-right: 6px; }
+  .sec .acts { display: flex; gap: 8px; flex-shrink: 0; }
+  .sec a {
+    padding: 6px 14px; border-radius: 8px; font-size: 12px; text-decoration: none;
+    border: 1px solid rgba(0, 255, 140, 0.4); background: rgba(0, 255, 140, 0.1); color: #00ff8c;
+    white-space: nowrap;
+  }
+  .sec a.ans { border-color: rgba(127, 168, 147, .35); background: transparent; color: #9fb8ab; }
+  .sec a:active { filter: brightness(1.3); }
+
+  .empty { font-size: 13px; color: #5d7a6c; text-align: center; padding: 26px 0; }
+
+  .back { margin-top: 30px; text-align: center; }
+  .back a {
+    display: inline-block; padding: 10px 32px; font-size: 13px; letter-spacing: 2px;
+    color: #00ff8c; text-decoration: none;
+    border: 1px solid rgba(0, 255, 140, 0.4); border-radius: 8px; background: rgba(0, 255, 140, 0.06);
+  }
+  .back a:hover { background: rgba(0, 255, 140, 0.14); border-color: #00ff8c; }
+
+  .bottom { text-align: center; font-size: 12px; color: #4a6a58; line-height: 2; letter-spacing: 1px; margin-top: 44px; }
+
+  html[data-theme="light"] body { background: #f2f7f3; color: #10231a; }
+  html[data-theme="light"] h1 { color: #10231a; }
+  html[data-theme="light"] .pick, html[data-theme="light"] .card { background: rgba(255,255,255,.92); border-color: rgba(0,145,88,.2); }
+  html[data-theme="light"] .pick label, html[data-theme="light"] .sub { color: #5a7a68; }
+  html[data-theme="light"] .pick select { background: #fff; color: #10231a; border-color: rgba(0,145,88,.25); }
+  html[data-theme="light"] .card h2 { color: #009658; }
+  html[data-theme="light"] .sec .t { color: #2a4a3a; }
+  html[data-theme="light"] .sec .t .no { color: #009658; }
+  html[data-theme="light"] .sec a { border-color: rgba(0,145,88,.35); background: rgba(0,145,88,.08); color: #009658; }
+  html[data-theme="light"] .sec a.ans { border-color: rgba(0,0,0,.12); color: #5a7a68; background: transparent; }
+  html[data-theme="light"] .empty, html[data-theme="light"] .bottom { color: #7a9a88; }
+  html[data-theme="light"] .back a { border-color: rgba(0,145,88,.35); background: rgba(0,145,88,.08); color: #009658; }
+
+  @media (max-width: 640px) {
+    .pick { grid-template-columns: repeat(2, 1fr); }
+    h1 { font-size: 23px; }
+    .sec { align-items: flex-start; }
+    .sec .acts { width: 100%; }
+    .sec a { flex: 1; text-align: center; }
+  }
+</style>
+<link rel="stylesheet" href="/theme.css">
+</head>
+<body>
+  <div class="top">
+    <h1>试题</h1>
+    <p class="sub">按版本 · 年级 · 册次 · 章节查找同步练习与章节测试</p>
+
+    <div class="pick">
+      <div>
+        <label for="selVer">版本</label>
+        <select id="selVer">
+          <option value="suke">苏科版</option>
+        </select>
+      </div>
+      <div>
+        <label for="selGrade">年级</label>
+        <select id="selGrade">
+          <option value="7">七年级</option>
+        </select>
+      </div>
+      <div>
+        <label for="selVol">册次</label>
+        <select id="selVol">
+          <option value="up">上册</option>
+        </select>
+        <div class="hint">根据 2024 年新教材编写</div>
+      </div>
+      <div>
+        <label for="selCh">章节</label>
+        <select id="selCh">
+          <option value="">请选择…</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="bar"></span><span id="cardTitle">文件</span><span class="cnt" id="cardCnt"></span></h2>
+      <div id="fileList"><div class="empty">请先选择章节</div></div>
+    </div>
+
+    <div class="back">
+      <a href="/zh_cn/file">← 返回资源库</a>
+    </div>
+  </div>
+
+  <div class="bottom">
+    <div>zrfeng.top</div>
+    <div>© 2026 zrfeng.top — All Rights Reserved</div>
+  </div>
+
+<script>
+(function () {
+  'use strict';
+
+  // 章节数据（文件在 /assets/exam/suke7-up/）
+  var DATA = [{"no":1,"name":"数学与我们同行","sections":[{"no":"1.1","title":"数学与我们同行","ans":"ch1-1-ans.docx","sync":"ch1-1-sync.docx"},{"no":"1.2","title":"活动思考","ans":"ch1-2-ans.docx","sync":"ch1-2-sync.docx"},{"no":"1.3","title":"交流表达","ans":"ch1-3-ans.docx","sync":"ch1-3-sync.docx"}],"test":{"ans":"ch1-test-ans.docx","sync":"ch1-test-sync.docx"}},{"no":2,"name":"有理数","sections":[{"no":"2.1","title":"正数与负数","ans":"ch2-1-ans.docx","sync":"ch2-1-sync.docx"},{"no":"2.2","title":"有理数与无理数","ans":"ch2-2-ans.docx","sync":"ch2-2-sync.docx"},{"no":"2.3","title":"数轴","ans":"ch2-3-ans.docx","sync":"ch2-3-sync.docx"},{"no":"2.4","title":"绝对值与相反数","ans":"ch2-4-ans.docx","sync":"ch2-4-sync.docx"},{"no":"2.5","title":"有理数的加法与减法","ans":"ch2-5-ans.docx","sync":"ch2-5-sync.docx"},{"no":"2.6","title":"有理数的乘法与除法","ans":"ch2-6-ans.docx","sync":"ch2-6-sync.docx"},{"no":"2.7","title":"有理数的乘方","ans":"ch2-7-ans.docx","sync":"ch2-7-sync.docx"},{"no":"2.8","title":"有理数的混合运算","ans":"ch2-8-ans.docx","sync":"ch2-8-sync.docx"}],"test":{"ans":"ch2-test-ans.docx","sync":"ch2-test-sync.docx"}},{"no":3,"name":"代数式","sections":[{"no":"3.1","title":"字母表示数","ans":"ch3-1-ans.docx","sync":"ch3-1-sync.docx"},{"no":"3.2","title":"代数式","ans":"ch3-2-ans.docx","sync":"ch3-2-sync.docx"},{"no":"3.3","title":"代数式的值","ans":"ch3-3-ans.docx","sync":"ch3-3-sync.docx"},{"no":"3.4","title":"合并同类项","ans":"ch3-4-ans.docx","sync":"ch3-4-sync.docx"},{"no":"3.5","title":"去括号","ans":"ch3-5-ans.docx","sync":"ch3-5-sync.docx"},{"no":"3.6","title":"整式的加减","ans":"ch3-6-ans.docx","sync":"ch3-6-sync.docx"}],"test":{"ans":"ch3-test-ans.docx","sync":"ch3-test-sync.docx"}},{"no":4,"name":"一元一次方程","sections":[{"no":"4.1","title":"从问题到方程","ans":"ch4-1-ans.docx","sync":"ch4-1-sync.docx"},{"no":"4.2","title":"解一元一次方程","ans":"ch4-2-ans.docx","sync":"ch4-2-sync.docx"},{"no":"4.3","title":"用一元一次方程解决问题","ans":"ch4-3-ans.docx","sync":"ch4-3-sync.docx"}],"test":{"ans":"ch4-test-ans.docx","sync":"ch4-test-sync.docx"}}];
+  var BASE = '/assets/exam/suke7-up/';
+
+  var selCh = document.getElementById('selCh');
+  var listEl = document.getElementById('fileList');
+  var titleEl = document.getElementById('cardTitle');
+  var cntEl = document.getElementById('cardCnt');
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  DATA.forEach(function (c) {
+    var o = document.createElement('option');
+    o.value = String(c.no);
+    o.textContent = '第 ' + c.no + ' 章 · ' + c.name;
+    selCh.appendChild(o);
+  });
+
+  function render(chNo) {
+    var ch = DATA.filter(function (c) { return String(c.no) === String(chNo); })[0];
+    if (!ch) {
+      titleEl.textContent = '文件';
+      cntEl.textContent = '';
+      listEl.innerHTML = '<div class="empty">请先选择章节</div>';
+      return;
+    }
+
+    var rows = [];
+    ch.sections.forEach(function (s) {
+      rows.push({ no: s.no, title: s.title, sync: s.sync, ans: s.ans });
+    });
+    if (ch.test && (ch.test.sync || ch.test.ans)) {
+      rows.push({ no: '测试', title: '章节测试（第 ' + ch.no + ' 章 ' + ch.name + '）', sync: ch.test.sync, ans: ch.test.ans });
+    }
+
+    titleEl.textContent = '第 ' + ch.no + ' 章 · ' + ch.name;
+    cntEl.textContent = rows.length + ' 份';
+
+    listEl.innerHTML = rows.map(function (r) {
+      var acts = '';
+      if (r.sync) acts += '<a href="' + BASE + esc(r.sync) + '" download>同步练习</a>';
+      if (r.ans) acts += '<a class="ans" href="' + BASE + esc(r.ans) + '" download>参考答案</a>';
+      return '<div class="sec">' +
+        '<div class="t"><span class="no">' + esc(r.no) + '</span>' + esc(r.title) + '</div>' +
+        '<div class="acts">' + acts + '</div>' +
+        '</div>';
+    }).join('');
+  }
+
+  selCh.addEventListener('change', function () { render(this.value); });
+})();
+</script>
+  <script src="/status.js" defer></script>
+<p style="text-align:center;font-size:12px;margin:16px 0"><a href="/en_us/file/exam/?lang=en" style="color:#7fa893;text-decoration:none">English</a></p>
+</body>
+</html>

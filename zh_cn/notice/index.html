@@ -31,7 +31,37 @@
     z-index: 0;
   }
 
-  .wrap { position: relative; z-index: 1; max-width: 720px; margin: 0 auto; }
+  /* ---------- 停服横幅（从右向左滚动） ---------- */
+  .down-banner {
+    position: relative; z-index: 1;
+    margin-bottom: 18px;
+    border: 1px solid rgba(255, 176, 32, 0.4);
+    border-radius: 12px;
+    background: rgba(255, 176, 32, 0.08);
+    overflow: hidden;
+  }
+  .down-banner .track {
+    display: inline-block;
+    white-space: nowrap;
+    padding: 10px 0;
+    font-size: 13px;
+    font-weight: 700;
+    color: #ffb020;
+    letter-spacing: 1px;
+    animation: downscroll 18s linear infinite;
+  }
+  .down-banner .track span { padding: 0 3em; }
+  @keyframes downscroll {
+    from { transform: translateX(100vw); }
+    to   { transform: translateX(-100%); }
+  }
+  /* 尊重系统减弱动态效果设置 */
+  @media (prefers-reduced-motion: reduce) {
+    .down-banner .track { animation: none; white-space: normal; text-align: center; padding: 10px 14px; }
+  }
+
+  .wrap {
+ position: relative; z-index: 1; max-width: 720px; margin: 0 auto; }
 
   h1 {
     font-size: 30px;
@@ -197,7 +227,12 @@
 <link rel="stylesheet" href="/theme.css">
 </head>
 <body>
-<div class="wrap">
+<div class="down-banner" role="alert">
+    <div class="track">
+      <span>⚠ 503 · 由于服务框架瘫痪，本站已于公元2026年11月7日20:30停止对外服务，服务恢复时间未知 ⚠</span><span>⚠ 503 · 由于服务框架瘫痪，本站已于公元2026年11月7日20:30停止对外服务，服务恢复时间未知 ⚠</span>
+    </div>
+  </div>
+  <div class="wrap">
   <h1>通知板块</h1>
   <p class="sub">站点公告 · 维护消息 · 我的消息</p>
 
