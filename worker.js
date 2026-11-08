@@ -4373,12 +4373,15 @@ function handleLangSwitch(request, url) {
 const SITE_DOWN = true;
 const DOWN_PAGE = '/zh_cn/down/';        // 中英文案都在这一页上（正文以中文为准）
 
-/** 允许访问的路径（停服期间：通知板块 + 503 页本身，否则 503 页会重定向到自己） */
+/** 允许的路径（停服期间：中英通知板块 + 503 页本身，否则 503 页会重定向到自己） */
 function downAllowed(path) {
-  if (path === '/zh_cn/notice' || path.startsWith('/zh_cn/notice/')) return true;
-  if (path === '/zh_cn/down' || path.startsWith('/zh_cn/down/')) return true;
-  if (path === '/en_us/down' || path.startsWith('/en_us/down/')) return true;
-  return false;
+  const ok = [
+    '/zh_cn/notice', '/zh_cn/notice/',   // 中文通知板块（停服公告挂在这里）
+    '/en_us/notice', '/en_us/notice/',   // 英文通知板块
+    '/zh_cn/down', '/zh_cn/down/',       // 503 页本身
+    '/en_us/down', '/en_us/down/',       // 英文 503 页
+  ];
+  return ok.some(function (p) { return path === p || path.startsWith(p); });
 }
 
 /** 302 到 503 页 */
