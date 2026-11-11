@@ -33,6 +33,23 @@
   }
   p b { color: #66ccff; }
 
+  .poem {
+    margin-top: 26px;
+    font-size: 16px;
+    line-height: 2;
+    color: #66ccff;
+    font-family: Georgia, "Times New Roman", serif;
+    font-style: italic;
+  }
+  .poem .author {
+    display: block;
+    margin-top: 6px;
+    font-size: 12px;
+    letter-spacing: 1px;
+    opacity: .7;
+    font-style: normal;
+  }
+
   .meta {
     margin-top: 26px; font-size: 11px; color: #66ccff; opacity: .7;
     letter-spacing: 1px; font-family: ui-monospace, Menlo, Consolas, monospace;
@@ -63,7 +80,11 @@
 <body>
   <div class="box">
     <div class="code">503</div>
-    <p>Due to a framework failure, this site <b>stopped serving on Nov 7, 2026, 20:30 (CST)</b>. <b>No ETA for recovery.</b></p>
+    <p>Migrating and backing up account data. Preparing to restart.</p>
+    <div class="poem">
+      If you have a friend who knows your heart, distance cannot keep you two apart.
+      <span class="author">— Wang Bo, "Farewell to Prefect Du"</span>
+    </div>
     <div class="meta">zrfeng.top · 503 SERVICE UNAVAILABLE</div>
     <a class="go" href="/en_us/notice/">Go to Notice Page</a>
     <p class="lang"><a href="/zh_cn/down/">中文</a></p>
