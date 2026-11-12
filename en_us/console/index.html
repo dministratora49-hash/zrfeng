@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<script>/* 尽早落地亮/暗色主题，避免刷新时先闪一下深色（切换按钮在顶部状态栏里） */(function(){var t='dark';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
+<script>/* Apply the saved theme (dark / light / Android) as early as possible; default is Android */(function(){var t='android';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark'||s==='android')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
 <title>Console · zrfeng</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -233,6 +233,7 @@
   }
 </style>
 <link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="/android.css">
 </head>
 <body>
 <div class="wrap">
@@ -360,6 +361,34 @@
         '<button data-em="change">Change</button></div>';
     }
     if (sec) html += '<div class="card"><h2>Account security</h2>' + sec + '</div>';
+
+    // Appearance: all three themes are kept — the old ones are still selectable
+    var THEME_LIST = [
+      { id: 'android', name: 'Android (Material You)', desc: 'Material You light · Roboto + Noto Sans · rounded cards' },
+      { id: 'light', name: 'Light', desc: 'Tianyi blue #66ccff · white cards (the previous light theme)' },
+      { id: 'dark', name: 'Dark', desc: 'The original dark neon-green theme' }
+    ];
+    var curTheme = 'android';
+    try {
+      var tv = localStorage.getItem('zrfeng-theme');
+      if (tv === 'light' || tv === 'dark' || tv === 'android') curTheme = tv;
+    } catch (e) {
+      curTheme = document.documentElement.getAttribute('data-theme') || 'android';
+    }
+    var th = '<div class="card"><h2>Appearance</h2>' +
+      '<div class="meta" style="margin-bottom:10px">All three themes are kept. Pick one and it is saved; once signed in it can be saved to your account too.</div>';
+    THEME_LIST.forEach(function (t) {
+      th += '<div class="row">' +
+        '<div class="info"><div class="name">' + t.name +
+        (t.id === curTheme ? ' <span class="tag active">In use</span>' : '') + '</div>' +
+        '<div class="meta">' + t.desc + '</div></div>' +
+        '<button data-theme-pick="' + t.id + '"' + (t.id === curTheme ? ' disabled' : '') + '>' +
+        (t.id === curTheme ? 'Current' : 'Switch') + '</button>' +
+        '</div>';
+    });
+    th += '<div class="msg" id="themeMsg"></div></div>';
+    html += th;
+
     meEl.innerHTML = html;
 
     var b = document.getElementById('delBtn');
@@ -372,6 +401,53 @@
     });
     meEl.querySelectorAll('button[data-rc]').forEach(function (x) {
       x.onclick = function () { openRecoveryCode(); };
+    });
+    meEl.querySelectorAll('button[data-theme-pick]').forEach(function (x) {
+      x.onclick = function () { pickTheme(x.dataset.themePick); };
+    });
+  }
+
+  /* ===================== Appearance: switch between the three themes ===================== */
+  function pickTheme(id) {
+    if (id !== 'light' && id !== 'dark' && id !== 'android') return;
+    document.documentElement.setAttribute('data-theme', id);
+    try { localStorage.setItem('zrfeng-theme', id); } catch (e) { }
+    try {
+      document.dispatchEvent(new CustomEvent('zrfeng:themechange', { detail: { theme: id } }));
+    } catch (e) { }
+    var btns = document.querySelectorAll('#dsh-status-bar .sb-theme, #dsh-theme-float');
+    for (var i = 0; i < btns.length; i++) {
+      var nxt = id === 'dark' ? 'light' : (id === 'light' ? 'android' : 'dark');
+      var meta = {
+        dark: { ico: '☾', label: 'Dark' },
+        light: { ico: '☀', label: 'Light' },
+        android: { ico: '🤖', label: 'Android' }
+      }[nxt];
+      var ico = btns[i].querySelector('.ico');
+      var lbl = btns[i].querySelector('.lbl');
+      if (ico) ico.textContent = meta.ico;
+      if (lbl) lbl.textContent = meta.label;
+      btns[i].setAttribute('title', 'Switch to ' + meta.label + ' mode');
+    }
+
+    var msg = document.getElementById('themeMsg');
+    if (msg) { msg.className = 'msg'; msg.textContent = 'Switched. Syncing to your account…'; }
+    fetch('/api/pref', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ theme: id })
+    }).then(function (r) { return r.json(); }).then(function (j) {
+      if (j && !j.ok) {
+        if (msg) { msg.className = 'msg err'; msg.textContent = 'Switched on this device, but not saved to your account: ' + ((j && j.error) || 'unknown reason'); }
+      }
+      if (ME) renderMe(ME);
+      var m2 = document.getElementById('themeMsg');
+      if (m2 && (!j || j.ok)) { m2.className = 'msg ok'; m2.textContent = 'Switched to "' + id + '".'; }
+    }).catch(function () {
+      if (meEl) { }
+      if (ME) renderMe(ME);
+      var m3 = document.getElementById('themeMsg');
+      if (m3) { m3.className = 'msg err'; m3.textContent = 'Switched on this device; account sync failed (network error).'; }
     });
   }
 

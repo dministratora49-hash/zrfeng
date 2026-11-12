@@ -208,12 +208,18 @@
     'color:#ffbe3c;}' +
     '#' + WARN_ID + ' .wn-acts a:active,#' + WARN_ID + ' .wn-acts button:active{opacity:.7;}';
 
-  /* ==================== 亮 / 暗色主题 ====================
-   * 站点原本是深色，这里只负责在 <html> 上写 data-theme：
-   * 具体配色全部在 /theme.css 里，且只有 data-theme="light" 时才生效。
-   * 选择记在 localStorage，下次打开自动沿用；不选则默认深色。
+  /* ==================== 主题（暗色 / 亮色 / 原生安卓） ====================
+   * 这里只负责在 <html> 上写 data-theme，具体配色全在 CSS 里：
+   *   /theme.css    只对 data-theme="light" 生效（亮色）
+   *   /android.css  只对 data-theme="android" 生效（Material You）
+   * 深色就是各页面自带的那套，两个 CSS 都不生效。
+   *
+   * 三套主题一套没删：控制台「外观」里可以随时选回来。
+   * 新访客默认给「原生安卓」—— 站点本来就跑在安卓上。
    */
   var THEME_KEY = 'zrfeng-theme';
+  var THEMES = { dark: '暗色', light: '亮色', android: '原生安卓' };
+  var THEME_DEFAULT = 'android';
   var THEME_FLOAT_ID = 'dsh-theme-float';
   var TOAST_ID = 'dsh-slide-toast';
   var PREF_ACK_PREFIX = 'zrfeng-pref-ack:';
@@ -223,20 +229,30 @@
   var prefPrompted = false;
   var mcTimer = null;
 
+  function isTheme(t) { return t === 'dark' || t === 'light' || t === 'android'; }
+
   function currentTheme() {
-    return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+    var t = document.documentElement.getAttribute('data-theme');
+    return isTheme(t) ? t : THEME_DEFAULT;
   }
 
   function readTheme() {
     try {
       var t = localStorage.getItem(THEME_KEY);
-      if (t === 'light' || t === 'dark') return t;
+      if (isTheme(t)) return t;
     } catch (e) { /* 隐私模式下 localStorage 可能不可用 */ }
     return currentTheme();
   }
 
+  /** 主题轮的下一站：暗色 → 亮色 → 原生安卓 → 暗色 */
+  var THEME_CYCLE = ['dark', 'light', 'android'];
+  function nextTheme(t) {
+    var i = THEME_CYCLE.indexOf(t);
+    return THEME_CYCLE[(i + 1) % THEME_CYCLE.length];
+  }
+
   function applyTheme(theme, persist) {
-    var t = theme === 'light' ? 'light' : 'dark';
+    var t = isTheme(theme) ? theme : THEME_DEFAULT;
     document.documentElement.setAttribute('data-theme', t);
     if (persist) {
       try { localStorage.setItem(THEME_KEY, t); } catch (e) { /* 忽略 */ }
@@ -252,17 +268,27 @@
     syncThemeButtons(t);
   }
 
+  /** 图标 / 文案跟着目标主题走（按钮上写的是「点下去会变成什么」） */
+  var THEME_META = {
+    dark: { ico: '☾', label: '暗色' },
+    light: { ico: '☀', label: '亮色' },
+    android: { ico: '🤖', label: '安卓' }
+  };
+
+  function themeMeta(t) { return THEME_META[t] || THEME_META.dark; }
+
   /** 按钮上写的是「点下去会变成什么」，不是当前状态 */
   function syncThemeButtons(theme) {
-    var target = theme === 'light' ? 'dark' : 'light';
+    var target = nextTheme(theme);
+    var meta = themeMeta(target);
     var btns = document.querySelectorAll('#' + BAR_ID + ' .sb-theme, #' + THEME_FLOAT_ID);
     for (var i = 0; i < btns.length; i++) {
       var b = btns[i];
       var ico = b.querySelector('.ico');
       var lbl = b.querySelector('.lbl');
-      if (ico) ico.textContent = target === 'light' ? '☀' : '☾';
-      if (lbl) lbl.textContent = target === 'light' ? '亮色' : '暗色';
-      var tip = target === 'light' ? '切换到亮色模式' : '切换到暗色模式';
+      if (ico) ico.textContent = meta.ico;
+      if (lbl) lbl.textContent = meta.label;
+      var tip = '切换到' + meta.label + '模式';
       b.setAttribute('title', tip);
       b.setAttribute('aria-label', tip);
     }
@@ -270,7 +296,7 @@
 
   function onThemeClick(e) {
     if (e) e.preventDefault();
-    var next = currentTheme() === 'light' ? 'dark' : 'light';
+    var next = nextTheme(currentTheme());
     applyTheme(next, true);
     askSaveThemePref(next);
   }
@@ -352,7 +378,7 @@
   function writePrefAck(user, theme) {
     try { localStorage.setItem(prefAckKey(user), String(theme || '')); } catch (e) { }
   }
-  function themeName(t) { return t === 'light' ? '亮色' : '暗色'; }
+  function themeName(t) { return (THEMES[t] || THEMES.dark); }
 
   function saveThemeToAccount(theme, done) {
     fetch('/api/pref', {
@@ -374,7 +400,7 @@
     var user = d && d.loggedIn ? String(d.username || '') : '';
     if (!user) {
       showMcToast({
-        icon: theme === 'light' ? '☀' : '☾',
+        icon: themeMeta(theme).ico,
         title: '已切换为「' + themeName(theme) + '」模式',
         desc: '当前只保存在这台设备上。登录后可以把偏好存到账户，换设备不用再设。',
         autoHideMs: 4200
@@ -385,7 +411,7 @@
       // 账户里已经是这个值，不用问
       writePrefAck(user, theme);
       showMcToast({
-        icon: theme === 'light' ? '☀' : '☾',
+        icon: themeMeta(theme).ico,
         title: '已切换为「' + themeName(theme) + '」模式',
         desc: '和账户里保存的偏好一致，不需要再同步。',
         autoHideMs: 2800
@@ -441,7 +467,7 @@
     var user = data && data.loggedIn ? String(data.username || '') : '';
     if (!user) return;
     var saved = data.prefTheme;
-    if (saved !== 'light' && saved !== 'dark') return;
+    if (!isTheme(saved)) return;
     var cur = currentTheme();
     if (saved === cur) { writePrefAck(user, saved); return; }
     if (readPrefAck(user) === saved) return;   // 这台设备已经对这个值做过选择
@@ -459,7 +485,7 @@
             applyTheme(saved, true);
             writePrefAck(user, saved);
             showMcToast({
-              icon: saved === 'light' ? '☀' : '☾',
+              icon: themeMeta(saved).ico,
               title: '已套用账户偏好',
               desc: '现在是「' + themeName(saved) + '」模式。',
               autoHideMs: 2800

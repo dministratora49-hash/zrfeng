@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<script>/* Apply the saved light/dark theme as early as possible (toggle lives in the top status bar) */(function(){var t='dark';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
+<script>/* Apply the saved theme (dark / light / Android) as early as possible; default is Android */(function(){var t='android';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark'||s==='android')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
 <title>Chat Room</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -304,6 +304,7 @@
   }
 </style>
 <link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="/android.css">
 </head>
 <body class="locked">
 <div class="wrap">

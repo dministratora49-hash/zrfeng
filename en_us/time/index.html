@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<script>/* 尽早落地亮/暗色主题，避免刷新时先闪一下深色（切换按钮在顶部状态栏里） */(function(){var t='dark';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
+<script>/* Apply the saved theme (dark / light / Android) as early as possible; default is Android */(function(){var t='android';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark'||s==='android')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
 <title>Beijing Time · Synced with Alibaba Time Server</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
@@ -44,6 +44,7 @@
   .btn:active { background:rgba(0,230,118,.25); box-shadow:0 0 14px rgba(0,255,136,.4); }
 </style>
 <link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="/android.css">
 </head>
 <body>
 <div class="card">

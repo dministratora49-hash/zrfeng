@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<script>/* 尽早落地亮/暗色主题，避免刷新时先闪一下深色（切换按钮在顶部状态栏里） */(function(){var t='dark';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
+<script>/* Apply the saved theme (dark / light / Android) as early as possible; default is Android */(function(){var t='android';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark'||s==='android')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
 <title>www.zrfeng.top — Home</title>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+SC:wght@300;400;700;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
@@ -52,6 +52,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;margin-top:40px;lette
 @media(max-width:520px){.timer-grid{grid-template-columns:repeat(3,1fr)}.clock-box{top:40px;right:12px;padding:8px 12px}}
 </style>
 <link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="/android.css">
 </head>
 <body>
 <canvas id="p"></canvas>
@@ -110,9 +111,11 @@ footer{text-align:center;color:var(--muted);font-size:12px;margin-top:40px;lette
 (function(){
   var c=document.getElementById("p"),ctx=c.getContext("2d"),pts=[];
   // 粒子颜色跟着亮/暗色主题走（切换按钮在顶部状态栏里）
-  var PC=document.documentElement.getAttribute("data-theme")==="light"?"0,145,88":"0,255,170";
+  // 粒子颜色：暗色荧光绿 / 亮色深绿 / 原生安卓 M3 主色 #00658f
+  function pcOf(t){return t==="light"?"0,145,88":(t==="android"?"0,101,143":"0,255,170");}
+  var PC=pcOf(document.documentElement.getAttribute("data-theme")||"android");
   document.addEventListener("zrfeng:themechange",function(e){
-    PC=(e.detail&&e.detail.theme==="light")?"0,145,88":"0,255,170";
+    PC=pcOf((e.detail&&e.detail.theme)||"android");
   });
   function rs(){c.width=innerWidth;c.height=innerHeight}
   rs();window.addEventListener("resize",rs);

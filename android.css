@@ -1,0 +1,1079 @@
+/* ============================================================================
+   zrfeng.top —— 原生安卓主题（Material You / Material Design 3）
+   ----------------------------------------------------------------------------
+   <html data-theme="android"> 时生效。本文件里的每一条规则都带
+   html[data-theme="android"] 前缀，所以：
+
+     · data-theme="dark"    —— 站点原本的深色，本文件一条都不生效
+     · data-theme="light"   —— /theme.css 的亮色，本文件一条都不生效
+     · data-theme="android" —— 只有本文件生效
+
+   三条主题共用 /status.js 里的同一个开关和同一个 localStorage 键
+   （zrfeng-theme），旧的两套一套没删，都在控制台「外观」里可以选回来。
+
+   配色取 Material 3 动态取色：种子色 = 站点原本的天依蓝 #66ccff，
+   推出的浅色方案（surface / primary / outline 三组）：
+     surface              #FBFCFE   卡片、页面底
+     surface-container    #EDF2F7   次级容器、输入框
+     primary              #00658F   按钮底、强调文字（对白底 5.4:1）
+     primary-container    #C9E6FF   选中态、标签底
+     on-surface           #1A1C1E   正文
+     outline              #71787D   描边
+   圆角按 M3：卡片 12 / 对话框 28 / 按钮全圆；去掉所有发光与渐变。
+
+   字体：Android 原生是 Roboto（系统自带的纯拉丁字体）+ Noto Sans CJK
+   （中文，思源黑体）。两者都是 Apache-2.0 / SIL OFL 1.1，可商用、可自托管，
+   所以不找替身：
+     · Roboto   自托管在 /assets/fonts/roboto-latin{,-ext}.woff2（Apache-2.0）
+     · 中文     用系统里的 Noto Sans SC / 思源黑体 / 苹方 / 微软雅黑 依次回落，
+                不额外下载（思源黑体整包 10MB 上下，为省流量交给系统字体）
+   字体栈写在 body 上，见下面第 0 节。
+   ============================================================================ */
+
+/* ---------- 字体：Roboto 走本地文件，中文走系统 ---------- */
+@font-face {
+  font-family: 'RobotoM3';
+  font-style: normal;
+  font-weight: 100 900;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url('/assets/fonts/roboto-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+                 U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF,
+                 U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'RobotoM3';
+  font-style: normal;
+  font-weight: 100 900;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url('/assets/fonts/roboto-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+                 U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+                 U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+html[data-theme="android"] {
+  color-scheme: light;
+
+  --md-surface: #fbfcfe;
+  --md-surface-1: #f3f6fa;
+  --md-surface-2: #edf2f7;
+  --md-surface-3: #e7edf4;
+  --md-surface-4: #dfe7ef;
+
+  --md-on-surface: #1a1c1e;
+  --md-on-surface-var: #41484d;
+
+  --md-primary: #00658f;
+  --md-on-primary: #ffffff;
+  --md-primary-container: #c9e6ff;
+  --md-on-primary-container: #001e2f;
+
+  --md-outline: #71787d;
+  --md-outline-var: #c1c7cc;
+
+  --md-error: #ba1a1a;
+  --md-error-container: #ffdad6;
+
+  --md-ripple: rgba(0, 101, 143, .12);
+  --md-elev1: 0 1px 2px rgba(0, 0, 0, .06), 0 1px 3px 1px rgba(0, 0, 0, .04);
+  --md-elev2: 0 1px 2px rgba(0, 0, 0, .08), 0 2px 6px 2px rgba(0, 0, 0, .05);
+  --md-elev3: 0 4px 8px 3px rgba(0, 0, 0, .06), 0 1px 3px rgba(0, 0, 0, .10);
+
+  /* 首页等页面自己在 :root 里定义了 --bg / --fg / --accent 这些，
+     这里按同一套 M3 色板重新赋值，省得逐条覆盖它的 rule。
+     html[data-theme="android"] 的优先级高于 :root，且本文件在页面样式之后加载。 */
+  --bg: #fbfcfe;
+  --fg: #1a1c1e;
+  --muted: #41484d;
+  --accent: #00658f;
+  --ad: rgba(0, 101, 143, .10);
+  --ag: rgba(0, 101, 143, .20);
+  --warm: #8a5000;
+}
+
+/* ---------- 0. 全局底色：纯色 surface，去掉原来的网格与径向光 ---------- */
+html[data-theme="android"] body {
+  background: var(--md-surface);
+  background-image: none;
+  color: var(--md-on-surface);
+  /* Android 原生字体：Roboto（拉丁）+ Noto Sans CJK / 思源黑体（中文） */
+  font-family: 'RobotoM3', 'Roboto', 'Noto Sans SC', 'Noto Sans CJK SC',
+               'Source Han Sans SC', '思源黑体', 'PingFang SC',
+               'Microsoft YaHei', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: .1px;
+}
+/* 表单控件默认不继承 body 字体，单独接上 */
+html[data-theme="android"] input,
+html[data-theme="android"] textarea,
+html[data-theme="android"] select,
+html[data-theme="android"] button,
+html[data-theme="android"] .modal input,
+html[data-theme="android"] .tk-form input,
+html[data-theme="android"] .composer textarea {
+  font-family: inherit;
+}
+html[data-theme="android"] body::before {
+  background-image: none;
+  display: none;
+}
+html[data-theme="android"] ::selection {
+  background: var(--md-primary-container);
+  color: var(--md-on-primary-container);
+}
+
+/* ---------- 1. 标题：去掉渐变字，回到 M3 的纯色大标题 ---------- */
+/* 页面里写死的 Orbitron / Consolas 这类字体，这里统一拉回 Roboto + 思源黑体 */
+html[data-theme="android"] h1,
+html[data-theme="android"] h2,
+html[data-theme="android"] h3,
+html[data-theme="android"] .card-label,
+html[data-theme="android"] .badge,
+html[data-theme="android"] .clock-label,
+html[data-theme="android"] .clock-time,
+html[data-theme="android"] .clock-date,
+html[data-theme="android"] .visitor-num,
+html[data-theme="android"] .timer-tag,
+html[data-theme="android"] .timer-val,
+html[data-theme="android"] .timer-unit,
+html[data-theme="android"] .nt-time,
+html[data-theme="android"] .tk-meta,
+html[data-theme="android"] .tk-time,
+html[data-theme="android"] .rp-time,
+html[data-theme="android"] .msg .tm,
+html[data-theme="android"] .pg-info,
+html[data-theme="android"] .m-page,
+html[data-theme="android"] .sec-title,
+html[data-theme="android"] .big,
+html[data-theme="android"] .cell .v,
+html[data-theme="android"] .cell .l {
+  font-family: 'RobotoM3', 'Roboto', 'Noto Sans SC', 'Noto Sans CJK SC',
+               'Source Han Sans SC', '思源黑体', 'PingFang SC',
+               'Microsoft YaHei', system-ui, sans-serif;
+}
+html[data-theme="android"] h1,
+html[data-theme="android"] header h1,
+html[data-theme="android"] h2,
+html[data-theme="android"] h3 {
+  background: none;
+  -webkit-background-clip: initial;
+  background-clip: initial;
+  -webkit-text-fill-color: currentColor;
+  text-shadow: none;
+  color: var(--md-on-surface);
+}
+html[data-theme="android"] h1 {
+  font-size: 28px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.3;
+}
+html[data-theme="android"] h2,
+html[data-theme="android"] .card h2,
+html[data-theme="android"] .sec-title {
+  color: var(--md-on-surface);
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+html[data-theme="android"] .card h2 .bar {
+  background: var(--md-primary);
+  width: 3px;
+  border-radius: 2px;
+}
+
+/* ---------- 2. 卡片 / 容器：M3 的 surface-container + 12dp 圆角 ---------- */
+html[data-theme="android"] .card,
+html[data-theme="android"] .box,
+html[data-theme="android"] .item,
+html[data-theme="android"] .ticket,
+html[data-theme="android"] .stat,
+html[data-theme="android"] .clock-box,
+html[data-theme="android"] .github-card,
+html[data-theme="android"] .captcha-box,
+html[data-theme="android"] .row,
+html[data-theme="android"] .file-card,
+html[data-theme="android"] .chat-card {
+  background: var(--md-surface-1);
+  border: 1px solid var(--md-outline-var);
+  border-radius: 12px;
+  box-shadow: none;
+  backdrop-filter: none;
+  color: var(--md-on-surface);
+}
+html[data-theme="android"] .card:hover,
+html[data-theme="android"] .box:hover,
+html[data-theme="android"] .item:hover,
+html[data-theme="android"] .github-card:hover {
+  background: var(--md-surface-2);
+  border-color: var(--md-outline);
+  box-shadow: var(--md-elev1);
+  transform: none;
+}
+html[data-theme="android"] .cell,
+html[data-theme="android"] .tk-item,
+html[data-theme="android"] .msg,
+html[data-theme="android"] .tk,
+html[data-theme="android"] .timer-item,
+html[data-theme="android"] .need-login,
+html[data-theme="android"] .verdict,
+html[data-theme="android"] .copyline,
+html[data-theme="android"] .m-bubble {
+  background: var(--md-surface-2);
+  border-color: var(--md-outline-var);
+  border-radius: 12px;
+  box-shadow: none;
+}
+
+/* ---------- 3. 正文与次要文字 ---------- */
+html[data-theme="android"] p,
+html[data-theme="android"] .news-text,
+html[data-theme="android"] .nt-body,
+html[data-theme="android"] .tk-body,
+html[data-theme="android"] .msg .tx,
+html[data-theme="android"] .rp-text,
+html[data-theme="android"] .tk-reply-text,
+html[data-theme="android"] .name,
+html[data-theme="android"] .addr,
+html[data-theme="android"] .nt-title,
+html[data-theme="android"] .tk-title,
+html[data-theme="android"] .card .name,
+html[data-theme="android"] .github-card .text,
+html[data-theme="android"] .kv b,
+html[data-theme="android"] .modal p,
+html[data-theme="android"] .team,
+html[data-theme="android"] .book,
+html[data-theme="android"] .file-card .fc-name {
+  color: var(--md-on-surface);
+}
+html[data-theme="android"] p.sub,
+html[data-theme="android"] .sub,
+html[data-theme="android"] .hint,
+html[data-theme="android"] .who,
+html[data-theme="android"] .meta,
+html[data-theme="android"] .nt-time,
+html[data-theme="android"] .empty,
+html[data-theme="android"] .center,
+html[data-theme="android"] .kv div,
+html[data-theme="android"] .tk-meta,
+html[data-theme="android"] .tk-time,
+html[data-theme="android"] .tk-who,
+html[data-theme="android"] .tk-rep,
+html[data-theme="android"] .tk-reply-who,
+html[data-theme="android"] .tk-tip,
+html[data-theme="android"] .tk-anon,
+html[data-theme="android"] .tk-anon-tip,
+html[data-theme="android"] .delrow,
+html[data-theme="android"] .delrow .d-t,
+html[data-theme="android"] .m-hint,
+html[data-theme="android"] .m-now,
+html[data-theme="android"] .m-stat,
+html[data-theme="android"] .bottom,
+html[data-theme="android"] footer,
+html[data-theme="android"] .links,
+html[data-theme="android"] .stat span,
+html[data-theme="android"] .github-card .name,
+html[data-theme="android"] .card .cn,
+html[data-theme="android"] .visitor-sub,
+html[data-theme="android"] .clock-label,
+html[data-theme="android"] .clock-date,
+html[data-theme="android"] .team-sub,
+html[data-theme="android"] .desc {
+  color: var(--md-on-surface-var);
+}
+
+/* ---------- 4. 强调色：改用 M3 primary（对白底 5.4:1） ---------- */
+html[data-theme="android"] .card-label,
+html[data-theme="android"] .badge,
+html[data-theme="android"] .hl,
+html[data-theme="android"] .who b,
+html[data-theme="android"] .center a,
+html[data-theme="android"] .timer-tag,
+html[data-theme="android"] .visitor-num,
+html[data-theme="android"] .clock-time,
+html[data-theme="android"] .captcha-q,
+html[data-theme="android"] .nt-title strong,
+html[data-theme="android"] .news-text strong,
+html[data-theme="android"] .msg-line.ok,
+html[data-theme="android"] .hint.ok,
+html[data-theme="android"] .msg.ok,
+html[data-theme="android"] .tk-msg.ok,
+html[data-theme="android"] .links a:hover,
+html[data-theme="android"] .back a:hover,
+html[data-theme="android"] .on,
+html[data-theme="android"] .rp-who.admin,
+html[data-theme="android"] .tk-reply-who.admin,
+html[data-theme="android"] .online,
+html[data-theme="android"] .stat b,
+html[data-theme="android"] .bg {
+  color: var(--md-primary);
+}
+html[data-theme="android"] .card-label,
+html[data-theme="android"] .badge {
+  font-family: inherit;
+  text-transform: none;
+  letter-spacing: .2px;
+  font-weight: 500;
+}
+html[data-theme="android"] .visitor-num,
+html[data-theme="android"] .clock-time,
+html[data-theme="android"] .big {
+  text-shadow: none;
+  font-family: inherit;
+  font-weight: 600;
+  letter-spacing: -.5px;
+}
+html[data-theme="android"] .line {
+  background: var(--md-outline-var);
+  height: 1px;
+}
+html[data-theme="android"] .box .status,
+html[data-theme="android"] .card .status,
+html[data-theme="android"] .status {
+  color: var(--md-on-surface-var);
+  text-shadow: none;
+}
+html[data-theme="android"] a.card .status { color: var(--md-error); }
+
+/* ---------- 5. 按钮：M3 全圆角胶囊 ---------- */
+html[data-theme="android"] .btn,
+html[data-theme="android"] .btn-nav,
+html[data-theme="android"] .back a,
+html[data-theme="android"] .back-btn,
+html[data-theme="android"] .copy,
+html[data-theme="android"] .tk-form button,
+html[data-theme="android"] .row-code button,
+html[data-theme="android"] .refresh,
+html[data-theme="android"] .dl-btn,
+html[data-theme="android"] .need-login .nl-btn,
+html[data-theme="android"] .m-acts button,
+html[data-theme="android"] .m-quick button,
+html[data-theme="android"] .tk-acts button,
+html[data-theme="android"] .sec a,
+html[data-theme="android"] .composer button.send,
+html[data-theme="android"] button {
+  border-radius: 999px;
+  border: 1px solid var(--md-outline);
+  background: transparent;
+  background-image: none;
+  color: var(--md-primary);
+  font-family: inherit;
+  font-weight: 500;
+  letter-spacing: .1px;
+  box-shadow: none;
+  text-shadow: none;
+  transition: background .15s ease, box-shadow .15s ease;
+}
+html[data-theme="android"] .btn:hover,
+html[data-theme="android"] .btn-nav:hover,
+html[data-theme="android"] .back a:hover,
+html[data-theme="android"] .back-btn:hover,
+html[data-theme="android"] .copy:hover,
+html[data-theme="android"] .refresh:hover,
+html[data-theme="android"] .dl-btn:hover,
+html[data-theme="android"] .need-login .nl-btn:hover,
+html[data-theme="android"] .row-code button:hover:not(:disabled),
+html[data-theme="android"] button:hover:not(:disabled) {
+  background: var(--md-ripple);
+  border-color: var(--md-primary);
+  box-shadow: none;
+  transform: none;
+}
+html[data-theme="android"] .btn:active,
+html[data-theme="android"] .btn-nav:active,
+html[data-theme="android"] button:active:not(:disabled) {
+  background: rgba(0, 101, 143, .18);
+  transform: none;
+  box-shadow: none;
+}
+/* 主要按钮：实心 primary */
+html[data-theme="android"] .tk-send,
+html[data-theme="android"] .submit,
+html[data-theme="android"] .file-card .fc-btn,
+html[data-theme="android"] .composer button.send {
+  background: var(--md-primary);
+  background-image: none;
+  border-color: transparent;
+  color: var(--md-on-primary);
+  box-shadow: var(--md-elev1);
+}
+html[data-theme="android"] .tk-send:hover,
+html[data-theme="android"] .submit:hover,
+html[data-theme="android"] .file-card .fc-btn:hover,
+html[data-theme="android"] .composer button.send:hover {
+  background: #004e70;
+  box-shadow: var(--md-elev2);
+}
+html[data-theme="android"] .btn:disabled,
+html[data-theme="android"] .tk-form button:disabled,
+html[data-theme="android"] .row-code button:disabled,
+html[data-theme="android"] .submit:disabled,
+html[data-theme="android"] button:disabled {
+  opacity: .38;
+  box-shadow: none;
+}
+html[data-theme="android"] .copy.done {
+  color: var(--md-on-primary-container);
+  background: var(--md-primary-container);
+  border-color: transparent;
+}
+html[data-theme="android"] .btn.ghost,
+html[data-theme="android"] button.warn,
+html[data-theme="android"] .btn.ghost:hover,
+html[data-theme="android"] button.warn:hover {
+  color: var(--md-error);
+  border-color: var(--md-error);
+  background: transparent;
+}
+html[data-theme="android"] button.mute,
+html[data-theme="android"] .btn.ghost { border-radius: 999px; }
+
+/* ---------- 6. 表单：M3 outlined 输入框 ---------- */
+html[data-theme="android"] input,
+html[data-theme="android"] textarea,
+html[data-theme="android"] select,
+html[data-theme="android"] .tk-form input,
+html[data-theme="android"] .fld input,
+html[data-theme="android"] .fld textarea,
+html[data-theme="android"] .field input,
+html[data-theme="android"] .captcha-row input,
+html[data-theme="android"] .tk-input,
+html[data-theme="android"] .tk-reply-form input,
+html[data-theme="android"] .m-field input,
+html[data-theme="android"] .m-field textarea,
+html[data-theme="android"] .modal input,
+html[data-theme="android"] .modal .m-field input,
+html[data-theme="android"] .row-code input,
+html[data-theme="android"] .pg-size select,
+html[data-theme="android"] .pg-jump input,
+html[data-theme="android"] .composer textarea,
+html[data-theme="android"] .tk-anon input,
+html[data-theme="android"] .m-page input,
+html[data-theme="android"] .pick select {
+  background: var(--md-surface);
+  color: var(--md-on-surface);
+  border: 1px solid var(--md-outline);
+  border-radius: 8px;
+  font-family: inherit;
+  box-shadow: none;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+html[data-theme="android"] input::placeholder,
+html[data-theme="android"] textarea::placeholder,
+html[data-theme="android"] .field input::placeholder,
+html[data-theme="android"] .tk-input::placeholder {
+  color: var(--md-on-surface-var);
+  opacity: .75;
+}
+html[data-theme="android"] input:focus,
+html[data-theme="android"] textarea:focus,
+html[data-theme="android"] select:focus,
+html[data-theme="android"] .tk-form input:focus,
+html[data-theme="android"] .fld input:focus,
+html[data-theme="android"] .fld textarea:focus,
+html[data-theme="android"] .field input:focus,
+html[data-theme="android"] .captcha-row input:focus,
+html[data-theme="android"] .tk-input:focus,
+html[data-theme="android"] .tk-reply-form input:focus,
+html[data-theme="android"] .m-field input:focus,
+html[data-theme="android"] .m-field textarea:focus,
+html[data-theme="android"] .modal input:focus,
+html[data-theme="android"] .pg-jump input:focus,
+html[data-theme="android"] .pg-size select:focus,
+html[data-theme="android"] .composer textarea:focus,
+html[data-theme="android"] .pick select:focus {
+  outline: none;
+  border-color: var(--md-primary);
+  box-shadow: inset 0 0 0 1px var(--md-primary);
+}
+html[data-theme="android"] .field label,
+html[data-theme="android"] .fld label,
+html[data-theme="android"] .m-field label,
+html[data-theme="android"] .pick label {
+  color: var(--md-on-surface-var);
+  font-size: 12px;
+  font-weight: 500;
+}
+html[data-theme="android"] .tabs,
+html[data-theme="android"] .tab {
+  background: transparent;
+  border-radius: 999px;
+}
+html[data-theme="android"] .tab {
+  color: var(--md-on-surface-var);
+  box-shadow: none;
+}
+html[data-theme="android"] .tab.on {
+  color: var(--md-on-primary-container);
+  background: var(--md-primary-container);
+  box-shadow: none;
+}
+
+/* ---------- 7. 状态灯 / 小圆点：Android 的实心圆点，去发光 ---------- */
+html[data-theme="android"] .dot,
+html[data-theme="android"] .msg .dot,
+html[data-theme="android"] .online::before,
+html[data-theme="android"] .status::before,
+html[data-theme="android"] .pulse {
+  background: var(--md-primary);
+  box-shadow: none;
+  animation: none;
+}
+html[data-theme="android"] .dot.off,
+html[data-theme="android"] .dot.red,
+html[data-theme="android"] .box[data-down="1"] .dot {
+  background: var(--md-error);
+  box-shadow: none;
+}
+html[data-theme="android"] .box[data-down="1"] .status { color: var(--md-error); }
+
+/* ---------- 8. 标签 / 芯片：M3 chip ---------- */
+html[data-theme="android"] .tag,
+html[data-theme="android"] .tag.main,
+html[data-theme="android"] .tag.active,
+html[data-theme="android"] .badge,
+html[data-theme="android"] .timer-tag {
+  border-radius: 8px;
+  border: 1px solid var(--md-outline-var);
+  background: var(--md-surface-2);
+  color: var(--md-on-surface-var);
+  box-shadow: none;
+  font-weight: 500;
+}
+html[data-theme="android"] .tag.main,
+html[data-theme="android"] .tag.active,
+html[data-theme="android"] .tag.admin,
+html[data-theme="android"] .tk-new {
+  background: var(--md-primary-container);
+  border-color: transparent;
+  color: var(--md-on-primary-container);
+}
+html[data-theme="android"] .tag.casual,
+html[data-theme="android"] .tag.maint,
+html[data-theme="android"] .tag.trial,
+html[data-theme="android"] .tk-anon-tag {
+  background: #ffe0b2;
+  border-color: transparent;
+  color: #5c3d00;
+}
+html[data-theme="android"] .tag.blocked,
+html[data-theme="android"] .tag.banned,
+html[data-theme="android"] .tk-pending {
+  background: var(--md-error-container);
+  border-color: transparent;
+  color: var(--md-error);
+}
+html[data-theme="android"] .tag.super {
+  background: #fff3c4;
+  border-color: transparent;
+  color: #5c4a00;
+}
+html[data-theme="android"] .tag.sub {
+  background: #e8def8;
+  border-color: transparent;
+  color: #3f2a66;
+}
+html[data-theme="android"] .news-date {
+  background: var(--md-primary-container);
+  color: var(--md-on-primary-container);
+  border-radius: 8px;
+}
+
+/* ---------- 9. 通知板块 ---------- */
+html[data-theme="android"] .nt { border-bottom: 1px solid var(--md-outline-var); }
+html[data-theme="android"] .msg {
+  background: var(--md-surface-2);
+  border: 1px solid var(--md-outline-var);
+  border-radius: 12px;
+}
+html[data-theme="android"] .rp { border-left: 3px solid var(--md-outline-var); }
+html[data-theme="android"] .msg-line.err,
+html[data-theme="android"] .msg.err,
+html[data-theme="android"] .tk-msg.bad,
+html[data-theme="android"] .hint.bad,
+html[data-theme="android"] .modal .err,
+html[data-theme="android"] .composer .hint .err {
+  color: var(--md-error);
+}
+html[data-theme="android"] .tk-msg.bad {
+  border-color: var(--md-error);
+  background: var(--md-error-container);
+}
+html[data-theme="android"] .down-banner {
+  border: 1px solid var(--md-outline-var);
+  border-radius: 12px;
+  background: var(--md-primary-container);
+  overflow: hidden;
+}
+html[data-theme="android"] .down-banner .track {
+  color: var(--md-on-primary-container);
+  font-weight: 500;
+  letter-spacing: .2px;
+}
+html[data-theme="android"] .pg {
+  border-top: 1px solid var(--md-outline-var);
+}
+html[data-theme="android"] .pg-info,
+html[data-theme="android"] .pg-size,
+html[data-theme="android"] .pg-jump {
+  color: var(--md-on-surface-var);
+  font-family: inherit;
+}
+html[data-theme="android"] .btn[disabled] { opacity: .38; }
+
+/* ---------- 10. 控制台 ---------- */
+html[data-theme="android"] .notice {
+  background: #fff4d6;
+  border: 1px solid #e0c48a;
+  border-radius: 12px;
+}
+html[data-theme="android"] .notice .nt-t { color: #5c4400; }
+html[data-theme="android"] .notice .nt-s { color: #6d5c33; }
+html[data-theme="android"] .notice button {
+  color: #5c4400;
+  border-color: #c9a961;
+  background: transparent;
+}
+html[data-theme="android"] .dellist { border-top: 1px solid var(--md-outline-var); }
+html[data-theme="android"] .delrow { color: var(--md-on-surface-var); }
+html[data-theme="android"] .delrow .d-u { color: var(--md-primary); }
+html[data-theme="android"] .row { border-bottom: 1px solid var(--md-outline-var); }
+html[data-theme="android"] .maint {
+  background: #fff8e6;
+  border: 1px solid #e3c98f;
+  border-radius: 12px;
+  box-shadow: none;
+}
+html[data-theme="android"] .maint h2,
+html[data-theme="android"] .maint .m-stat b { color: #5c4400; }
+html[data-theme="android"] .maint .m-stat { color: #6d5c33; }
+html[data-theme="android"] .m-field label,
+html[data-theme="android"] .m-hint,
+html[data-theme="android"] .m-now { color: #7a6742; }
+html[data-theme="android"] .m-page {
+  background: var(--md-surface);
+  color: var(--md-on-surface-var);
+  border: 1px solid var(--md-outline);
+  border-radius: 999px;
+}
+html[data-theme="android"] .m-page.on {
+  border-color: transparent;
+  background: var(--md-primary-container);
+  color: var(--md-on-primary-container);
+}
+html[data-theme="android"] .m-page em { color: var(--md-outline); }
+html[data-theme="android"] .m-page.on em { color: var(--md-on-primary-container); }
+html[data-theme="android"] .m-acts button,
+html[data-theme="android"] .m-quick button {
+  color: var(--md-primary);
+  border-color: var(--md-outline);
+  background: transparent;
+}
+
+/* 控制台弹窗：M3 dialog，28dp 大圆角 */
+html[data-theme="android"] .mask { background: rgba(0, 0, 0, .32); }
+html[data-theme="android"] .modal,
+html[data-theme="android"] .dlg {
+  background: var(--md-surface-1);
+  border: none;
+  border-radius: 28px;
+  box-shadow: var(--md-elev3);
+  color: var(--md-on-surface);
+}
+html[data-theme="android"] .modal h3,
+html[data-theme="android"] .dlg h2,
+html[data-theme="android"] .dlg.danger h2 {
+  color: var(--md-on-surface);
+  font-weight: 500;
+}
+html[data-theme="android"] .modal p,
+html[data-theme="android"] .modal p.small,
+html[data-theme="android"] .step-hint,
+html[data-theme="android"] .modal .m-field label,
+html[data-theme="android"] .dlg p { color: var(--md-on-surface-var); }
+html[data-theme="android"] .modal .acts button,
+html[data-theme="android"] .modal .m-quick button,
+html[data-theme="android"] .dlg-acts button {
+  color: var(--md-primary);
+  border-color: var(--md-outline);
+  background: transparent;
+}
+html[data-theme="android"] .dlg-acts button.primary-warn,
+html[data-theme="android"] .dlg-acts button.ghost {
+  color: var(--md-error);
+  border-color: var(--md-error);
+}
+
+/* ---------- 11. 登录页 ---------- */
+html[data-theme="android"] .captcha-box {
+  background: var(--md-surface-2);
+  border: 1px solid var(--md-outline-var);
+  border-radius: 12px;
+}
+html[data-theme="android"] .msg.ok {
+  color: var(--md-on-primary-container);
+  background: var(--md-primary-container);
+  border-color: transparent;
+  border-radius: 12px;
+}
+html[data-theme="android"] .msg.err {
+  color: var(--md-error);
+  background: var(--md-error-container);
+  border-color: transparent;
+  border-radius: 12px;
+}
+html[data-theme="android"] .links a { color: var(--md-primary); }
+
+/* ---------- 12. 时间页（终端风 → M3 大数字） ---------- */
+html[data-theme="android"] .cell .v,
+html[data-theme="android"] .big,
+html[data-theme="android"] .big small,
+html[data-theme="android"] .ampm,
+html[data-theme="android"] .date {
+  color: var(--md-primary);
+  font-family: inherit;
+  text-shadow: none;
+}
+html[data-theme="android"] .cell .l { color: var(--md-on-surface-var); }
+html[data-theme="android"] .badge {
+  border: 1px solid var(--md-outline-var);
+  background: var(--md-surface-2);
+  color: var(--md-on-surface-var);
+}
+
+/* ---------- 13. 关于页 ---------- */
+html[data-theme="android"] header h1 { color: var(--md-on-surface); }
+html[data-theme="android"] header p { color: var(--md-on-surface-var); }
+html[data-theme="android"] .logo {
+  border-color: var(--md-outline-var);
+  box-shadow: none;
+}
+html[data-theme="android"] .founder { border-color: var(--md-outline-var); }
+
+/* ---------- 14. 首页 ---------- */
+html[data-theme="android"] .atm {
+  background: none;
+  display: none;
+}
+html[data-theme="android"] .clock-box {
+  background: var(--md-surface-1);
+  border: 1px solid var(--md-outline-var);
+  border-radius: 12px;
+  backdrop-filter: none;
+  box-shadow: none;
+}
+
+/* ---------- 15. 顶部状态栏：Material 3 top app bar ---------- */
+html[data-theme="android"] #dsh-status-bar {
+  background: var(--md-surface-1);
+  border-bottom: 1px solid var(--md-outline-var);
+  color: var(--md-on-surface-var);
+  box-shadow: none;
+  backdrop-filter: none;
+}
+html[data-theme="android"] #dsh-status-bar .sb-btn {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: var(--md-primary);
+  background: transparent;
+  box-shadow: none;
+}
+html[data-theme="android"] #dsh-status-bar .sb-btn:hover,
+html[data-theme="android"] #dsh-status-bar .sb-btn:active {
+  background: var(--md-ripple);
+}
+html[data-theme="android"] #dsh-status-bar a.sb-text { color: var(--md-primary); }
+html[data-theme="android"] #dsh-status-bar .sb-cd { color: #8a5000; }
+html[data-theme="android"] #dsh-status-bar .sb-theme { border-color: var(--md-outline-var); }
+
+/* ---------- 16. 状态栏弹窗 ---------- */
+html[data-theme="android"] #dsh-block-mask,
+html[data-theme="android"] #dsh-maint-mask,
+html[data-theme="android"] #dsh-ban-mask,
+html[data-theme="android"] #dsh-warn-mask { background: rgba(0, 0, 0, .32); }
+
+html[data-theme="android"] #dsh-block-mask .bm-card,
+html[data-theme="android"] #dsh-ban-mask .bn-card,
+html[data-theme="android"] #dsh-maint-mask .mt-card,
+html[data-theme="android"] #dsh-warn-mask .wn-card {
+  background: var(--md-surface-1);
+  border: none;
+  border-radius: 28px;
+  box-shadow: var(--md-elev3);
+}
+html[data-theme="android"] #dsh-block-mask h2,
+html[data-theme="android"] #dsh-ban-mask h2 { color: var(--md-error); }
+html[data-theme="android"] #dsh-maint-mask h2,
+html[data-theme="android"] #dsh-maint-mask .mt-pct,
+html[data-theme="android"] #dsh-maint-mask .mt-cd,
+html[data-theme="android"] #dsh-warn-mask h2,
+html[data-theme="android"] #dsh-warn-mask .wn-badge { color: #8a5000; }
+html[data-theme="android"] #dsh-block-mask p,
+html[data-theme="android"] #dsh-ban-mask p,
+html[data-theme="android"] #dsh-maint-mask p,
+html[data-theme="android"] #dsh-warn-mask p { color: var(--md-on-surface-var); }
+html[data-theme="android"] #dsh-ban-mask .bn-meta,
+html[data-theme="android"] #dsh-maint-mask .mt-quote,
+html[data-theme="android"] #dsh-maint-mask .mt-range,
+html[data-theme="android"] #dsh-maint-mask .mt-note,
+html[data-theme="android"] #dsh-maint-mask .mt-staff summary,
+html[data-theme="android"] #dsh-warn-mask .wn-by,
+html[data-theme="android"] #dsh-warn-mask .wn-note { color: var(--md-on-surface-var); }
+html[data-theme="android"] #dsh-block-mask .bm-acts a,
+html[data-theme="android"] #dsh-block-mask .bm-acts button,
+html[data-theme="android"] #dsh-ban-mask .bn-acts a,
+html[data-theme="android"] #dsh-ban-mask .bn-acts button {
+  color: var(--md-error);
+  border-color: var(--md-error);
+  border-radius: 999px;
+  background: transparent;
+}
+html[data-theme="android"] #dsh-maint-mask .mt-acts a,
+html[data-theme="android"] #dsh-maint-mask .mt-acts button,
+html[data-theme="android"] #dsh-maint-mask .mt-staff button,
+html[data-theme="android"] #dsh-warn-mask .wn-acts a,
+html[data-theme="android"] #dsh-warn-mask .wn-acts button {
+  color: var(--md-primary);
+  border-color: var(--md-outline);
+  border-radius: 999px;
+  background: transparent;
+}
+html[data-theme="android"] #dsh-maint-mask .mt-staff { border-top: 1px solid var(--md-outline-var); }
+html[data-theme="android"] #dsh-maint-mask .mt-staff input {
+  background: var(--md-surface);
+  color: var(--md-on-surface);
+  border-color: var(--md-outline);
+  border-radius: 8px;
+}
+html[data-theme="android"] #dsh-warn-mask .wn-text {
+  background: var(--md-surface-2);
+  border: 1px solid var(--md-outline-var);
+  border-radius: 12px;
+  color: var(--md-on-surface);
+}
+
+/* ---------- 17. 联系我们页的悬浮切换按钮 ---------- */
+html[data-theme="android"] #dsh-theme-float {
+  background: var(--md-surface-1);
+  border: 1px solid var(--md-outline-var);
+  border-radius: 999px;
+  color: var(--md-primary);
+  box-shadow: var(--md-elev2);
+}
+
+/* ---------- 18. 右侧滑出提示 ---------- */
+html[data-theme="android"] #dsh-slide-toast {
+  background: var(--md-surface-1);
+  border: none;
+  border-radius: 16px;
+  box-shadow: var(--md-elev3);
+  color: var(--md-on-surface);
+}
+html[data-theme="android"] #dsh-slide-toast .sl-ico {
+  background: var(--md-primary-container);
+  border: none;
+  border-radius: 999px;
+  color: var(--md-on-primary-container);
+}
+html[data-theme="android"] #dsh-slide-toast .sl-t { color: var(--md-on-surface); }
+html[data-theme="android"] #dsh-slide-toast .sl-d { color: var(--md-on-surface-var); }
+html[data-theme="android"] #dsh-slide-toast .sl-acts button {
+  color: var(--md-primary);
+  border-color: var(--md-outline);
+  border-radius: 999px;
+  background: transparent;
+}
+html[data-theme="android"] #dsh-slide-toast .sl-acts button:hover {
+  background: var(--md-ripple);
+  border-color: var(--md-primary);
+}
+html[data-theme="android"] #dsh-slide-toast .sl-acts button.primary {
+  background: var(--md-primary);
+  border-color: transparent;
+  color: var(--md-on-primary);
+}
+html[data-theme="android"] #dsh-slide-toast .sl-acts button.mute {
+  color: var(--md-on-surface-var);
+  border-color: var(--md-outline-var);
+}
+
+/* ---------- 19. 小说 / 文件下载页 ---------- */
+html[data-theme="android"] .row { background: var(--md-surface-1); border-color: var(--md-outline-var); }
+html[data-theme="android"] .file-card { background: var(--md-surface-1); border-color: var(--md-outline-var); }
+
+/* ---------- 20. 净检页表格 ---------- */
+html[data-theme="android"] table td {
+  border-bottom: 1px solid var(--md-outline-var);
+  color: var(--md-on-surface);
+}
+html[data-theme="android"] table td:first-child { color: var(--md-on-surface-var); }
+html[data-theme="android"] .verdict {
+  border: 1px solid transparent;
+  background: var(--md-primary-container);
+  color: var(--md-on-primary-container);
+  border-radius: 12px;
+}
+html[data-theme="android"] .verdict.bad {
+  background: var(--md-error-container);
+  color: var(--md-error);
+  border-color: transparent;
+}
+html[data-theme="android"] .verdict.wait {
+  background: var(--md-surface-2);
+  color: var(--md-on-surface-var);
+  border-color: var(--md-outline-var);
+}
+html[data-theme="android"] .copyline {
+  background: var(--md-surface-2);
+  border-color: var(--md-outline-var);
+  border-radius: 12px;
+}
+html[data-theme="android"] .copyline code { color: var(--md-on-surface); }
+
+/* ---------- 21. 聊天室 ---------- */
+html[data-theme="android"] .chat-head {
+  border-bottom: 1px solid var(--md-outline-var);
+  color: var(--md-on-surface-var);
+}
+html[data-theme="android"] .chat-head b { color: var(--md-primary); }
+html[data-theme="android"] .linkbtn { color: var(--md-primary); }
+html[data-theme="android"] .m-bubble {
+  border: 1px solid var(--md-outline-var);
+  border-radius: 16px;
+  background: var(--md-surface-2);
+  color: var(--md-on-surface);
+}
+html[data-theme="android"] .m.mine .m-bubble {
+  background: var(--md-primary-container);
+  border-color: transparent;
+  color: var(--md-on-primary-container);
+}
+html[data-theme="android"] .m-meta,
+html[data-theme="android"] .m-meta .nm { color: var(--md-on-surface-var); }
+html[data-theme="android"] .m.admin .m-meta .nm { color: #8a5000; }
+html[data-theme="android"] .composer {
+  border-top: 1px solid var(--md-outline-var);
+  background: var(--md-surface-1);
+}
+html[data-theme="android"] .msgs::-webkit-scrollbar-thumb {
+  background: var(--md-outline-var);
+  border-radius: 3px;
+}
+
+/* 聊天室 / 求物页的各类遮罩对话框 */
+html[data-theme="android"] .mask { background: rgba(0, 0, 0, .32); }
+html[data-theme="android"] .dlg {
+  background: var(--md-surface-1);
+  border: none;
+  border-radius: 28px;
+  box-shadow: var(--md-elev3);
+}
+html[data-theme="android"] .dlg h2,
+html[data-theme="android"] .dlg.danger h2 { color: var(--md-on-surface); }
+html[data-theme="android"] .dlg p,
+html[data-theme="android"] .dlg p strong { color: var(--md-on-surface-var); }
+html[data-theme="android"] .dlg .warnbox {
+  background: var(--md-surface-2);
+  border-color: var(--md-outline-var);
+  border-radius: 12px;
+}
+html[data-theme="android"] .dlg-acts button {
+  color: var(--md-primary);
+  border-color: var(--md-outline);
+  border-radius: 999px;
+  background: transparent;
+}
+html[data-theme="android"] #cnBlockMask .dlg-icon {
+  background: var(--md-error-container);
+  border-color: transparent;
+  color: var(--md-error);
+}
+html[data-theme="android"] #cnBlockMask h2 { color: var(--md-error); }
+
+/* ---------- 22. 页脚那几行写死颜色的行内样式 ----------
+   各页底部「English / 中文」这类小链接是 style="color:#7fa893" 写死的，
+   在浅底上对比度只有 2.8:1。行内样式的优先级高于本文件，只能 !important。 */
+html[data-theme="android"] p[style*="color"] > a[style],
+html[data-theme="android"] p[style*="font-size:12px"] a,
+html[data-theme="android"] footer a {
+  color: var(--md-primary) !important;
+  text-decoration: none;
+  opacity: .9;
+}
+html[data-theme="android"] p[style*="font-size:12px"] {
+  color: var(--md-on-surface-var) !important;
+}
+/* 正文里写死荧光绿的站内链接（通知页「登录」、控制台「通知板块」） */
+html[data-theme="android"] a[style*="#00ff8c"],
+html[data-theme="android"] a[style*="#66ccff"] {
+  color: var(--md-primary) !important;
+}
+/* 登录页「忘记密码 / 返回登录」、控制台里写在行内样式上的灰字 */
+html[data-theme="android"] a[style*="#7fa893"] {
+  color: var(--md-primary) !important;
+}
+html[data-theme="android"] .msg[style*="#7fa893"],
+html[data-theme="android"] div[style*="#5c7a6b"] {
+  color: var(--md-on-surface-var) !important;
+}
+/* 控制台统计里的红/橙数字 */
+html[data-theme="android"] b[style*="#ff5c5c"],
+html[data-theme="android"] b[style*="#ff4444"] {
+  color: var(--md-error) !important;
+}
+
+/* ---------- 23. 少数零散部件的补漏 ---------- */
+html[data-theme="android"] #cnBlockMask .cn-note {
+  background: var(--md-surface-2);
+  border-color: var(--md-outline-var);
+  color: var(--md-on-surface-var);
+}
+html[data-theme="android"] .acts a {
+  color: var(--md-primary);
+  border-color: var(--md-outline);
+  background: transparent;
+}
+html[data-theme="android"] .addr:hover { color: var(--md-primary); }
+html[data-theme="android"] .card h2 .cnt { color: var(--md-on-surface-var); }
+html[data-theme="android"] .close,
+html[data-theme="android"] .close:hover { color: var(--md-on-surface-var); }
+html[data-theme="android"] .composer button.send:active {
+  background: #004e70;
+  box-shadow: none;
+}
+html[data-theme="android"] .dlg .check { color: var(--md-on-surface-var); }
+html[data-theme="android"] .file-card .fc-meta { color: var(--md-on-surface-var); }
+html[data-theme="android"] .linkbtn:hover { color: var(--md-primary); }
+html[data-theme="android"] .modal .head {
+  border-bottom-color: var(--md-outline-var);
+  color: var(--md-on-surface);
+}
+html[data-theme="android"] .note {
+  background: var(--md-surface-2);
+  border-color: var(--md-outline-var);
+  color: var(--md-on-surface-var);
+}
+html[data-theme="android"] .pick { color: var(--md-on-surface); }
+html[data-theme="android"] .rp-who.user { color: var(--md-on-surface-var); }
+html[data-theme="android"] .tk-form button:active { background: var(--md-ripple); }
+html[data-theme="android"] .tk-thread { border-left-color: var(--md-outline-var); }
+html[data-theme="android"] .ver,
+html[data-theme="android"] .ver b { color: var(--md-on-surface-var); }
+html[data-theme="android"] td:first-child,
+html[data-theme="android"] td:last-child { color: var(--md-on-surface-var); }
+
+/* ---------- 24. 试题页 ---------- */
+html[data-theme="android"] .pick .hint { color: var(--md-on-surface-var); }
+html[data-theme="android"] .sec { border-bottom: 1px solid var(--md-outline-var); }
+html[data-theme="android"] .sec .t { color: var(--md-on-surface); }
+html[data-theme="android"] .sec .t .no { color: var(--md-primary); }
+html[data-theme="android"] .sec a.ans,
+html[data-theme="android"] .sec a {
+  color: var(--md-primary);
+  border-color: var(--md-outline);
+  border-radius: 999px;
+  background: transparent;
+}

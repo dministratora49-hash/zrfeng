@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<script>/* 尽早落地亮/暗色主题（切换按钮在顶部状态栏里） */(function(){var t='dark';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
+<script>/* 尽早落地主题（暗色/亮色/原生安卓，切换在顶部状态栏或控制台「外观」里） */(function(){var t='android';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark'||s==='android')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
 <title>剩余更新清单 · 暂停服务</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -57,6 +57,7 @@
   html[data-theme="light"] footer { color: #9aaa98; }
 </style>
 <link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="/android.css">
 </head>
 <body>
   <div class="box">

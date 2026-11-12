@@ -208,35 +208,51 @@
     'color:#ffbe3c;}' +
     '#' + WARN_ID + ' .wn-acts a:active,#' + WARN_ID + ' .wn-acts button:active{opacity:.7;}';
 
-  /* ==================== 亮 / 暗色主题 ====================
-   * 站点原本是深色，这里只负责在 <html> 上写 data-theme：
-   * 具体配色全部在 /theme.css 里，且只有 data-theme="light" 时才生效。
-   * 选择记在 localStorage，下次打开自动沿用；不选则默认深色。
+  /* ==================== Theme (dark / light / Android) ====================
+   * This file only writes data-theme on <html>; the colours live in CSS:
+   *   /theme.css    applies only to data-theme="light"
+   *   /android.css  applies only to data-theme="android" (Material You)
+   * Dark is each page's own stylesheet — neither file applies.
+   *
+   * All three themes are kept: pick any of them again in Console → Appearance.
+   * New visitors get Android, since the site runs on Android anyway.
    */
   var THEME_KEY = 'zrfeng-theme';
+  var THEMES = { dark: 'Dark', light: 'Light', android: 'Android' };
+  var THEME_DEFAULT = 'android';
   var THEME_FLOAT_ID = 'dsh-theme-float';
   var TOAST_ID = 'dsh-slide-toast';
   var PREF_ACK_PREFIX = 'zrfeng-pref-ack:';
-  /** 最近一次 /api/status 的结果（判断是否登录、账户偏好是什么） */
+  /** Latest /api/status result (whether signed in, what the account preference is) */
   var lastStatus = null;
-  /** 每次页面加载只主动问一次「要不要套用账户偏好」 */
+  /** Ask at most once per page load whether to apply the account preference */
   var prefPrompted = false;
   var mcTimer = null;
 
+  function isTheme(t) { return t === 'dark' || t === 'light' || t === 'android'; }
+
   function currentTheme() {
-    return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+    var t = document.documentElement.getAttribute('data-theme');
+    return isTheme(t) ? t : THEME_DEFAULT;
   }
 
   function readTheme() {
     try {
       var t = localStorage.getItem(THEME_KEY);
-      if (t === 'light' || t === 'dark') return t;
-    } catch (e) { /* 隐私模式下 localStorage 可能不可用 */ }
+      if (isTheme(t)) return t;
+    } catch (e) { /* localStorage may be unavailable in private mode */ }
     return currentTheme();
   }
 
+  /** Cycle order: dark → light → Android → dark */
+  var THEME_CYCLE = ['dark', 'light', 'android'];
+  function nextTheme(t) {
+    var i = THEME_CYCLE.indexOf(t);
+    return THEME_CYCLE[(i + 1) % THEME_CYCLE.length];
+  }
+
   function applyTheme(theme, persist) {
-    var t = theme === 'light' ? 'light' : 'dark';
+    var t = isTheme(theme) ? theme : THEME_DEFAULT;
     document.documentElement.setAttribute('data-theme', t);
     if (persist) {
       try { localStorage.setItem(THEME_KEY, t); } catch (e) { /* 忽略 */ }
@@ -252,17 +268,26 @@
     syncThemeButtons(t);
   }
 
-  /** 按钮上写的是「点下去会变成什么」，不是当前状态 */
+  /** Icons / labels follow the target theme (the button says what you get next) */
+  var THEME_META = {
+    dark: { ico: '☾', label: 'Dark' },
+    light: { ico: '☀', label: 'Light' },
+    android: { ico: '🤖', label: 'Android' }
+  };
+
+  function themeMeta(t) { return THEME_META[t] || THEME_META.dark; }
+
   function syncThemeButtons(theme) {
-    var target = theme === 'light' ? 'dark' : 'light';
+    var target = nextTheme(theme);
+    var meta = themeMeta(target);
     var btns = document.querySelectorAll('#' + BAR_ID + ' .sb-theme, #' + THEME_FLOAT_ID);
     for (var i = 0; i < btns.length; i++) {
       var b = btns[i];
       var ico = b.querySelector('.ico');
       var lbl = b.querySelector('.lbl');
-      if (ico) ico.textContent = target === 'light' ? '☀' : '☾';
-      if (lbl) lbl.textContent = target === 'light' ? 'Light' : 'Dark';
-      var tip = target === 'light' ? 'Switch to light mode' : 'Switch to dark mode';
+      if (ico) ico.textContent = meta.ico;
+      if (lbl) lbl.textContent = meta.label;
+      var tip = 'Switch to ' + meta.label + ' mode';
       b.setAttribute('title', tip);
       b.setAttribute('aria-label', tip);
     }
@@ -270,7 +295,7 @@
 
   function onThemeClick(e) {
     if (e) e.preventDefault();
-    var next = currentTheme() === 'light' ? 'dark' : 'light';
+    var next = nextTheme(currentTheme());
     applyTheme(next, true);
     askSaveThemePref(next);
   }
@@ -352,7 +377,7 @@
   function writePrefAck(user, theme) {
     try { localStorage.setItem(prefAckKey(user), String(theme || '')); } catch (e) { }
   }
-  function themeName(t) { return t === 'light' ? 'Light' : 'Dark'; }
+  function themeName(t) { return (THEMES[t] || THEMES.dark); }
 
   function saveThemeToAccount(theme, done) {
     fetch('/api/pref', {
@@ -374,7 +399,7 @@
     var user = d && d.loggedIn ? String(d.username || '') : '';
     if (!user) {
       showMcToast({
-        icon: theme === 'light' ? '☀' : '☾',
+        icon: themeMeta(theme).ico,
         title: 'Switched to “' + themeName(theme) + '” mode',
         desc: 'This is saved on this device only. Log in to store the preference in your account so you do not have to set it again on other devices.',
         autoHideMs: 4200
@@ -385,7 +410,7 @@
       // 账户里已经是这个值，不用问
       writePrefAck(user, theme);
       showMcToast({
-        icon: theme === 'light' ? '☀' : '☾',
+        icon: themeMeta(theme).ico,
         title: 'Switched to “' + themeName(theme) + '” mode',
         desc: 'It already matches the preference saved in your account, so no sync is needed.',
         autoHideMs: 2800
@@ -441,7 +466,7 @@
     var user = data && data.loggedIn ? String(data.username || '') : '';
     if (!user) return;
     var saved = data.prefTheme;
-    if (saved !== 'light' && saved !== 'dark') return;
+    if (!isTheme(saved)) return;
     var cur = currentTheme();
     if (saved === cur) { writePrefAck(user, saved); return; }
     if (readPrefAck(user) === saved) return;   // 这台设备已经对这个值做过选择
@@ -459,7 +484,7 @@
             applyTheme(saved, true);
             writePrefAck(user, saved);
             showMcToast({
-              icon: saved === 'light' ? '☀' : '☾',
+              icon: themeMeta(saved).ico,
               title: 'Account preference applied',
               desc: 'You are now in “' + themeName(saved) + '” mode.',
               autoHideMs: 2800

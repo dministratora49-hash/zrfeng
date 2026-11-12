@@ -4790,6 +4790,7 @@ function resolveLang(request) {
 
 /** 完整匹配的词条（面向普通访客的路径：登录注册、工单、公告、下载门控） */
 const EN_MESSAGES = {
+  'theme 只能是 light、dark 或 android': 'theme must be light, dark or android',
   '账号或密码错误': 'Incorrect account or password',
   '请输入账号和密码': 'Please enter your account and password',
   '请输入用户名或邮箱': 'Please enter your username or email',
@@ -5203,7 +5204,7 @@ async function handleRequest(request, env) {
               const un = u ? u.username : s ? s.username : null;
               if (!un) return null;
               const p = await getPref(env, un);
-              return p && (p.theme === 'light' || p.theme === 'dark') ? p.theme : null;
+              return p && ['light','dark','android'].includes(p.theme) ? p.theme : null;
             })(),
             // 账户警告：只有登录用户才有；没看过的警告前端会弹一次
             warning: u ? await warningState(env, u.username) : null,
@@ -5338,7 +5339,7 @@ async function handleRequest(request, env) {
           const p = await getPref(env, s.username);
           return json({
             ok: true,
-            pref: p && (p.theme === 'light' || p.theme === 'dark')
+            pref: p && ['light','dark','android'].includes(p.theme)
               ? { theme: p.theme, at: p.at || null }
               : null,
           });
@@ -5349,8 +5350,8 @@ async function handleRequest(request, env) {
           let body = {};
           try { body = await request.json(); } catch (e) { body = {}; }
           const theme = String((body && body.theme) || '');
-          if (theme !== 'light' && theme !== 'dark') {
-            return json({ ok: false, error: 'theme 只能是 light 或 dark' }, 400);
+          if (theme !== 'light' && theme !== 'dark' && theme !== 'android') {
+            return json({ ok: false, error: 'theme 只能是 light、dark 或 android' }, 400);
           }
           const cur = await getPref(env, s.username);
           // 和已存的一样就不写 KV：省写入次数，也避免无意义的更新时间
