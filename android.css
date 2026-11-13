@@ -602,17 +602,6 @@ html[data-theme="android"] .tk-msg.bad {
   border-color: var(--md-error);
   background: var(--md-error-container);
 }
-html[data-theme="android"] .down-banner {
-  border: 1px solid var(--md-outline-var);
-  border-radius: 12px;
-  background: var(--md-primary-container);
-  overflow: hidden;
-}
-html[data-theme="android"] .down-banner .track {
-  color: var(--md-on-primary-container);
-  font-weight: 500;
-  letter-spacing: .2px;
-}
 html[data-theme="android"] .pg {
   border-top: 1px solid var(--md-outline-var);
 }
@@ -787,7 +776,6 @@ html[data-theme="android"] #dsh-status-bar .sb-btn:active {
 }
 html[data-theme="android"] #dsh-status-bar a.sb-text { color: var(--md-primary); }
 html[data-theme="android"] #dsh-status-bar .sb-cd { color: #8a5000; }
-html[data-theme="android"] #dsh-status-bar .sb-theme { border-color: var(--md-outline-var); }
 
 /* ---------- 16. 状态栏弹窗 ---------- */
 html[data-theme="android"] #dsh-block-mask,
@@ -856,13 +844,6 @@ html[data-theme="android"] #dsh-warn-mask .wn-text {
 }
 
 /* ---------- 17. 联系我们页的悬浮切换按钮 ---------- */
-html[data-theme="android"] #dsh-theme-float {
-  background: var(--md-surface-1);
-  border: 1px solid var(--md-outline-var);
-  border-radius: 999px;
-  color: var(--md-primary);
-  box-shadow: var(--md-elev2);
-}
 
 /* ---------- 18. 右侧滑出提示 ---------- */
 html[data-theme="android"] #dsh-slide-toast {

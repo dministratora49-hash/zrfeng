@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<script>/* Apply the saved theme (dark / light / Android) as early as possible; default is Android */(function(){var t='android';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark'||s==='android')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
+<script>/* Apply the saved theme as early as possible (default Android; only Console → Appearance writes it) */(function(){var t='android';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark'||s==='android')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
 <title>Console · zrfeng</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -415,20 +415,6 @@
     try {
       document.dispatchEvent(new CustomEvent('zrfeng:themechange', { detail: { theme: id } }));
     } catch (e) { }
-    var btns = document.querySelectorAll('#dsh-status-bar .sb-theme, #dsh-theme-float');
-    for (var i = 0; i < btns.length; i++) {
-      var nxt = id === 'dark' ? 'light' : (id === 'light' ? 'android' : 'dark');
-      var meta = {
-        dark: { ico: '☾', label: 'Dark' },
-        light: { ico: '☀', label: 'Light' },
-        android: { ico: '🤖', label: 'Android' }
-      }[nxt];
-      var ico = btns[i].querySelector('.ico');
-      var lbl = btns[i].querySelector('.lbl');
-      if (ico) ico.textContent = meta.ico;
-      if (lbl) lbl.textContent = meta.label;
-      btns[i].setAttribute('title', 'Switch to ' + meta.label + ' mode');
-    }
 
     var msg = document.getElementById('themeMsg');
     if (msg) { msg.className = 'msg'; msg.textContent = 'Switched. Syncing to your account…'; }
@@ -437,14 +423,15 @@
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ theme: id })
     }).then(function (r) { return r.json(); }).then(function (j) {
-      if (j && !j.ok) {
-        if (msg) { msg.className = 'msg err'; msg.textContent = 'Switched on this device, but not saved to your account: ' + ((j && j.error) || 'unknown reason'); }
-      }
+      var okAcc = !!(j && j.ok);
+      var why = (j && j.error) || 'unknown reason';
       if (ME) renderMe(ME);
       var m2 = document.getElementById('themeMsg');
-      if (m2 && (!j || j.ok)) { m2.className = 'msg ok'; m2.textContent = 'Switched to "' + id + '".'; }
+      if (m2) {
+        if (okAcc) { m2.className = 'msg ok'; m2.textContent = 'Switched and saved to your account.'; }
+        else { m2.className = 'msg err'; m2.textContent = 'Switched on this device, but not saved to your account: ' + why; }
+      }
     }).catch(function () {
-      if (meEl) { }
       if (ME) renderMe(ME);
       var m3 = document.getElementById('themeMsg');
       if (m3) { m3.className = 'msg err'; m3.textContent = 'Switched on this device; account sync failed (network error).'; }

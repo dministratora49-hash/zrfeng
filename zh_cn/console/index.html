@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<script>/* 尽早落地主题（暗色/亮色/原生安卓，切换在顶部状态栏或控制台「外观」里） */(function(){var t='android';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark'||s==='android')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
+<script>/* 尽早落地主题（默认原生安卓；只认控制台「外观」里存下的值，避免闪色） */(function(){var t='android';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark'||s==='android')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
 <title>控制台 · zrfeng</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -415,22 +415,6 @@
     try {
       document.dispatchEvent(new CustomEvent('zrfeng:themechange', { detail: { theme: id } }));
     } catch (e) { }
-    // 状态栏 / 悬浮按钮上的图标也跟着换
-    var btns = document.querySelectorAll('#dsh-status-bar .sb-theme, #dsh-theme-float');
-    for (var i = 0; i < btns.length; i++) {
-      var nxt = id === 'dark' ? 'light' : (id === 'light' ? 'android' : 'dark');
-      var meta = {
-        dark: { ico: '☾', label: '暗色' },
-        light: { ico: '☀', label: '亮色' },
-        android: { ico: '🤖', label: '安卓' }
-      }[nxt];
-      var ico = btns[i].querySelector('.ico');
-      var lbl = btns[i].querySelector('.lbl');
-      if (ico) ico.textContent = meta.ico;
-      if (lbl) lbl.textContent = meta.label;
-      btns[i].setAttribute('title', '切换到' + meta.label + '模式');
-    }
-
     var msg = document.getElementById('themeMsg');
     if (msg) { msg.className = 'msg'; msg.textContent = '已切换，正在同步到账户…'; }
     fetch('/api/pref', {
@@ -438,17 +422,18 @@
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ theme: id })
     }).then(function (r) { return r.json(); }).then(function (j) {
-      if (msg) {
-        if (j && j.ok) { msg.className = 'msg ok'; msg.textContent = '已切换，并已存入账户。'; }
-        else { msg.className = 'msg err'; msg.textContent = '已在本机切换，但没存进账户：' + ((j && j.error) || '未知原因'); }
-      }
-      // 重新渲染一遍，让「使用中」标记跟着走
+      var okAcc = !!(j && j.ok);
+      var why = (j && j.error) || '未知原因';
       if (ME) renderMe(ME);
       var m2 = document.getElementById('themeMsg');
-      if (m2) { m2.className = 'msg ok'; m2.textContent = '已切换到「' + id + '」。'; }
+      if (m2) {
+        if (okAcc) { m2.className = 'msg ok'; m2.textContent = '已切换，并已存入账户。'; }
+        else { m2.className = 'msg err'; m2.textContent = '已在本机切换，但没存进账户：' + why; }
+      }
     }).catch(function () {
-      if (msg) { msg.className = 'msg err'; msg.textContent = '已在本机切换，账户同步失败（网络异常）。'; }
       if (ME) renderMe(ME);
+      var m3 = document.getElementById('themeMsg');
+      if (m3) { m3.className = 'msg err'; m3.textContent = '已在本机切换，账户同步失败（网络异常）。'; }
     });
   }
 

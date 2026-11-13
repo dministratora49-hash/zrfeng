@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<script>/* 尽早落地主题（暗色/亮色/原生安卓，切换在顶部状态栏或控制台「外观」里） */(function(){var t='android';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark'||s==='android')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
+<script>/* 尽早落地主题（默认原生安卓；只认控制台「外观」里存下的值，避免闪色） */(function(){var t='android';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark'||s==='android')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
 <title>登录 / 注册 · zrfeng.top</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }

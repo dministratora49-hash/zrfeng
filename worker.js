@@ -4361,37 +4361,6 @@ function handleLangSwitch(request, url) {
  * 地区跳转：美国 IP 默认进英文站（/en_us/ + 原路径）。
  * 不跳的情况：已经在 /en_us/、用户手动选过中文、非页面请求。
  */
-/* ---------------------- 全站停服（503） ---------------------- */
-
-/**
- * 全站停服开关：除「通知板块」外，其它页面一律 302 到 503 提示页。
- *
- * 通知板块要保持可访问 —— 停服公告就挂在那里。
- * 静态资源（js/css/图片/文档）不拦，聊天室等接口 /api/* 也不拦（页面进不去就没流量）。
- * 恢复服务：把 SITE_DOWN 改回 false 部署一次即可。
- */
-const SITE_DOWN = true;
-const DOWN_PAGE = '/zh_cn/down/';        // 中英文案都在这一页上（正文以中文为准）
-
-/** 允许的路径（停服期间：中英通知板块 + 503 页本身，否则 503 页会重定向到自己） */
-function downAllowed(path) {
-  const ok = [
-    '/zh_cn/notice', '/zh_cn/notice/',   // 中文通知板块（停服公告挂在这里）
-    '/en_us/notice', '/en_us/notice/',   // 英文通知板块
-    '/zh_cn/down', '/zh_cn/down/',       // 503 页本身
-    '/en_us/down', '/en_us/down/',       // 英文 503 页
-  ];
-  return ok.some(function (p) { return path === p || path.startsWith(p); });
-}
-
-/** 302 到 503 页 */
-function redirectDown(url) {
-  const dest = new URL(url.toString());
-  dest.pathname = DOWN_PAGE;
-  dest.search = '';
-  return new Response(null, { status: 302, headers: { location: dest.toString(), 'cache-control': 'no-store' } });
-}
-
 /* ---------------------- 地区准入 ---------------------- */
 
 /**
@@ -5479,9 +5448,6 @@ async function handleRequest(request, env) {
     // 非 API：先处理语种与地区跳转，再原样交给静态资源
     if (method === 'GET' || method === 'HEAD') {
       if (isPagePath(path)) {
-        // 全站停服：除通知板块外一律 302 到 503 页（优先级最高，压过语种/地区逻辑）
-        if (SITE_DOWN && !downAllowed(path)) return redirectDown(url);
-
         const allow = handleRegionAllow(request, url);
         if (allow) return allow;
         const switched = handleLangSwitch(request, url);

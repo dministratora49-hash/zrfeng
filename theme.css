@@ -490,7 +490,6 @@ html[data-theme="light"] #dsh-status-bar .sb-btn {
 html[data-theme="light"] #dsh-status-bar .sb-btn:active { background: rgba(102, 204, 255, .20); }
 html[data-theme="light"] #dsh-status-bar a.sb-text { color: #66ccff; }
 html[data-theme="light"] #dsh-status-bar .sb-cd { color: #a06a00; }
-html[data-theme="light"] #dsh-status-bar .sb-theme { border-color: rgba(90, 180, 224, .40); }
 
 /* ---------- 18. 状态栏弹出的各类遮罩 / 弹窗 ---------- */
 html[data-theme="light"] #dsh-block-mask,
@@ -559,12 +558,6 @@ html[data-theme="light"] #dsh-warn-mask .wn-text {
 }
 
 /* ---------- 19. 「联系我们」页的悬浮切换按钮（该页没有状态栏） ---------- */
-html[data-theme="light"] #dsh-theme-float {
-  background: rgba(255, 255, 255, .95);
-  border-color: rgba(90, 180, 224, .40);
-  color: #66ccff;
-  box-shadow: 0 2px 12px rgba(12, 60, 40, .10);
-}
 
 /* ---------- 20. 小说下载页（file/novel 及其子页） ---------- */
 html[data-theme="light"] .row { background: #fff; border-color: var(--lt-line); box-shadow: var(--lt-shadow); }

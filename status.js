@@ -71,23 +71,10 @@
     'border:1px solid rgba(0,255,140,.45);color:#00ff8c;text-decoration:none;' +
     'font-size:12px;line-height:1.3;white-space:nowrap;background:rgba(0,255,140,.07);}' +
     '#' + BAR_ID + ' .sb-btn:active{background:rgba(0,255,140,.2);}' +
-    /* 亮 / 暗色切换按钮：复用 .sb-btn 的观感，窄屏只留图标 */
-    '#' + BAR_ID + ' .sb-theme{display:inline-flex;align-items:center;gap:6px;cursor:pointer;' +
-    'font-family:inherit;}' +
-    '#' + BAR_ID + ' .sb-theme .ico{font-size:13px;line-height:1;}' +
-    /* 「联系我们」页故意没有状态栏，亮/暗切换改用独立的小悬浮按钮 */
-    '#dsh-theme-float{position:fixed;top:44px;right:12px;z-index:99998;display:inline-flex;' +
-    'align-items:center;gap:6px;padding:6px 12px;border-radius:20px;cursor:pointer;' +
-    'border:1px solid rgba(0,255,140,.45);background:rgba(6,14,10,.92);color:#00ff8c;' +
-    'font-size:12px;line-height:1.2;font-family:"Microsoft YaHei","PingFang SC",sans-serif;' +
-    'backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);}' +
-    '#dsh-theme-float .ico{font-size:13px;line-height:1;}' +
     '@media (max-width:420px){' +
     '#' + BAR_ID + '{padding:0 8px;gap:6px;}' +
     '#' + BAR_ID + ' .sb-pre{display:none;}' +
     '#' + BAR_ID + ' .sb-pre-s{display:inline;}' +
-    '#' + BAR_ID + ' .sb-theme .lbl{display:none;}' +
-    '#dsh-theme-float .lbl{display:none;}' +
     '#' + BAR_ID + ' .sb-btn{padding:3px 8px;font-size:11px;}}' +
     /* ---- 右侧滑出提示：图标 + 标题 + 说明 + 按钮，用站点自己的卡片观感 ---- */
     '#dsh-slide-toast{position:fixed;top:46px;right:12px;z-index:100010;box-sizing:border-box;' +
@@ -220,7 +207,6 @@
   var THEME_KEY = 'zrfeng-theme';
   var THEMES = { dark: '暗色', light: '亮色', android: '原生安卓' };
   var THEME_DEFAULT = 'android';
-  var THEME_FLOAT_ID = 'dsh-theme-float';
   var TOAST_ID = 'dsh-slide-toast';
   var PREF_ACK_PREFIX = 'zrfeng-pref-ack:';
   /** 最近一次 /api/status 的结果（判断是否登录、账户偏好是什么） */
@@ -244,13 +230,6 @@
     return currentTheme();
   }
 
-  /** 主题轮的下一站：暗色 → 亮色 → 原生安卓 → 暗色 */
-  var THEME_CYCLE = ['dark', 'light', 'android'];
-  function nextTheme(t) {
-    var i = THEME_CYCLE.indexOf(t);
-    return THEME_CYCLE[(i + 1) % THEME_CYCLE.length];
-  }
-
   function applyTheme(theme, persist) {
     var t = isTheme(theme) ? theme : THEME_DEFAULT;
     document.documentElement.setAttribute('data-theme', t);
@@ -265,7 +244,6 @@
       ev.initCustomEvent('zrfeng:themechange', false, false, { theme: t });
       document.dispatchEvent(ev);
     }
-    syncThemeButtons(t);
   }
 
   /** 图标 / 文案跟着目标主题走（按钮上写的是「点下去会变成什么」） */
@@ -277,29 +255,6 @@
 
   function themeMeta(t) { return THEME_META[t] || THEME_META.dark; }
 
-  /** 按钮上写的是「点下去会变成什么」，不是当前状态 */
-  function syncThemeButtons(theme) {
-    var target = nextTheme(theme);
-    var meta = themeMeta(target);
-    var btns = document.querySelectorAll('#' + BAR_ID + ' .sb-theme, #' + THEME_FLOAT_ID);
-    for (var i = 0; i < btns.length; i++) {
-      var b = btns[i];
-      var ico = b.querySelector('.ico');
-      var lbl = b.querySelector('.lbl');
-      if (ico) ico.textContent = meta.ico;
-      if (lbl) lbl.textContent = meta.label;
-      var tip = '切换到' + meta.label + '模式';
-      b.setAttribute('title', tip);
-      b.setAttribute('aria-label', tip);
-    }
-  }
-
-  function onThemeClick(e) {
-    if (e) e.preventDefault();
-    var next = nextTheme(currentTheme());
-    applyTheme(next, true);
-    askSaveThemePref(next);
-  }
 
   /* ==================== MC 成就风格滑出提示 ====================
    * 从右侧滑入、方角、粗亮边；用来问「是否保存账户偏好」这类一次性问题。
@@ -380,86 +335,6 @@
   }
   function themeName(t) { return (THEMES[t] || THEMES.dark); }
 
-  function saveThemeToAccount(theme, done) {
-    fetch('/api/pref', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ theme: theme })
-    }).then(function (r) {
-      return r.json();
-    }).then(function (j) {
-      done(!!(j && j.ok), (j && j.error) || '');
-    }).catch(function () {
-      done(false, '网络异常，请稍后再试');
-    });
-  }
-
-  /** 刚切换完主题：登录用户就问一句要不要存进账户 */
-  function askSaveThemePref(theme) {
-    var d = lastStatus;
-    var user = d && d.loggedIn ? String(d.username || '') : '';
-    if (!user) {
-      showMcToast({
-        icon: themeMeta(theme).ico,
-        title: '已切换为「' + themeName(theme) + '」模式',
-        desc: '当前只保存在这台设备上。登录后可以把偏好存到账户，换设备不用再设。',
-        autoHideMs: 4200
-      });
-      return;
-    }
-    if (d.prefTheme === theme) {
-      // 账户里已经是这个值，不用问
-      writePrefAck(user, theme);
-      showMcToast({
-        icon: themeMeta(theme).ico,
-        title: '已切换为「' + themeName(theme) + '」模式',
-        desc: '和账户里保存的偏好一致，不需要再同步。',
-        autoHideMs: 2800
-      });
-      return;
-    }
-    showMcToast({
-      icon: '⚙',
-      title: '账户偏好设置',
-      desc: '要把「' + themeName(theme) + '」模式保存到账户吗？以后在别的设备登录，会问你是否套用。',
-      autoHideMs: 15000,
-      actions: [
-        {
-          text: '保存到账户',
-          cls: 'primary',
-          onClick: function () {
-            saveThemeToAccount(theme, function (ok, err) {
-              if (ok) {
-                writePrefAck(user, theme);
-                if (lastStatus) lastStatus.prefTheme = theme;
-                showMcToast({
-                  icon: '✔',
-                  title: '偏好已同步',
-                  desc: '账户已记住「' + themeName(theme) + '」模式。',
-                  autoHideMs: 3000
-                });
-              } else {
-                showMcToast({
-                  icon: '✖',
-                  title: '保存失败',
-                  desc: err || '请稍后再试。',
-                  autoHideMs: 3600
-                });
-              }
-            });
-            return true;
-          }
-        },
-        {
-          text: '仅本机',
-          cls: 'mute',
-          onClick: function () {
-            if (lastStatus && lastStatus.prefTheme) writePrefAck(user, lastStatus.prefTheme);
-          }
-        }
-      ]
-    });
-  }
 
   /** 登录后：账户里有偏好、且和这台设备不一致 → 滑出来问一次是否套用 */
   function maybeAskUsePref(data) {
@@ -501,27 +376,7 @@
     });
   }
 
-  function makeThemeBtn(cls, id) {
-    var b = document.createElement('button');
-    b.type = 'button';
-    b.className = cls;
-    if (id) b.id = id;
-    b.innerHTML = '<span class="ico">☀</span><span class="lbl">亮色</span>';
-    b.onclick = onThemeClick;
-    return b;
-  }
 
-  /** 联系我们页没有状态栏 —— 给它一个独立小按钮，别让亮色模式在那页进不去 */
-  function ensureFloatThemeBtn() {
-    if (document.getElementById(THEME_FLOAT_ID)) return;
-    document.body.appendChild(makeThemeBtn('', THEME_FLOAT_ID));
-    syncThemeButtons(currentTheme());
-  }
-
-  function removeFloatThemeBtn() {
-    var f = document.getElementById(THEME_FLOAT_ID);
-    if (f) f.remove();
-  }
 
   function injectCss() {
     if (document.getElementById('dsh-status-css')) return;
@@ -988,7 +843,6 @@
       hideMaintenance();
       hideWarn();
       stopCountdown();
-      ensureFloatThemeBtn();
       return;
     }
 
@@ -1059,8 +913,6 @@
 
     var right = document.createElement('div');
     right.className = 'sb-r';
-    // 亮 / 暗色切换：任何账户状态下都要能用，所以放在最右一组的最前面
-    right.appendChild(makeThemeBtn('sb-btn sb-theme'));
     // 右上角控制台：已激活（完成邮箱验证）的用户可见。
     // 管理员额外可见 —— 否则没人能去激活被拦截的账户。
     if (data && data.loggedIn && (acc.activated || data.isAdmin)) {
@@ -1087,9 +939,7 @@
     }
     bar.appendChild(right);
 
-    removeFloatThemeBtn();
     document.body.insertBefore(bar, document.body.firstChild);
-    syncThemeButtons(currentTheme());
     // 记录本次状态；顺便判断要不要问「是否套用账户偏好」（每页只问一次）
     lastStatus = data;
     maybeAskUsePref(data);
