@@ -2173,6 +2173,36 @@ function parseChatGateVerdict(out) {
 }
 
 /**
+ * 从 Workers AI 的返回里抠出文本。
+ * 不同模型/不同版本把结果放在不同字段：response、result、text、choices[0].message.content、
+ * 甚至数组里。以前只认 response / result，模型换了返回形状就变成「空响应」——
+ * 线上表现为「审核服务暂时不可用」，其实模型答得好好的，只是我们没接住。
+ */
+function pickAiText(r) {
+  if (!r) return '';
+  if (typeof r === 'string') return r;
+  const cands = [
+    r.response,
+    r.result,
+    r.text,
+    r.output_text,
+    r.result && r.result.response,
+    r.choices && r.choices[0] && r.choices[0].message && r.choices[0].message.content,
+    r.choices && r.choices[0] && r.choices[0].text,
+  ];
+  for (const c of cands) {
+    if (typeof c === 'string' && c.trim()) return c;
+  }
+  if (Array.isArray(r.output)) {
+    for (const o of r.output) {
+      if (typeof o === 'string' && o.trim()) return o;
+      if (o && typeof o.content === 'string' && o.content.trim()) return o.content;
+    }
+  }
+  return '';
+}
+
+/**
  * 让 AI 看一段地址。返回 { ok:true, verdict } 或 { ok:false, message, detail }。
  * 模型没绑、超时、输出洗不出来，一律按「审核不可用」处理 —— 宁可让人稍后再试，
  * 也不能因为 AI 挂了就把门敞开。
@@ -2197,10 +2227,7 @@ async function reviewChatGateAddress(env, address) {
           { role: 'user', content: address },
         ],
       });
-      out =
-        (r && typeof r.response === 'string' && r.response) ||
-        (r && typeof r.result === 'string' && r.result) ||
-        '';
+      out = pickAiText(r);
     } catch (e) {
       detail = 'run: ' + String((e && e.message) || e).slice(0, 140);
       continue;
@@ -2248,6 +2275,23 @@ async function handleChatGateProbe(env, request, ip) {
   } else {
     out.code = rev.code;
     out.detail = rev.detail;
+    // 解析不出来时把模型返回的原始形状也吐出来，否则「空响应」三个字没法往下查
+    try {
+      const raw = await env.AI.run(CHAT_GATE_MODEL, {
+        max_tokens: 64,
+        temperature: 0,
+        messages: [{ role: 'user', content: 'Reply with exactly: OK' }],
+      });
+      out.raw = {
+        type: typeof raw,
+        keys: raw && typeof raw === 'object' ? Object.keys(raw).slice(0, 20) : [],
+        preview: (() => {
+          try { return JSON.stringify(raw).slice(0, 500); } catch { return String(raw).slice(0, 500); }
+        })(),
+      };
+    } catch (e) {
+      out.raw = { error: String((e && e.message) || e).slice(0, 300) };
+    }
   }
   return json(out);
 }
