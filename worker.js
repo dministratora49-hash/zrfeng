@@ -2216,6 +2216,42 @@ async function reviewChatGateAddress(env, address) {
   return { ok: false, code: 'ai_error', message: '审核服务暂时不可用，请稍后再试', detail };
 }
 
+/**
+ * GET /api/chat/gate/probe：地址审核自检。
+ * 用一段写死的测试地址跑一次完整审核，把「有没有绑 AI」「模型判了什么」「报什么错」
+ * 一次吐出来。地址不是调用方给的，所以没法拿它当免费 AI 接口刷。
+ * 每个 IP 每分钟一次，够排障用了。
+ */
+async function handleChatGateProbe(env, request, ip) {
+  const now = Date.now();
+  if (ip) {
+    const k = 'chatgateprobe:' + ip + ':' + Math.floor(now / 60000);
+    try {
+      if (await env.USERS.get(k)) {
+        return json({ ok: false, message: '请求过于频繁，请稍后再试' }, 429);
+      }
+      await env.USERS.put(k, '1', { expirationTtl: 120 });
+    } catch {
+      /* KV 挂了也照跑，排障要紧 */
+    }
+  }
+
+  const out = { ok: true, aiBound: !!env.AI, model: CHAT_GATE_MODEL };
+  if (!env.AI) {
+    out.hint = 'env.AI 是空的：wrangler.toml 的 [ai] binding 没生效，或账户没开通 Workers AI';
+    return json(out);
+  }
+
+  const rev = await reviewChatGateAddress(env, '3F, 2-2-1 Yoyogi, Shibuya-ku, Tokyo 151-0053, Japan');
+  if (rev.ok) {
+    out.verdict = rev.verdict;
+  } else {
+    out.code = rev.code;
+    out.detail = rev.detail;
+  }
+  return json(out);
+}
+
 /** 每小时允许提交几次地址，免得有人把它当成免费的 AI 接口刷 */
 async function chatGateTryAllowed(env, identity, now) {
   const key = 'chatgtry:' + (identity.who || 'anon') + ':' + Math.floor(now / 3600000);
@@ -5422,6 +5458,9 @@ async function handleRequest(request, env) {
         // 聊天室（KV 轮询）
         if (path === '/api/chat/gate' && method === 'POST') {
           return await handleChatGate(env, request);
+        }
+        if (path === '/api/chat/gate/probe' && method === 'GET') {
+          return await handleChatGateProbe(env, request, ip);
         }
         if (path === '/api/chat' && method === 'GET') {
           return await handleChatList(env, request);
