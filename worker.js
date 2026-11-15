@@ -2047,7 +2047,8 @@ async function countOnline(env) {
  * 两个刻意的取舍：
  *   · 地址**不落盘**。KV 里只记通过时间、时区、地区代码，绝不把用户的家庭住址
  *     存在服务器上——这东西泄露一次就没法挽回，而它对我们没有任何复用价值。
- *   · 管理员直接放行。站长自己就在江苏，不放行等于把自己关在门外。
+ *   · **管理员也不放行**。这道门是为了遵守中国大陆法律法规而设的，
+ *     跟「谁在管这个站」无关，所以身份再高也一样拦。
  */
 const CHAT_GATE_TTL = 12 * 3600;
 const CHAT_GATE_ADDR_MIN = 6;
@@ -2206,10 +2207,7 @@ async function handleChatGate(env, request) {
   const identity = await chatIdentity(env, request, deviceId);
   const extra = newDevice ? { 'set-cookie': newDevice } : {};
 
-  // 管理员直接放行
-  if (identity.isAdmin) {
-    return json({ ok: true, admin: true, message: '管理员直接进入' }, 200, extra);
-  }
+  // 注意：这里没有管理员豁免。这道门槛是合规要求，不因身份放行。
 
   // 1) 来源国就是中国大陆
   const country = String((request.cf && request.cf.country) || '').toUpperCase();
@@ -2263,7 +2261,7 @@ async function handleChatGate(env, request) {
  * 前端弹窗只能劝人，挡不住直接发请求。
  */
 async function chatGateBlocked(env, request, identity) {
-  if (identity.isAdmin) return null;
+  // 同样没有管理员豁免：合规门槛对所有人一视同仁
   const country = String((request.cf && request.cf.country) || '').toUpperCase();
   if (country === 'CN') {
     return json({ ok: false, deny: 'cn', gate: 'address', message: '本网站暂时不提供中国大陆聊天室' }, 403);
@@ -5040,7 +5038,6 @@ const EN_MESSAGES = {
   '提交次数太多了，请过一小时再试': 'Too many attempts — please try again in an hour',
   '验证通过': 'Verification passed',
   '已通过验证': 'Already verified',
-  '管理员直接进入': 'Admins are let straight through',
   '账号或密码错误': 'Incorrect account or password',
   '请输入账号和密码': 'Please enter your account and password',
   '请输入用户名或邮箱': 'Please enter your username or email',
