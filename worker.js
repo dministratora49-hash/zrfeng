@@ -2768,10 +2768,9 @@ const AI_TRANSLATE_MODELS = [
     id: '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
     kind: 'chat',
     params: { max_tokens: 1024, temperature: 0 },
-    pick: (r) =>
-      (typeof r.response === 'string' ? r.response : '') ||
-      (typeof r.result === 'string' ? r.result : '') ||
-      '',
+    // 用 pickAiText 而不是只认 response/result：这个模型现在把文本放在别的字段里，
+    // 只认那两个会一直拿到空串，表现为「翻译不出来」——公告一直没有英文版就是这个原因
+    pick: (r) => pickAiText(r),
   },
   {
     id: '@cf/meta/m2m100-1.2b',
