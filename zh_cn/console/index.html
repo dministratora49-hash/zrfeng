@@ -59,6 +59,7 @@
   .tag.admin   { background: rgba(0,200,255,0.15); color: #4dd2ff; border: 1px solid rgba(0,200,255,0.4); }
   .tag.banned  { background: rgba(255,68,68,0.18); color: #ff4444; border: 1px solid rgba(255,68,68,0.55); }
   .tag.super   { background: rgba(255,215,0,0.18); color: #ffd700; border: 1px solid rgba(255,215,0,0.5); }
+  .tag.off     { background: rgba(255,255,255,0.06); color: #7fa893; border: 1px solid rgba(255,255,255,0.18); }
   .tag.sub     { background: rgba(170,120,255,0.18); color: #b98cff; border: 1px solid rgba(170,120,255,0.5); }
 
   button {
@@ -354,6 +355,17 @@
       '<div class="name">恢复代码</div>' +
       '<div class="meta">忘记密码时用它可以重设密码。格式：key--用户名:邮箱:密码--32位随机（区分大小写）</div></div>' +
       '<button data-rc="show">' + (u.recoveryCode ? '查看' : '生成') + '</button></div>';
+    // 二次验证：只影响「新设备登录」，开关状态存在账户偏好里，换设备也跟着走
+    var twofaOn = u.twofa !== false;
+    sec += '<div class="row"><div class="info">' +
+      '<div class="name">二次验证（2FA）' +
+      (twofaOn ? ' <span class="tag active">已开启</span>' : ' <span class="tag off">已关闭</span>') + '</div>' +
+      '<div class="meta">' +
+      (twofaOn
+        ? '新设备登录需要邮箱验证码（没有邮箱的账户要管理员密钥）。关闭后在新设备上登录你的账户将不需要验证。'
+        : '关闭后在新设备上登录你的账户将不需要验证，仅凭密码即可进入。') +
+      '</div></div>' +
+      '<button data-2fa="' + (twofaOn ? 'off' : 'on') + '">' + (twofaOn ? '关闭' : '开启') + '</button></div>';
     if (u.canChangeEmail) {
       sec += '<div class="row"><div class="info">' +
         '<div class="name">更改邮箱</div>' +
@@ -405,6 +417,9 @@
     meEl.querySelectorAll('button[data-theme-pick]').forEach(function (x) {
       x.onclick = function () { pickTheme(x.dataset.themePick); };
     });
+    meEl.querySelectorAll('button[data-2fa]').forEach(function (x) {
+      x.onclick = function () { toggle2fa(x.getAttribute('data-2fa') === 'on'); };
+    });
   }
 
   /* ===================== 外观：三套主题切换 ===================== */
@@ -434,6 +449,43 @@
       if (ME) renderMe(ME);
       var m3 = document.getElementById('themeMsg');
       if (m3) { m3.className = 'msg err'; m3.textContent = '已在本机切换，账户同步失败（网络异常）。'; }
+    });
+  }
+
+  /* ===================== 二次验证（2FA）开关 ===================== */
+  function toggle2fa(enable) {
+    var msg = document.getElementById('meMsg');
+    var btn = document.querySelector('button[data-2fa]');
+    if (btn) { btn.disabled = true; btn.textContent = '处理中…'; }
+    function restore() {
+      if (btn) { btn.disabled = false; btn.textContent = enable ? '开启' : '关闭'; }
+    }
+    fetch('/api/account/2fa', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ enabled: enable })
+    }).then(function (r) { return r.json(); }).then(function (j) {
+      if (!j || !j.ok) {
+        restore();
+        if (msg) { msg.className = 'msg err'; msg.textContent = (j && j.message) || '设置失败'; }
+        return;
+      }
+      if (ME) {
+        ME.user = ME.user || {};
+        ME.user.twofa = j.twofa;
+        renderMe(ME);
+      }
+      var m2 = document.getElementById('meMsg');
+      if (m2) {
+        m2.className = 'msg ok';
+        m2.textContent = j.twofa
+          ? '二次验证已开启：新设备登录需要验证。'
+          : '二次验证已关闭：新设备登录只需要密码。';
+      }
+    }).catch(function () {
+      restore();
+      var m3 = document.getElementById('meMsg');
+      if (m3) { m3.className = 'msg err'; m3.textContent = '网络错误，设置未保存'; }
     });
   }
 

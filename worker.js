@@ -430,6 +430,16 @@ async function putPref(env, username, patch) {
   return next;
 }
 
+/* ---------------- 二次验证（2FA）开关 ----------------
+ * 判定的是「新设备登录时要不要再验一次身份」。
+ * 偏好里没写过这个字段（老账户）按开着处理 —— 默认严格，用户自己关。
+ * 关闭后，任何设备输对密码就能直接登录。
+ */
+function twofaEnabled(pref) {
+  if (!pref || typeof pref !== 'object') return true;
+  return pref.twofa !== false;
+}
+
 /** 按账号名或邮箱找到用户 */
 async function findByLogin(env, account) {
   const a = String(account || '').trim().toLowerCase();
@@ -1184,9 +1194,13 @@ async function handleLogin(env, request, ip) {
     }
   }
 
-  // 新设备登录验证：这台设备从没在该账户上成功登录过 → 需要额外确认身份
+  // 二次验证（2FA）：账户设置里默认开着；关掉之后新设备登录不再要求验证
+  const pref = await getPref(env, user.username);
+  const twofa = twofaEnabled(pref);
+
+  // 新设备登录验证：这台设备从没在该账户上成功登录过 → 需要额外确认身份（受 2FA 开关约束）
   const deviceId = deviceIdOf(request) || randomHex(16);
-  if (!(await isKnownDevice(env, user, deviceId)) && !user.email) {
+  if (twofa && !(await isKnownDevice(env, user, deviceId)) && !user.email) {
     // 没有邮箱 → 收不到验证码，改用「管理员给的密钥」
     const ticket = randomHex(16);
     await env.USERS.put(
@@ -1205,7 +1219,7 @@ async function handleLogin(env, request, ip) {
       { 'Set-Cookie': deviceCookie(deviceId) }
     );
   }
-  if (user.email && !(await isKnownDevice(env, user, deviceId))) {
+  if (twofa && user.email && !(await isKnownDevice(env, user, deviceId))) {
     const ticket = randomHex(16);
     const code = String(Math.floor(100000 + Math.random() * 900000));
     await env.USERS.put(
@@ -1229,10 +1243,21 @@ async function handleLogin(env, request, ip) {
     );
   }
 
+  // 走到这里说明这台设备已被放行（要么本来就是已知设备，要么 2FA 关着）。
+  // 仍记一笔：用户以后把 2FA 打开时，这台设备不会被当成新设备。
+  await rememberDevice(env, user.username, deviceId);
+
   const status = accountStatus(user);
   const { cookie } = await createSession(env, user);
-  return json(
-    {
+  // device 标记要单独 append —— 和 session 一起塞数组会被拼成一条 Cookie
+  const headers = new Headers({
+    'content-type': 'application/json; charset=utf-8',
+    'cache-control': 'no-store',
+  });
+  headers.append('Set-Cookie', cookie);
+  headers.append('Set-Cookie', deviceCookie(deviceId));
+  return new Response(
+    JSON.stringify({
       ok: true,
       message: '登录成功',
       user: {
@@ -1243,9 +1268,8 @@ async function handleLogin(env, request, ip) {
         isSuper: roleOf(user) === 'super',
       },
       account: status,
-    },
-    200,
-    { 'Set-Cookie': cookie }
+    }),
+    { status: 200, headers }
   );
 }
 
@@ -4760,6 +4784,9 @@ function resolveLang(request) {
 /** 完整匹配的词条（面向普通访客的路径：登录注册、工单、公告、下载门控） */
 const EN_MESSAGES = {
   'theme 只能是 light、dark 或 android': 'theme must be light, dark or android',
+  'enabled 必须是 true 或 false': 'enabled must be true or false',
+  '二次验证已开启': 'Two-factor verification enabled',
+  '二次验证已关闭': 'Two-factor verification disabled',
   '账号或密码错误': 'Incorrect account or password',
   '请输入账号和密码': 'Please enter your account and password',
   '请输入用户名或邮箱': 'Please enter your username or email',
@@ -5152,6 +5179,8 @@ async function handleRequest(request, env) {
               canAddEmail: !!(u && !u.email && !banState(u, Date.now()).banned),
               // 已有邮箱的账户可以「更改邮箱」（先验旧、再验新）
               canChangeEmail: !!(u && u.email && !banState(u, Date.now()).banned),
+              // 二次验证开关（默认开）。关闭后新设备登录不再要求验证码
+              twofa: twofaEnabled(await getPref(env, (u && u.username) || s.username)),
             },
             account: accountStatus(u),
           });
@@ -5327,6 +5356,25 @@ async function handleRequest(request, env) {
           const p = cur && cur.theme === theme ? cur : await putPref(env, s.username, { theme });
           return json({ ok: true, pref: { theme: p.theme, at: p.at || Date.now() } });
         }
+        // 二次验证（2FA）开关：关掉后，新设备登录只验密码，不再发验证码 / 要密钥
+        if (path === '/api/account/2fa' && method === 'POST') {
+          const s = await getSession(env, request);
+          if (!s) return json({ ok: false, message: '请先登录' }, 401);
+          const u = await sessionUser(env, s);
+          if (!u) return json({ ok: false, message: '账户不存在' }, 404);
+          let body = {};
+          try { body = await request.json(); } catch (e) { body = {}; }
+          if (typeof body.enabled !== 'boolean') {
+            return json({ ok: false, message: 'enabled 必须是 true 或 false' }, 400);
+          }
+          const p = await putPref(env, u.username, { twofa: body.enabled });
+          return json({
+            ok: true,
+            twofa: twofaEnabled(p),
+            message: body.enabled ? '二次验证已开启' : '二次验证已关闭',
+          });
+        }
+
         if (path === '/api/downloads' && method === 'GET') {
           return await handleDownloads(env, request);
         }

@@ -59,6 +59,7 @@
   .tag.admin   { background: rgba(0,200,255,0.15); color: #4dd2ff; border: 1px solid rgba(0,200,255,0.4); }
   .tag.banned  { background: rgba(255,68,68,0.18); color: #ff4444; border: 1px solid rgba(255,68,68,0.55); }
   .tag.super   { background: rgba(255,215,0,0.18); color: #ffd700; border: 1px solid rgba(255,215,0,0.5); }
+  .tag.off     { background: rgba(255,255,255,0.06); color: #7fa893; border: 1px solid rgba(255,255,255,0.18); }
   .tag.sub     { background: rgba(170,120,255,0.18); color: #b98cff; border: 1px solid rgba(170,120,255,0.5); }
 
   button {
@@ -354,6 +355,17 @@
       '<div class="name">Recovery code</div>' +
       '<div class="meta">Use it to reset your password if you forget it. Format: key--username:email:password--32 random characters (case-sensitive)</div></div>' +
       '<button data-rc="show">' + (u.recoveryCode ? 'View' : 'Generate') + '</button></div>';
+    // Two-factor verification: only affects signing in on a new device
+    var twofaOn = u.twofa !== false;
+    sec += '<div class="row"><div class="info">' +
+      '<div class="name">Two-factor verification (2FA)' +
+      (twofaOn ? ' <span class="tag active">On</span>' : ' <span class="tag off">Off</span>') + '</div>' +
+      '<div class="meta">' +
+      (twofaOn
+        ? 'Signing in on a new device requires an email code (accounts without an email need a key from the admin). Turn it off and signing in on a new device will not require verification.'
+        : 'Turned off: signing in on a new device will not require verification — the password alone is enough.') +
+      '</div></div>' +
+      '<button data-2fa="' + (twofaOn ? 'off' : 'on') + '">' + (twofaOn ? 'Turn off' : 'Turn on') + '</button></div>';
     if (u.canChangeEmail) {
       sec += '<div class="row"><div class="info">' +
         '<div class="name">Change email</div>' +
@@ -404,6 +416,46 @@
     });
     meEl.querySelectorAll('button[data-theme-pick]').forEach(function (x) {
       x.onclick = function () { pickTheme(x.dataset.themePick); };
+    });
+    meEl.querySelectorAll('button[data-2fa]').forEach(function (x) {
+      x.onclick = function () { toggle2fa(x.getAttribute('data-2fa') === 'on'); };
+    });
+  }
+
+  /* ===================== Two-factor verification (2FA) ===================== */
+  function toggle2fa(enable) {
+    var msg = document.getElementById('meMsg');
+    var btn = document.querySelector('button[data-2fa]');
+    if (btn) { btn.disabled = true; btn.textContent = 'Working…'; }
+    function restore() {
+      if (btn) { btn.disabled = false; btn.textContent = enable ? 'Turn on' : 'Turn off'; }
+    }
+    fetch('/api/account/2fa', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ enabled: enable })
+    }).then(function (r) { return r.json(); }).then(function (j) {
+      if (!j || !j.ok) {
+        restore();
+        if (msg) { msg.className = 'msg err'; msg.textContent = (j && j.message) || 'Could not save the setting'; }
+        return;
+      }
+      if (ME) {
+        ME.user = ME.user || {};
+        ME.user.twofa = j.twofa;
+        renderMe(ME);
+      }
+      var m2 = document.getElementById('meMsg');
+      if (m2) {
+        m2.className = 'msg ok';
+        m2.textContent = j.twofa
+          ? 'Two-factor verification is on: new devices must verify.'
+          : 'Two-factor verification is off: new devices only need the password.';
+      }
+    }).catch(function () {
+      restore();
+      var m3 = document.getElementById('meMsg');
+      if (m3) { m3.className = 'msg err'; m3.textContent = 'Network error — the setting was not saved'; }
     });
   }
 
