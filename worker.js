@@ -3151,6 +3151,7 @@ const MAINT_MAX_MS = 30 * 86400000;
 const MAINT_PAGES = [
   { id: 'home', name: '主站首页', nameEn: 'Home', path: '/' },
   { id: 'aboutus', name: '关于项目组', nameEn: 'About us', path: '/aboutus' },
+  { id: 'credits', name: '鸣谢名单', nameEn: 'Credits', path: '/credits' },
   { id: 'time', name: '北京时间', nameEn: 'Beijing Time', path: '/time' },
   { id: 'guide', name: '导航页', nameEn: 'Directory', path: '/guide' },
   { id: 'notice', name: '通知板块', nameEn: 'Notices', path: '/notice' },
