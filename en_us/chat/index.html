@@ -578,6 +578,42 @@
     if (close) close.onclick = function () { location.href = '/en_us/guide/'; };
   }
 
+  /* ---------------- Admin: clear the chat room ----------------
+     This function used to be called but never defined (bindAdmin() is the second
+     line of boot()), so boot() threw a ReferenceError immediately and none of the
+     dialogs or the initial load ever ran — the page looked "entered but empty". */
+  function bindAdmin() {
+    var btn = el('clearBtn');
+    if (!btn) return;
+    btn.onclick = function () {
+      if (btn.disabled) return;
+      if (!confirm('Clear the whole chat room? This cannot be undone.')) return;
+      btn.disabled = true;
+      fetch('/api/admin/chat/clear', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: '{}'
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          btn.disabled = false;
+          if (j && j.ok) {
+            seen = {};
+            lastId = '';
+            el('msgs').innerHTML = '<div class="empty">No messages yet — say hello</div>';
+            setHint(j.message || 'Cleared', false);
+          } else {
+            setHint((j && j.message) || 'Could not clear', true);
+          }
+        })
+        .catch(function () {
+          btn.disabled = false;
+          setHint('Network error — could not clear', true);
+        });
+    };
+  }
+
   function bindGate() {
     el('warnOk').onclick = function () {
       if (el('noMore').checked) {

@@ -587,6 +587,42 @@
     if (close) close.onclick = function () { location.href = '/zh_cn/guide/'; };
   }
 
+  /* ---------------- 管理员：清空聊天室 ----------------
+     这个函数以前只有调用、没有定义（boot() 第二行就 bindAdmin()），
+     结果 boot 一进来就抛 ReferenceError，后面所有弹窗和加载都没执行 ——
+     页面看着像「进去了但什么都不弹」，其实就是脚本第一步就死了。 */
+  function bindAdmin() {
+    var btn = el('clearBtn');
+    if (!btn) return;
+    btn.onclick = function () {
+      if (btn.disabled) return;
+      if (!confirm('确定清空整个聊天室吗？此操作不可撤销。')) return;
+      btn.disabled = true;
+      fetch('/api/admin/chat/clear', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: '{}'
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          btn.disabled = false;
+          if (j && j.ok) {
+            seen = {};
+            lastId = '';
+            el('msgs').innerHTML = '<div class="empty">还没有消息，来打个招呼吧</div>';
+            setHint(j.message || '已清空', false);
+          } else {
+            setHint((j && j.message) || '清空失败', true);
+          }
+        })
+        .catch(function () {
+          btn.disabled = false;
+          setHint('网络异常，清空失败', true);
+        });
+    };
+  }
+
   function bindGate() {
     el('warnOk').onclick = function () {
       if (el('noMore').checked) {
