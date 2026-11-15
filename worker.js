@@ -2123,54 +2123,97 @@ const CHAT_GATE_SYSTEM =
   '- If the text gives no usable geographic clue, use "XX".\n' +
   'Never invent details that are not in the text.';
 
+/** 从模型输出里抠出 JSON 对象：允许 ```json 围栏、允许前后夹着解释文字 */
+function extractJsonObject(out) {
+  const text = String(out || '').replace(/```(?:json)?/gi, '');
+  const cands = [];
+  // 先试「最短的完整对象」——模型把两个花括号写在一起时，贪婪匹配会把它们黏成一坨
+  const short = text.match(/\{[\s\S]*?\}/);
+  if (short) cands.push(short[0]);
+  const greedy = text.match(/\{[\s\S]*\}/);
+  if (greedy && (!short || greedy[0] !== short[0])) cands.push(greedy[0]);
+  for (const c of cands) {
+    try {
+      const v = JSON.parse(c);
+      if (v && typeof v === 'object' && !Array.isArray(v)) return v;
+    } catch {
+      /* 换下一个候选 */
+    }
+  }
+  return null;
+}
+
+/**
+ * 布尔值归一。llama 这类模型经常把 true 写成字符串 "true"，甚至写「是」，
+ * 只认 typeof === 'boolean' 会白扔一半本来合格的回答。
+ */
+function asBool(v) {
+  if (typeof v === 'boolean') return v;
+  if (typeof v === 'number') return v !== 0;
+  const s = String(v == null ? '' : v).trim().toLowerCase();
+  if (['true', 'yes', 'y', '1', '是', '真', '真实'].indexOf(s) >= 0) return true;
+  if (['false', 'no', 'n', '0', '否', '假', '虚假'].indexOf(s) >= 0) return false;
+  return null;
+}
+
 /** 把模型输出洗成 { real, country, reason }；洗不出来返回 null（调用方按「审核失败」处理） */
 function parseChatGateVerdict(out) {
-  const s = String(out || '');
-  const m = s.match(/\{[\s\S]*\}/);
-  if (!m) return null;
-  let v = null;
-  try {
-    v = JSON.parse(m[0]);
-  } catch {
-    return null;
-  }
-  if (!v || typeof v !== 'object') return null;
-  if (typeof v.real !== 'boolean') return null;
-  const country = String(v.country || '').trim().toUpperCase();
+  const v = extractJsonObject(out);
+  if (!v) return null;
+  // 键名也容错：real / is_real / valid 都认
+  const raw = v.real !== undefined ? v.real : v.is_real !== undefined ? v.is_real : v.valid;
+  const real = asBool(raw);
+  if (real === null) return null;
+  const country = String(v.country || v.country_code || '').trim().toUpperCase();
   return {
-    real: v.real,
+    real,
     country: /^[A-Z]{2}$/.test(country) ? country : 'XX',
     reason: capText(String(v.reason || '').trim(), 120),
   };
 }
 
 /**
- * 让 AI 看一段地址。返回 { ok:true, verdict } 或 { ok:false, message }。
+ * 让 AI 看一段地址。返回 { ok:true, verdict } 或 { ok:false, message, detail }。
  * 模型没绑、超时、输出洗不出来，一律按「审核不可用」处理 —— 宁可让人稍后再试，
  * 也不能因为 AI 挂了就把门敞开。
+ *
+ * 失败时把真正的原因塞进 detail：以前只回一句「暂时不可用」，
+ * 结果「没绑 AI」「模型报错」「输出解析不了」三种完全不同的故障长得一模一样，根本没法查。
  */
 async function reviewChatGateAddress(env, address) {
-  if (!env.AI) return { ok: false, message: '审核服务暂时不可用，请稍后再试' };
-  let out = '';
-  try {
-    const r = await env.AI.run(CHAT_GATE_MODEL, {
-      max_tokens: 220,
-      temperature: 0,
-      messages: [
-        { role: 'system', content: CHAT_GATE_SYSTEM },
-        { role: 'user', content: address },
-      ],
-    });
-    out =
-      (r && typeof r.response === 'string' && r.response) ||
-      (r && typeof r.result === 'string' && r.result) ||
-      '';
-  } catch {
-    return { ok: false, message: '审核服务暂时不可用，请稍后再试' };
+  if (!env.AI) {
+    return { ok: false, code: 'no_ai', message: '审核服务未配置（缺少 Workers AI 绑定），请联系管理员' };
   }
-  const verdict = parseChatGateVerdict(out);
-  if (!verdict) return { ok: false, message: '审核服务暂时不可用，请稍后再试' };
-  return { ok: true, verdict };
+  let detail = '';
+  // 同一段地址最多试两次：温度 0 也可能偶尔吐出半截 JSON，重试一次常常就好了
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let out = '';
+    try {
+      const r = await env.AI.run(CHAT_GATE_MODEL, {
+        max_tokens: 260,
+        temperature: 0,
+        messages: [
+          { role: 'system', content: CHAT_GATE_SYSTEM },
+          { role: 'user', content: address },
+        ],
+      });
+      out =
+        (r && typeof r.response === 'string' && r.response) ||
+        (r && typeof r.result === 'string' && r.result) ||
+        '';
+    } catch (e) {
+      detail = 'run: ' + String((e && e.message) || e).slice(0, 140);
+      continue;
+    }
+    if (!out) {
+      detail = 'empty response';
+      continue;
+    }
+    const verdict = parseChatGateVerdict(out);
+    if (verdict) return { ok: true, verdict };
+    detail = 'unparsed: ' + capText(out.trim(), 140);
+  }
+  return { ok: false, code: 'ai_error', message: '审核服务暂时不可用，请稍后再试', detail };
 }
 
 /** 每小时允许提交几次地址，免得有人把它当成免费的 AI 接口刷 */
@@ -2242,7 +2285,12 @@ async function handleChatGate(env, request) {
 
   // 4) 交给 AI 判
   const rev = await reviewChatGateAddress(env, address);
-  if (!rev.ok) return json({ ok: false, message: rev.message }, 503, extra);
+  if (!rev.ok) {
+    const body = { ok: false, message: rev.message };
+    if (rev.code) body.code = rev.code;
+    if (rev.detail) body.detail = rev.detail;
+    return json(body, 503, extra);
+  }
 
   if (!rev.verdict.real) {
     return json({ ok: false, deny: 'fake', message: '这个地址看起来不像是真实住址，请如实填写' }, 200, extra);
@@ -5035,6 +5083,7 @@ const EN_MESSAGES = {
   '这个地址看起来不像是真实住址，请如实填写': 'That does not look like a real address — please enter your actual address',
   '本网站暂时不提供中国大陆聊天室': 'This website does not currently offer its chat room in mainland China',
   '审核服务暂时不可用，请稍后再试': 'The verification service is temporarily unavailable — please try again later',
+  '审核服务未配置（缺少 Workers AI 绑定），请联系管理员': 'Verification is not configured (Workers AI binding missing) — please contact the administrator',
   '提交次数太多了，请过一小时再试': 'Too many attempts — please try again in an hour',
   '验证通过': 'Verification passed',
   '已通过验证': 'Already verified',

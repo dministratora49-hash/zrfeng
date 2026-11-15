@@ -322,7 +322,7 @@
   }
   .addr-in:focus { border-color: rgba(0,255,140,0.5); }
   .addr-in::placeholder { color: #6d8a7b; }
-  .addr-err { font-size: 12.5px; color: #ff8a8a; line-height: 1.7; margin-top: 8px; min-height: 18px; }
+  .addr-err { font-size: 12.5px; color: #ff8a8a; line-height: 1.7; margin-top: 8px; min-height: 18px; white-space: pre-line; }
   .addr-tip { font-size: 12px; color: #6d8a7b; line-height: 1.7; margin-top: 8px; }
   html[data-theme="light"] #addrMask h2 { color: #009658; }
   html[data-theme="light"] .addr-in {
@@ -546,7 +546,11 @@
         return;
       }
       if (j && j.deny === 'cn') { showCnBlock(); return; }
-      el('addrErr').textContent = (j && j.message) || '审核没通过，请再试一次';
+      // 服务端在失败时会带一句 detail（没绑 AI / 模型报错 / 输出解析不了），
+      // 直接显示出来，不然三种完全不同的故障看起来一模一样，没法查
+      var msg = (j && j.message) || '审核没通过，请再试一次';
+      if (j && j.detail) msg += '\n技术信息：' + String(j.detail).slice(0, 140);
+      el('addrErr').textContent = msg;
     });
   }
 
