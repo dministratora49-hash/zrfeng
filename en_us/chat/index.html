@@ -302,6 +302,38 @@
     font-size: 12px; color: #6d8a7b; margin-top: 10px; line-height: 1.7;
     background: rgba(255,107,107,0.06); border-radius: 8px; padding: 8px 12px;
   }
+
+  /* Residential address review dialog */
+  #addrMask { z-index: 70; }
+  #addrMask .dlg { max-width: 460px; }
+  #addrMask h2 { color: #00ff8c; }
+  .addr-in {
+    width: 100%; min-height: 84px; resize: vertical;
+    padding: 11px 13px; margin-top: 4px;
+    font-family: inherit; font-size: 13.5px; line-height: 1.7;
+    color: #e8f5ee; background: rgba(0,255,140,0.05);
+    border: 1px solid rgba(0,255,140,0.22); border-radius: 10px;
+    outline: none;
+  }
+  .addr-in:focus { border-color: rgba(0,255,140,0.5); }
+  .addr-in::placeholder { color: #6d8a7b; }
+  .addr-err { font-size: 12.5px; color: #ff8a8a; line-height: 1.7; margin-top: 8px; min-height: 18px; }
+  .addr-tip { font-size: 12px; color: #6d8a7b; line-height: 1.7; margin-top: 8px; }
+  html[data-theme="light"] #addrMask h2 { color: #009658; }
+  html[data-theme="light"] .addr-in {
+    color: #10231a; background: rgba(0,145,88,0.04); border-color: rgba(0,145,88,0.25);
+  }
+  html[data-theme="light"] .addr-in::placeholder { color: #7d9a8b; }
+  html[data-theme="light"] .addr-err { color: #cc4444; }
+  html[data-theme="light"] .addr-tip { color: #5a7a68; }
+  html[data-theme="android"] #addrMask h2 { color: var(--md-primary); }
+  html[data-theme="android"] .addr-in {
+    color: var(--md-on-surface); background: var(--md-surface-2);
+    border-color: var(--md-outline-var);
+  }
+  html[data-theme="android"] .addr-in::placeholder { color: var(--md-on-surface-var); }
+  html[data-theme="android"] .addr-err { color: var(--md-error); }
+  html[data-theme="android"] .addr-tip { color: var(--md-on-surface-var); }
 </style>
 <link rel="stylesheet" href="/theme.css">
 <link rel="stylesheet" href="/android.css">
@@ -429,12 +461,111 @@
     pollTimer = setInterval(function () { if (!document.hidden) load(false); }, POLL_MS);
   }
 
-  /* ---------------- CN block ---------------- */
-  function checkRegion() {
-    return fetch('/api/region', { cache: 'no-store' })
+  /* ---------------- Region gate (residential address review) ----------------
+     The decision is made on the server; this side only collects input and shows the verdict:
+       · deny:'cn'        → mainland China, show the block dialog without asking for an address
+       · need:'address'   → show the address dialog
+       · ok               → continue to the usual privacy notice
+     The server is what actually enforces it (/api/chat checks the pass itself);
+     this is just the polite half. */
+  var gatePassed = false;
+
+  /** Browser time zone, e.g. Asia/Shanghai */
+  function deviceTz() {
+    try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; }
+    catch (e) { return ''; }
+  }
+
+  /** Device region: pull the country code out of the language tag (en-US → US).
+      Browsers have no better API for this, so it is only an approximation. */
+  function deviceRegion() {
+    var langs = [];
+    try {
+      if (navigator.languages && navigator.languages.length) {
+        langs = Array.prototype.slice.call(navigator.languages);
+      }
+      if (navigator.language) langs.push(navigator.language);
+    } catch (e) { /* ignore */ }
+    for (var i = 0; i < langs.length; i++) {
+      var m = String(langs[i] || '').match(/[-_]([A-Za-z]{2})\b/);
+      if (m) return m[1].toUpperCase();
+    }
+    return '';
+  }
+
+  /** Ask the server "may I come in?"; passing an address means "review this one" */
+  function gateCheck(address) {
+    return fetch('/api/chat/gate', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ tz: deviceTz(), region: deviceRegion(), address: address || '' })
+    })
       .then(function (r) { return r.json(); })
-      .then(function (j) { return j && j.country; })
       .catch(function () { return null; });
+  }
+
+  function showAddr(msg) {
+    el('warnMask').hidden = true;
+    el('bugMask').hidden = true;
+    el('cnBlockMask').hidden = true;
+    el('addrMask').hidden = false;
+    lockBody(true);
+    el('addrErr').textContent = msg || '';
+    var box = el('addrInput');
+    if (box) setTimeout(function () { try { box.focus(); } catch (e) { /* ignore */ } }, 40);
+  }
+
+  var addrBusy = false;
+
+  function submitAddr() {
+    if (addrBusy) return;
+    var v = String(el('addrInput').value || '').trim();
+    if (v.length < 6) {
+      el('addrErr').textContent = 'That address is too short — please be more specific';
+      return;
+    }
+    addrBusy = true;
+    el('addrSubmit').disabled = true;
+    el('addrErr').textContent = 'Checking…';
+    gateCheck(v).then(function (j) {
+      addrBusy = false;
+      el('addrSubmit').disabled = false;
+      if (j && j.ok) {
+        gatePassed = true;
+        el('addrMask').hidden = true;
+        afterGate();
+        return;
+      }
+      if (j && j.deny === 'cn') { showCnBlock(); return; }
+      el('addrErr').textContent = (j && j.message) || 'That did not pass — please try again';
+    });
+  }
+
+  function bindAddr() {
+    el('addrLeave').onclick = leave;
+    el('addrSubmit').onclick = submitAddr;
+    el('addrInput').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        submitAddr();
+      }
+    });
+  }
+
+  /** Gate cleared — carry on to the usual "mind your privacy" notice */
+  function afterGate() {
+    if (acked()) showBug();
+    else showWarn();
+  }
+
+  /** Pass expired mid-session or the server no longer accepts us: go back to the gate */
+  function gateKicked(j) {
+    entered = false;
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    lockBody(true);
+    if (j && j.deny === 'cn') showCnBlock();
+    else showAddr((j && j.message) || '');
   }
 
   function showCnBlock() {
@@ -522,6 +653,8 @@
       .then(function (j) {
         loading = false;
         if (!j || !j.ok) {
+          // Server says we have not cleared the gate: the pass expired, back to the address dialog
+          if (j && j.gate === 'address') { gateKicked(j); return; }
           setHint((j && j.message) || 'Failed to load', true);
           return;
         }
@@ -587,6 +720,8 @@
           appendMessage({ id: j.id, at: j.at, name: (j.me && j.me.name) || 'me', text: text, mine: true });
           if (j.id && (!lastId || j.id > lastId)) lastId = j.id;
           scrollDown(true);
+        } else if (j && j.gate === 'address') {
+          gateKicked(j);
         } else {
           setHint((j && j.message) || 'Failed to send', true);
         }
@@ -602,23 +737,32 @@
   function boot() {
     bindGate();
     bindAdmin();
+    bindAddr();
     // Hide all masks first, then show them in order
     el('warnMask').hidden = true;
     el('bugMask').hidden = true;
     el('cnBlockMask').hidden = true;
+    el('addrMask').hidden = true;
     lockBody(true);
 
-    // Check region first: block CN, skip other gates
-    checkRegion().then(function (country) {
-      if (country === 'CN') {
+    // Region gate first: mainland China is refused outright, everyone else gets the address dialog
+    gateCheck('').then(function (j) {
+      if (j && j.ok) {
+        gatePassed = true;
+        afterGate();
+        return;
+      }
+      if (j && j.deny === 'cn') {
         showCnBlock();
         return;
       }
-      if (acked()) {
-        showBug();
-      } else {
-        showWarn();
+      if (j && j.need === 'address') {
+        showAddr('');
+        return;
       }
+      // No clear verdict (offline, AI down): neither sneak them in nor lock them out —
+      // show the dialog with the reason so they can retry
+      showAddr((j && j.message) || 'Could not confirm your region — check your connection and try again');
     });
   }
 
@@ -630,6 +774,23 @@
 })();
 </script>
 <p style="text-align:center;font-size:12px;margin:16px 0"><a href="/zh_cn/chat/?lang=zh" style="color:#7fa893;text-decoration:none">中文</a></p>
+
+<!-- Residential address review -->
+<div class="mask" id="addrMask" hidden>
+  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="addrTitle">
+    <div class="dlg-icon">🏠</div>
+    <h2 id="addrTitle">First, where do you live?</h2>
+    <p>The chat room is open to users <b>outside mainland China</b> only. Please enter the <b>full address where you currently live</b> — an AI will review it.</p>
+    <textarea class="addr-in" id="addrInput" maxlength="200"
+              placeholder="e.g. 3F, 2-2-1 Yoyogi, Shibuya, Tokyo, Japan"></textarea>
+    <div class="addr-err" id="addrErr"></div>
+    <div class="addr-tip">The address is used for this check only and is <b>not stored on the server</b>. Made-up addresses will be rejected.</div>
+    <div class="dlg-acts">
+      <button class="ghost" id="addrLeave" type="button">Leave</button>
+      <button id="addrSubmit" type="button">Submit for review</button>
+    </div>
+  </div>
+</div>
 
 <!-- China mainland block -->
 <div class="mask" id="cnBlockMask" hidden>

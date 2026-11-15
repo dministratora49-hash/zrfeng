@@ -1980,7 +1980,7 @@ async function listChat(env, limit = CHAT_PAGE_MAX) {
  * 聊天室身份：登录用户用账户名，未登录按设备 cookie 派生一个 guest 昵称。
  * who 是稳定内部标识，只用来判断「这条是不是我发的」，不对外暴露设备 id。
  */
-async function chatIdentity(env, request) {
+async function chatIdentity(env, request, deviceOverride) {
   let account = '';
   let role = 'guest';
   let isAdmin = false;
@@ -1999,7 +1999,9 @@ async function chatIdentity(env, request) {
   if (account) {
     return { who: 'u:' + account.toLowerCase(), name: account, account, isAdmin, role, loggedIn: true };
   }
-  const device = deviceIdOf(request) || 'anon';
+  // deviceOverride：门槛接口刚给这台机器发了一张新设备 Cookie，但那会儿请求里还没有它，
+  // 所以允许调用方把算好的设备标记传进来，避免第一次通过时被算成共用的 'anon'
+  const device = deviceOverride || deviceIdOf(request) || 'anon';
   return {
     who: 'd:' + device,
     name: 'guest-' + String(device).slice(0, 4),
@@ -2033,10 +2035,249 @@ async function countOnline(env) {
   }
 }
 
+/* ---------------- 聊天室地区门槛 ----------------
+ * 进聊天室之前要过一道「你住哪」的审核，判定顺序是死的：
+ *
+ *   1. Cloudflare 认出来源国是中国大陆        → 直接拒（不弹地址框、不烧 AI 额度）
+ *   2. 浏览器时区 + 设备地区都指向中国大陆     → 直接拒（同上，连问都不问）
+ *   3. 其余情况要填「当前居住的详细地址」      → 交给 Workers AI 判两件事：
+ *        是不是编的、是不是在中国大陆；命中任一条就拒
+ *   4. 通过后发一张 12 小时的通行证（存 KV），期间不再问
+ *
+ * 两个刻意的取舍：
+ *   · 地址**不落盘**。KV 里只记通过时间、时区、地区代码，绝不把用户的家庭住址
+ *     存在服务器上——这东西泄露一次就没法挽回，而它对我们没有任何复用价值。
+ *   · 管理员直接放行。站长自己就在江苏，不放行等于把自己关在门外。
+ */
+const CHAT_GATE_TTL = 12 * 3600;
+const CHAT_GATE_ADDR_MIN = 6;
+const CHAT_GATE_ADDR_MAX = 200;
+const CHAT_GATE_TRY_PER_HOUR = 8;
+
+/** 中国大陆的 IANA 时区（含几个历史别名，某些老设备/老系统还在用） */
+const CN_TIMEZONES = new Set([
+  'asia/shanghai', 'asia/chongqing', 'asia/harbin',
+  'asia/urumqi', 'asia/kashgar', 'prc',
+]);
+
+function isCnTimezone(tz) {
+  return CN_TIMEZONES.has(String(tz || '').trim().toLowerCase());
+}
+
+/** 通行证的 KV 键：绑到「人」而不是「机器」——登录用户跟账户走，游客跟设备标记走 */
+function chatGateKey(identity) {
+  if (!identity || !identity.who) return null;
+  // 没有设备 Cookie 的游客全都叫 'd:anon'，共用一个键就等于给所有人发证，绝不能写
+  if (identity.who === 'd:anon') return null;
+  return 'chatgate:' + identity.who;
+}
+
+/** 读通行证；过期或没有都返回 null */
+async function chatGatePass(env, identity) {
+  const key = chatGateKey(identity);
+  if (!key) return null;
+  try {
+    const v = await env.USERS.get(key, 'json');
+    if (!v || typeof v.at !== 'number') return null;
+    if (Date.now() - v.at > CHAT_GATE_TTL * 1000) return null;
+    return v;
+  } catch {
+    return null;
+  }
+}
+
+/** 发通行证。info 里只有通过时间、时区、地区，没有地址 */
+async function grantChatGate(env, identity, info) {
+  const key = chatGateKey(identity);
+  if (!key) return false;
+  try {
+    await env.USERS.put(
+      key,
+      JSON.stringify(Object.assign({ at: Date.now() }, info || {})),
+      { expirationTtl: CHAT_GATE_TTL }
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const CHAT_GATE_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+
+const CHAT_GATE_SYSTEM =
+  'You check the address a user says they currently live at, for a small website\'s chat room. ' +
+  'Reply with ONE JSON object and nothing else — no prose, no markdown fence:\n' +
+  '{"real": true|false, "country": "<two-letter ISO 3166-1 country code, or XX if you cannot tell>", "reason": "<one short sentence in Chinese>"}\n' +
+  'How to decide "real":\n' +
+  '- real=true when the text reads like a plausible, specific place someone could live: ' +
+  'a street/road/village/lane plus a house or building number, with a district or city.\n' +
+  '- real=false for: gibberish, jokes, insults, a single word, placeholder text ' +
+  '(test, asdf, 123, 不知道, 你猜), a bare city or country name, a famous landmark with no street address, ' +
+  'or text that contradicts itself.\n' +
+  '- Do not require the address to be verifiable — if it is detailed and plausible, real=true. ' +
+  'Only set real=false when it clearly is not an address.\n' +
+  'How to decide "country":\n' +
+  '- Give the country the address sits in. Mainland China (中国大陆: provinces, 北京/上海/广州/深圳 etc.) ' +
+  'is "CN". Hong Kong, Macao and Taiwan are "HK"/"MO"/"TW", NOT "CN".\n' +
+  '- If the text gives no usable geographic clue, use "XX".\n' +
+  'Never invent details that are not in the text.';
+
+/** 把模型输出洗成 { real, country, reason }；洗不出来返回 null（调用方按「审核失败」处理） */
+function parseChatGateVerdict(out) {
+  const s = String(out || '');
+  const m = s.match(/\{[\s\S]*\}/);
+  if (!m) return null;
+  let v = null;
+  try {
+    v = JSON.parse(m[0]);
+  } catch {
+    return null;
+  }
+  if (!v || typeof v !== 'object') return null;
+  if (typeof v.real !== 'boolean') return null;
+  const country = String(v.country || '').trim().toUpperCase();
+  return {
+    real: v.real,
+    country: /^[A-Z]{2}$/.test(country) ? country : 'XX',
+    reason: capText(String(v.reason || '').trim(), 120),
+  };
+}
+
+/**
+ * 让 AI 看一段地址。返回 { ok:true, verdict } 或 { ok:false, message }。
+ * 模型没绑、超时、输出洗不出来，一律按「审核不可用」处理 —— 宁可让人稍后再试，
+ * 也不能因为 AI 挂了就把门敞开。
+ */
+async function reviewChatGateAddress(env, address) {
+  if (!env.AI) return { ok: false, message: '审核服务暂时不可用，请稍后再试' };
+  let out = '';
+  try {
+    const r = await env.AI.run(CHAT_GATE_MODEL, {
+      max_tokens: 220,
+      temperature: 0,
+      messages: [
+        { role: 'system', content: CHAT_GATE_SYSTEM },
+        { role: 'user', content: address },
+      ],
+    });
+    out =
+      (r && typeof r.response === 'string' && r.response) ||
+      (r && typeof r.result === 'string' && r.result) ||
+      '';
+  } catch {
+    return { ok: false, message: '审核服务暂时不可用，请稍后再试' };
+  }
+  const verdict = parseChatGateVerdict(out);
+  if (!verdict) return { ok: false, message: '审核服务暂时不可用，请稍后再试' };
+  return { ok: true, verdict };
+}
+
+/** 每小时允许提交几次地址，免得有人把它当成免费的 AI 接口刷 */
+async function chatGateTryAllowed(env, identity, now) {
+  const key = 'chatgtry:' + (identity.who || 'anon') + ':' + Math.floor(now / 3600000);
+  try {
+    const n = Number(await env.USERS.get(key)) || 0;
+    if (n >= CHAT_GATE_TRY_PER_HOUR) return false;
+    await env.USERS.put(key, String(n + 1), { expirationTtl: 3700 });
+    return true;
+  } catch {
+    return true;   // KV 出问题时不拿这个当理由拦人
+  }
+}
+
+/**
+ * POST /api/chat/gate：进聊天室前的地区门槛。
+ * 不带 address 时只做前两步判断，返回 need:'address' 让前端弹输入框。
+ */
+async function handleChatGate(env, request) {
+  const body = await readJson(request);
+  const tz = capText(String(body.tz || '').trim(), 64);
+  const region = capText(String(body.region || '').trim().toUpperCase(), 8);
+  const address = capText(String(body.address || '').trim(), CHAT_GATE_ADDR_MAX + 1);
+
+  // 这台机器还没有设备标记时，现在就发一个：通行证要靠它认人，
+  // 不能等到进了聊天室再发（那时 'anon' 会把所有人的通行证混成一个）
+  let deviceId = deviceIdOf(request);
+  let newDevice = null;
+  if (!deviceId) {
+    deviceId = randomHex(16);
+    newDevice = deviceCookie(deviceId);
+  }
+  const identity = await chatIdentity(env, request, deviceId);
+  const extra = newDevice ? { 'set-cookie': newDevice } : {};
+
+  // 管理员直接放行
+  if (identity.isAdmin) {
+    return json({ ok: true, admin: true, message: '管理员直接进入' }, 200, extra);
+  }
+
+  // 1) 来源国就是中国大陆
+  const country = String((request.cf && request.cf.country) || '').toUpperCase();
+  if (country === 'CN') {
+    return json({ ok: false, deny: 'cn', message: '本网站暂时不提供中国大陆聊天室' }, 403, extra);
+  }
+
+  // 2) 时区 + 设备地区都指向中国大陆：连地址都不问，直接拒
+  if (isCnTimezone(tz) && region === 'CN') {
+    return json({ ok: false, deny: 'cn', message: '本网站暂时不提供中国大陆聊天室' }, 403, extra);
+  }
+
+  // 已经通过过，通行证还在有效期内
+  if (await chatGatePass(env, identity)) {
+    return json({ ok: true, message: '已通过验证' }, 200, extra);
+  }
+
+  // 3) 还没填地址：让前端弹框
+  if (!address) {
+    return json({ ok: false, need: 'address', message: '请填写你当前居住的详细地址' }, 200, extra);
+  }
+  const len = Array.from(address).length;
+  if (len < CHAT_GATE_ADDR_MIN) {
+    return json({ ok: false, deny: 'fake', message: '地址太短了，请写详细一些' }, 200, extra);
+  }
+  if (len > CHAT_GATE_ADDR_MAX) {
+    return json({ ok: false, deny: 'fake', message: '地址太长了，最多 ' + CHAT_GATE_ADDR_MAX + ' 个字' }, 200, extra);
+  }
+  if (!(await chatGateTryAllowed(env, identity, Date.now()))) {
+    return json({ ok: false, message: '提交次数太多了，请过一小时再试' }, 429, extra);
+  }
+
+  // 4) 交给 AI 判
+  const rev = await reviewChatGateAddress(env, address);
+  if (!rev.ok) return json({ ok: false, message: rev.message }, 503, extra);
+
+  if (!rev.verdict.real) {
+    return json({ ok: false, deny: 'fake', message: '这个地址看起来不像是真实住址，请如实填写' }, 200, extra);
+  }
+  if (rev.verdict.country === 'CN') {
+    return json({ ok: false, deny: 'cn', message: '本网站暂时不提供中国大陆聊天室' }, 403, extra);
+  }
+
+  await grantChatGate(env, identity, { tz, region, country: rev.verdict.country });
+  return json({ ok: true, message: '验证通过' }, 200, extra);
+}
+
+/**
+ * 聊天接口自己的门槛检查：没过门槛就返回 403，页面据此弹框。
+ * 放在服务端而不是只在前端拦，是因为 /api/chat 是公开接口 ——
+ * 前端弹窗只能劝人，挡不住直接发请求。
+ */
+async function chatGateBlocked(env, request, identity) {
+  if (identity.isAdmin) return null;
+  const country = String((request.cf && request.cf.country) || '').toUpperCase();
+  if (country === 'CN') {
+    return json({ ok: false, deny: 'cn', gate: 'address', message: '本网站暂时不提供中国大陆聊天室' }, 403);
+  }
+  if (await chatGatePass(env, identity)) return null;
+  return json({ ok: false, gate: 'address', message: '请先填写当前居住的地址' }, 403);
+}
+
 /** GET /api/chat?since=…：拉消息 + 在线人数 + 我的身份 */
 async function handleChatList(env, request) {
   const url = new URL(request.url);
   const identity = await chatIdentity(env, request);
+  const blocked = await chatGateBlocked(env, request, identity);
+  if (blocked) return blocked;
   await touchOnline(env, identity);
 
   const all = await listChat(env, CHAT_MAX_KEEP);
@@ -2070,6 +2311,8 @@ async function handleChatPost(env, request, ip) {
   }
 
   const identity = await chatIdentity(env, request);
+  const blocked = await chatGateBlocked(env, request, identity);
+  if (blocked) return blocked;
 
   // 登录用户可以顺手改昵称，不填就沿用账户名；guest 只能用派生的昵称
   let name = identity.name;
@@ -4788,6 +5031,16 @@ const EN_MESSAGES = {
   'enabled 必须是 true 或 false': 'enabled must be true or false',
   '二次验证已开启': 'Two-factor verification enabled',
   '二次验证已关闭': 'Two-factor verification disabled',
+  '请填写你当前居住的详细地址': 'Please enter the full address where you currently live',
+  '请先填写当前居住的地址': 'Please enter the address where you currently live first',
+  '地址太短了，请写详细一些': 'That address is too short — please be more specific',
+  '这个地址看起来不像是真实住址，请如实填写': 'That does not look like a real address — please enter your actual address',
+  '本网站暂时不提供中国大陆聊天室': 'This website does not currently offer its chat room in mainland China',
+  '审核服务暂时不可用，请稍后再试': 'The verification service is temporarily unavailable — please try again later',
+  '提交次数太多了，请过一小时再试': 'Too many attempts — please try again in an hour',
+  '验证通过': 'Verification passed',
+  '已通过验证': 'Already verified',
+  '管理员直接进入': 'Admins are let straight through',
   '账号或密码错误': 'Incorrect account or password',
   '请输入账号和密码': 'Please enter your account and password',
   '请输入用户名或邮箱': 'Please enter your username or email',
@@ -4909,6 +5162,7 @@ const EN_PREFIXES = [
   ['回复太长了，最多 ', 'Reply is too long (max '],
   ['警告内容最多 ', 'Warning text is too long (max '],
   ['标题太长了，最多 ', 'Title is too long (max '],
+  ['地址太长了，最多 ', 'Address is too long (max '],
   ['标题最多 ', 'Title must be at most '],
   ['正文太长了，最多 ', 'Body is too long (max '],
   ['文件过大（上限 ', 'File too large (limit '],
@@ -5120,6 +5374,9 @@ async function handleRequest(request, env) {
         }
 
         // 聊天室（KV 轮询）
+        if (path === '/api/chat/gate' && method === 'POST') {
+          return await handleChatGate(env, request);
+        }
         if (path === '/api/chat' && method === 'GET') {
           return await handleChatList(env, request);
         }

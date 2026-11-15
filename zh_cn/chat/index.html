@@ -307,6 +307,38 @@
     font-size: 12px; color: #6d8a7b; margin-top: 10px; line-height: 1.7;
     background: rgba(255,107,107,0.06); border-radius: 8px; padding: 8px 12px;
   }
+
+  /* 居住地址审核弹窗 */
+  #addrMask { z-index: 70; }
+  #addrMask .dlg { max-width: 460px; }
+  #addrMask h2 { color: #00ff8c; }
+  .addr-in {
+    width: 100%; min-height: 84px; resize: vertical;
+    padding: 11px 13px; margin-top: 4px;
+    font-family: inherit; font-size: 13.5px; line-height: 1.7;
+    color: #e8f5ee; background: rgba(0,255,140,0.05);
+    border: 1px solid rgba(0,255,140,0.22); border-radius: 10px;
+    outline: none;
+  }
+  .addr-in:focus { border-color: rgba(0,255,140,0.5); }
+  .addr-in::placeholder { color: #6d8a7b; }
+  .addr-err { font-size: 12.5px; color: #ff8a8a; line-height: 1.7; margin-top: 8px; min-height: 18px; }
+  .addr-tip { font-size: 12px; color: #6d8a7b; line-height: 1.7; margin-top: 8px; }
+  html[data-theme="light"] #addrMask h2 { color: #009658; }
+  html[data-theme="light"] .addr-in {
+    color: #10231a; background: rgba(0,145,88,0.04); border-color: rgba(0,145,88,0.25);
+  }
+  html[data-theme="light"] .addr-in::placeholder { color: #7d9a8b; }
+  html[data-theme="light"] .addr-err { color: #cc4444; }
+  html[data-theme="light"] .addr-tip { color: #5a7a68; }
+  html[data-theme="android"] #addrMask h2 { color: var(--md-primary); }
+  html[data-theme="android"] .addr-in {
+    color: var(--md-on-surface); background: var(--md-surface-2);
+    border-color: var(--md-outline-var);
+  }
+  html[data-theme="android"] .addr-in::placeholder { color: var(--md-on-surface-var); }
+  html[data-theme="android"] .addr-err { color: var(--md-error); }
+  html[data-theme="android"] .addr-tip { color: var(--md-on-surface-var); }
 </style>
 <link rel="stylesheet" href="/theme.css">
 <link rel="stylesheet" href="/android.css">
@@ -439,12 +471,110 @@
     pollTimer = setInterval(function () { if (!document.hidden) load(false); }, POLL_MS);
   }
 
-  /* ---------------- CN 用户拦截 ---------------- */
-  function checkRegion() {
-    return fetch('/api/region', { cache: 'no-store' })
+  /* ---------------- 地区门槛（居住地址审核） ----------------
+     判定在服务端做，这里只负责收集信息、显示结果：
+       · 服务端说 deny:'cn' → 中国大陆，弹拦截框，连地址都不问
+       · 服务端说 need:'address' → 弹地址框
+       · 服务端说 ok → 继续走原来的提醒弹窗
+     真正拦住人的是服务端（/api/chat 自己也会查通行证），这里只是把话说清楚。 */
+  var gatePassed = false;
+
+  /** 浏览器时区，比如 Asia/Shanghai */
+  function deviceTz() {
+    try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; }
+    catch (e) { return ''; }
+  }
+
+  /** 设备地区：从语言标签里抠国家码（zh-CN → CN）。浏览器没有更准的接口，这只能算近似 */
+  function deviceRegion() {
+    var langs = [];
+    try {
+      if (navigator.languages && navigator.languages.length) {
+        langs = Array.prototype.slice.call(navigator.languages);
+      }
+      if (navigator.language) langs.push(navigator.language);
+    } catch (e) { /* 忽略 */ }
+    for (var i = 0; i < langs.length; i++) {
+      var m = String(langs[i] || '').match(/[-_]([A-Za-z]{2})\b/);
+      if (m) return m[1].toUpperCase();
+    }
+    return '';
+  }
+
+  /** 问服务端「我能进吗」；带 address 就是「提交地址再判一次」 */
+  function gateCheck(address) {
+    return fetch('/api/chat/gate', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ tz: deviceTz(), region: deviceRegion(), address: address || '' })
+    })
       .then(function (r) { return r.json(); })
-      .then(function (j) { return j && j.country; })
       .catch(function () { return null; });
+  }
+
+  function showAddr(msg) {
+    el('warnMask').hidden = true;
+    el('bugMask').hidden = true;
+    el('cnBlockMask').hidden = true;
+    el('addrMask').hidden = false;
+    lockBody(true);
+    el('addrErr').textContent = msg || '';
+    var box = el('addrInput');
+    if (box) setTimeout(function () { try { box.focus(); } catch (e) { /* 忽略 */ } }, 40);
+  }
+
+  var addrBusy = false;
+
+  function submitAddr() {
+    if (addrBusy) return;
+    var v = String(el('addrInput').value || '').trim();
+    if (v.length < 6) {
+      el('addrErr').textContent = '地址太短了，请写详细一些';
+      return;
+    }
+    addrBusy = true;
+    el('addrSubmit').disabled = true;
+    el('addrErr').textContent = '审核中…';
+    gateCheck(v).then(function (j) {
+      addrBusy = false;
+      el('addrSubmit').disabled = false;
+      if (j && j.ok) {
+        gatePassed = true;
+        el('addrMask').hidden = true;
+        afterGate();
+        return;
+      }
+      if (j && j.deny === 'cn') { showCnBlock(); return; }
+      el('addrErr').textContent = (j && j.message) || '审核没通过，请再试一次';
+    });
+  }
+
+  function bindAddr() {
+    el('addrLeave').onclick = leave;
+    el('addrSubmit').onclick = submitAddr;
+    // 手机上没有 Ctrl+Enter 的余地，回车直接提交
+    el('addrInput').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        submitAddr();
+      }
+    });
+  }
+
+  /** 已经过了门槛，接着走原来的「注意隐私」提醒 */
+  function afterGate() {
+    if (acked()) showBug();
+    else showWarn();
+  }
+
+  /** 聊天中途通行证过期 / 服务端不认了：退回门槛，别再空转轮询 */
+  function gateKicked(j) {
+    entered = false;
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    lockBody(true);
+    if (j && j.deny === 'cn') showCnBlock();
+    else showAddr((j && j.message) || '');
   }
 
   function showCnBlock() {
@@ -533,6 +663,8 @@
       .then(function (j) {
         loading = false;
         if (!j || !j.ok) {
+          // 服务端说「你没过门槛」：通行证过期了，退回地址框
+          if (j && j.gate === 'address') { gateKicked(j); return; }
           setHint((j && j.message) || '加载失败', true);
           return;
         }
@@ -598,6 +730,8 @@
           appendMessage({ id: j.id, at: j.at, name: (j.me && j.me.name) || 'me', text: text, mine: true });
           if (j.id && (!lastId || j.id > lastId)) lastId = j.id;
           scrollDown(true);
+        } else if (j && j.gate === 'address') {
+          gateKicked(j);
         } else {
           setHint((j && j.message) || '发送失败', true);
         }
@@ -613,23 +747,32 @@
   function boot() {
     bindGate();
     bindAdmin();
+    bindAddr();
     // 先确认所有 mask 都是隐藏的，再按顺序显示
     el('warnMask').hidden = true;
     el('bugMask').hidden = true;
     el('cnBlockMask').hidden = true;
+    el('addrMask').hidden = true;
     lockBody(true);
 
-    // 先查地区：CN 直接拦截，不走其他 gate
-    checkRegion().then(function (country) {
-      if (country === 'CN') {
+    // 先过地区门槛：中国大陆直接拒；其他人先要一个居住地址
+    gateCheck('').then(function (j) {
+      if (j && j.ok) {
+        gatePassed = true;
+        afterGate();
+        return;
+      }
+      if (j && j.deny === 'cn') {
         showCnBlock();
         return;
       }
-      if (acked()) {
-        showBug();
-      } else {
-        showWarn();
+      if (j && j.need === 'address') {
+        showAddr('');
+        return;
       }
+      // 服务端没给出明确结论（网络断了、AI 挂了）：不偷偷放行，
+      // 也不把人锁死 —— 把地址框和原因一起显示出来，让人可以重试
+      showAddr((j && j.message) || '暂时无法确认地区，请检查网络后重试');
     });
   }
 
@@ -641,6 +784,23 @@
 })();
 </script>
 <p style="text-align:center;font-size:12px;margin:16px 0"><a href="/en_us/chat/?lang=en" style="color:#7fa893;text-decoration:none">English</a></p>
+
+<!-- 居住地址审核 -->
+<div class="mask" id="addrMask" hidden>
+  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="addrTitle">
+    <div class="dlg-icon">🏠</div>
+    <h2 id="addrTitle">先确认一下你住在哪里</h2>
+    <p>聊天室只对<b>中国大陆以外</b>的用户开放。请填写你<b>当前居住的详细地址</b>，会交给 AI 审核。</p>
+    <textarea class="addr-in" id="addrInput" maxlength="200"
+              placeholder="例如：日本东京都涩谷区代代木 2-2-1 3F"></textarea>
+    <div class="addr-err" id="addrErr"></div>
+    <div class="addr-tip">地址只用于这一次审核，<b>不会保存到服务器</b>。填假的会被拒绝。</div>
+    <div class="dlg-acts">
+      <button class="ghost" id="addrLeave" type="button">离开</button>
+      <button id="addrSubmit" type="button">提交审核</button>
+    </div>
+  </div>
+</div>
 
 <!-- 中国大陆用户拦截 -->
 <div class="mask" id="cnBlockMask" hidden>
