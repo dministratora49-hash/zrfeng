@@ -5005,6 +5005,97 @@ function escHtml(s) {
 }
 
 /** 「暂未开通」提示页：纯服务端渲染，不依赖任何外部资源 */
+/* ---------------------- 404 界面 ---------------------- */
+
+/**
+ * 聊天室已下线：/chat、/zh_cn/chat/、/en_us/chat/ 以及其下任意路径，
+ * 一律返回 404 界面，不再把页面本身交出去。
+ * 页面文件仍留在仓库里，只是外部再也访问不到。
+ */
+function isChatPath(path) {
+  let p = path;
+  if (p === '/zh_cn' || p.startsWith('/zh_cn/')) p = p.slice(6) || '/';
+  else if (p === '/en_us' || p.startsWith('/en_us/')) p = p.slice(6) || '/';
+  return (
+    p === '/chat' ||
+    p === '/chat/' ||
+    p === '/chat.html' ||
+    p === '/chat/index.html' ||
+    p.startsWith('/chat/')
+  );
+}
+
+const NOTFOUND_TEXT = {
+  zh: {
+    title: '404 · 页面不存在',
+    h1: '页面不存在',
+    body: '你访问的页面已经下线，或者从来就不存在。',
+    back: '返回首页',
+  },
+  en: {
+    title: '404 · Page Not Found',
+    h1: 'Page not found',
+    body: 'The page you are looking for is offline, or never existed.',
+    back: 'Back to home',
+  },
+};
+
+/** 极简 404 界面，配色与地区提示页保持一致 */
+function notFoundPageHtml(lang) {
+  const t = NOTFOUND_TEXT[lang] || NOTFOUND_TEXT.zh;
+  const home = lang === 'en' ? '/en_us/' : '/zh_cn/';
+  return `<!DOCTYPE html>
+<html lang="${lang === 'en' ? 'en' : 'zh-CN'}">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>${escHtml(t.title)} · zrfeng.top</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;
+    background:#050807;color:#e8f5ee;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    line-height:1.7}
+  .box{max-width:520px;width:100%;text-align:center}
+  .num{font-size:64px;font-weight:800;letter-spacing:2px;color:#00ff8c;margin-bottom:10px;
+    font-family:ui-monospace,Menlo,Consolas,monospace}
+  h1{font-size:20px;font-weight:700;margin-bottom:10px;color:#e8f5ee}
+  p{font-size:14px;color:#9fb8ab;margin-bottom:24px}
+  a{display:inline-block;font-size:14px;color:#00ff8c;text-decoration:none;
+    border:1px solid rgba(0,255,140,.35);border-radius:999px;padding:9px 22px}
+  a:active{background:rgba(0,255,140,.12)}
+</style>
+</head>
+<body>
+  <div class="box">
+    <div class="num">404</div>
+    <h1>${escHtml(t.h1)}</h1>
+    <p>${escHtml(t.body)}</p>
+    <a href="${home}">${escHtml(t.back)}</a>
+  </div>
+</body>
+</html>`;
+}
+
+/**
+ * /chat… 的 404 响应（状态码就是 404，不缓存）。
+ * 语种跟着路径走：站在 /en_us/ 下就给英文，站在 /zh_cn/ 下就给中文，
+ * 根路径则按 Cookie / 地区判断。
+ */
+function chatNotFoundResponse(request, path) {
+  let lang;
+  if (path === '/en_us' || path.startsWith('/en_us/')) lang = 'en';
+  else if (path === '/zh_cn' || path.startsWith('/zh_cn/')) lang = 'zh';
+  else lang = pickLang(request);
+  return new Response(notFoundPageHtml(lang), {
+    status: 404,
+    headers: {
+      'content-type': 'text/html; charset=utf-8',
+      'cache-control': 'no-store',
+    },
+  });
+}
+
 function regionPageHtml(lang, country) {
   const t = REGION_TEXT[lang] || REGION_TEXT.en;
   const rtl = lang === 'ar' ? ' dir="rtl"' : '';
@@ -5882,6 +5973,8 @@ async function handleRequest(request, env) {
     // 非 API：先处理语种与地区跳转，再原样交给静态资源
     if (method === 'GET' || method === 'HEAD') {
       if (isPagePath(path)) {
+        // 聊天室已下线：任何语种下的 /chat… 都直接 404，不再交给静态资源
+        if (isChatPath(path)) return chatNotFoundResponse(request, path);
         const allow = handleRegionAllow(request, url);
         if (allow) return allow;
         const switched = handleLangSwitch(request, url);
