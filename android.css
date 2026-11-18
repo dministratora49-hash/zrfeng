@@ -695,6 +695,12 @@ html[data-theme="android"] .dlg-acts button.ghost {
   color: var(--md-error);
   border-color: var(--md-error);
 }
+/* 弹窗里的危险操作按钮（确认关闭二次验证）：用 error 色，别和普通按钮一样蓝 */
+html[data-theme="android"] .modal .acts button.warn {
+  color: var(--md-error);
+  border-color: var(--md-error);
+  background: var(--md-error-container);
+}
 
 /* ---------- 11. 登录页 ---------- */
 html[data-theme="android"] .captcha-box {

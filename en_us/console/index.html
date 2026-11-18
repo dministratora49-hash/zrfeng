@@ -247,6 +247,16 @@
 </div>
 
 <!-- 注销弹窗：密码 → 邮件确认码 → 二次确认 -->
+<!-- Confirmation dialog for turning off two-factor authentication -->
+<div class="mask hidden" id="twofaMask">
+  <div class="modal">
+    <h3 id="tfTitle">Turn off two-factor authentication</h3>
+    <div id="tfBody"></div>
+    <div class="err" id="tfErr"></div>
+    <div class="acts" id="tfActs"></div>
+  </div>
+</div>
+
 <div class="mask hidden" id="delMask">
   <div class="modal">
     <h3 id="dmTitle">Delete account</h3>
@@ -418,11 +428,59 @@
       x.onclick = function () { pickTheme(x.dataset.themePick); };
     });
     meEl.querySelectorAll('button[data-2fa]').forEach(function (x) {
-      x.onclick = function () { toggle2fa(x.getAttribute('data-2fa') === 'on'); };
+      x.onclick = function () {
+        var enable = x.getAttribute('data-2fa') === 'on';
+        // Turning off asks for confirmation first; turning on does not
+        if (enable) toggle2fa(true);
+        else confirmTurnOff2fa();
+      };
     });
   }
 
   /* ===================== Two-factor verification (2FA) ===================== */
+  /* ===================== Two-factor authentication (2FA) toggle ===================== */
+  /* Turning 2FA off is risky — ask for confirmation first. */
+  var twofaMask = document.getElementById('twofaMask');
+  var tfBody = document.getElementById('tfBody');
+  var tfErr = document.getElementById('tfErr');
+  var tfActs = document.getElementById('tfActs');
+
+  function closeTwofaModal() {
+    if (twofaMask) twofaMask.className = 'mask hidden';
+    if (tfErr) tfErr.textContent = '';
+  }
+
+  function confirmTurnOff2fa() {
+    if (!twofaMask) { toggle2fa(false); return; }
+    tfBody.innerHTML =
+      '<p>Once two-factor authentication is turned off, your account is at risk of being hijacked. If your account is stolen after turning it off, we will not be held responsible.</p>';
+    tfErr.textContent = '';
+    tfActs.innerHTML =
+      '<button class="mute" id="tfCancel">Cancel</button>' +
+      '<button class="warn" id="tfOk">Turn off anyway</button>';
+    twofaMask.className = 'mask';
+
+    var cancel = document.getElementById('tfCancel');
+    var ok = document.getElementById('tfOk');
+    if (cancel) cancel.onclick = closeTwofaModal;
+    if (ok) ok.onclick = function () {
+      closeTwofaModal();
+      toggle2fa(false);
+    };
+  }
+
+  // Clicking the backdrop or pressing Esc cancels
+  if (twofaMask) {
+    twofaMask.addEventListener('click', function (e) {
+      if (e.target === twofaMask) closeTwofaModal();
+    });
+  }
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && twofaMask && twofaMask.className.indexOf('hidden') === -1) {
+      closeTwofaModal();
+    }
+  });
+
   function toggle2fa(enable) {
     var msg = document.getElementById('meMsg');
     var btn = document.querySelector('button[data-2fa]');

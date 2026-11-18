@@ -246,6 +246,16 @@
   <div id="app"></div>
 </div>
 
+<!-- 关闭二次验证的确认弹窗：风险提示 + 确认关闭 / 取消关闭 -->
+<div class="mask hidden" id="twofaMask">
+  <div class="modal">
+    <h3 id="tfTitle">关闭二次验证</h3>
+    <div id="tfBody"></div>
+    <div class="err" id="tfErr"></div>
+    <div class="acts" id="tfActs"></div>
+  </div>
+</div>
+
 <!-- 注销弹窗：密码 → 邮件确认码 → 二次确认 -->
 <div class="mask hidden" id="delMask">
   <div class="modal">
@@ -418,7 +428,12 @@
       x.onclick = function () { pickTheme(x.dataset.themePick); };
     });
     meEl.querySelectorAll('button[data-2fa]').forEach(function (x) {
-      x.onclick = function () { toggle2fa(x.getAttribute('data-2fa') === 'on'); };
+      x.onclick = function () {
+        var enable = x.getAttribute('data-2fa') === 'on';
+        // 关闭要先过风险确认；开启不需要
+        if (enable) toggle2fa(true);
+        else confirmTurnOff2fa();
+      };
     });
   }
 
@@ -453,6 +468,49 @@
   }
 
   /* ===================== 二次验证（2FA）开关 ===================== */
+  /* 关闭 2FA 是危险操作 —— 先弹风险确认框，用户明确确认了才真的关。 */
+  var twofaMask = document.getElementById('twofaMask');
+  var tfBody = document.getElementById('tfBody');
+  var tfErr = document.getElementById('tfErr');
+  var tfActs = document.getElementById('tfActs');
+
+  function closeTwofaModal() {
+    if (twofaMask) twofaMask.className = 'mask hidden';
+    if (tfErr) tfErr.textContent = '';
+  }
+
+  /** 弹出「确认关闭二次验证」 */
+  function confirmTurnOff2fa() {
+    if (!twofaMask) { toggle2fa(false); return; }
+    tfBody.innerHTML =
+      '<p>关闭二次验证后你的账户将存在被劫持的风险，关闭二次验证后如果账户被盗我们将不负任何责任！</p>';
+    tfErr.textContent = '';
+    tfActs.innerHTML =
+      '<button class="mute" id="tfCancel">取消关闭</button>' +
+      '<button class="warn" id="tfOk">确认关闭</button>';
+    twofaMask.className = 'mask';
+
+    var cancel = document.getElementById('tfCancel');
+    var ok = document.getElementById('tfOk');
+    if (cancel) cancel.onclick = closeTwofaModal;
+    if (ok) ok.onclick = function () {
+      closeTwofaModal();
+      toggle2fa(false);
+    };
+  }
+
+  // 点遮罩或按 Esc 都能取消关闭
+  if (twofaMask) {
+    twofaMask.addEventListener('click', function (e) {
+      if (e.target === twofaMask) closeTwofaModal();
+    });
+  }
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && twofaMask && twofaMask.className.indexOf('hidden') === -1) {
+      closeTwofaModal();
+    }
+  });
+
   function toggle2fa(enable) {
     var msg = document.getElementById('meMsg');
     var btn = document.querySelector('button[data-2fa]');
