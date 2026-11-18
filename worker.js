@@ -4707,8 +4707,9 @@ function readCookie(header, name) {
 }
 
 /** 只有「页面」才参与地区跳转，静态资源（js/css/图片/字体…）一律不碰 */
+/** 只有「页面」才参与地区跳转，静态资源（js/css/图片/字体/文档…）一律不碰 */
 function isPagePath(path) {
-  return !/\.(js|css|json|txt|xml|map|png|jpe?g|gif|svg|webp|avif|ico|bmp|woff2?|ttf|otf|eot|mp4|webm|mp3|pdf|zip|gz)$/i.test(path);
+  return !/\.(js|css|json|txt|xml|map|png|jpe?g|gif|svg|webp|avif|ico|bmp|woff2?|ttf|otf|eot|mp4|webm|mp3|pdf|zip|gz|docx?|xlsx?|pptx?|csv|epub|mobi)$/i.test(path);
 }
 
 /** 302 跳转，带 no-store 免得 CDN 把某个地区的结果缓存给所有人 */

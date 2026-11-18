@@ -1053,6 +1053,15 @@ html[data-theme="android"] td:first-child,
 html[data-theme="android"] td:last-child { color: var(--md-on-surface-var); }
 
 /* ---------- 24. 试题页 ---------- */
+/* 选择区容器：之前只管了 select 和 label，容器本身还留着深色主题的
+   半透明绿底，套在浅色页面上很突兀 —— 这里补齐成 M3 的 surface 卡片。 */
+html[data-theme="android"] .pick {
+  background: var(--md-surface-1);
+  border: 1px solid var(--md-outline-var);
+  border-radius: 12px;
+  box-shadow: none;
+  color: var(--md-on-surface);
+}
 html[data-theme="android"] .pick .hint { color: var(--md-on-surface-var); }
 html[data-theme="android"] .sec { border-bottom: 1px solid var(--md-outline-var); }
 html[data-theme="android"] .sec .t { color: var(--md-on-surface); }
