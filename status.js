@@ -66,6 +66,11 @@
     'font-variant-numeric:tabular-nums;color:#ffcc00;font-weight:600;}' +
     /* 窄屏时换用短前缀，保证倒计时不被挤掉 */
     '#' + BAR_ID + ' .sb-pre-s{display:none;}' +
+    /* 二次验证已关闭：感叹号 + 风险提示（替换掉「账户正常」，琥珀色区分于绿色圆点） */
+    '#' + BAR_ID + ' .sb-ex{display:inline-flex;align-items:center;justify-content:center;' +
+    'width:15px;height:15px;margin-right:5px;border-radius:50%;flex:none;' +
+    'background:#ffcc00;color:#3a2a00;font-size:11px;font-weight:700;line-height:1;}' +
+    '#' + BAR_ID + ' .sb-risk-text{color:#ffcc00;}' +
     '#' + BAR_ID + ' .sb-r{display:flex;align-items:center;gap:8px;flex:none;}' +
     '#' + BAR_ID + ' .sb-btn{display:inline-block;padding:4px 11px;border-radius:7px;' +
     'border:1px solid rgba(0,255,140,.45);color:#00ff8c;text-decoration:none;' +
@@ -906,7 +911,19 @@
     } else {
       var t = document.createElement('span');
       t.className = 'sb-text';
-      t.textContent = acc.label || '';
+      if (acc.twofaOff) {
+        // 二次验证已关闭：把「账户正常」整段换掉，改成感叹号 + 风险提示。
+        // 服务端判定（account.twofaOff），前端只负责显示。
+        t.className = 'sb-text sb-risk-text';
+        var ex = document.createElement('span');
+        ex.className = 'sb-ex';
+        ex.textContent = '!';
+        ex.title = '该账户有被劫持的风险';
+        t.appendChild(ex);
+        t.appendChild(document.createTextNode(acc.riskLabel || '该账户有被劫持的风险'));
+      } else {
+        t.textContent = acc.label || '';
+      }
       left.appendChild(t);
     }
     bar.appendChild(left);

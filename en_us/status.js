@@ -66,6 +66,11 @@
     'font-variant-numeric:tabular-nums;color:#ffcc00;font-weight:600;}' +
     /* 窄屏时换用短前缀，保证倒计时不被挤掉 */
     '#' + BAR_ID + ' .sb-pre-s{display:none;}' +
+    /* Two-factor authentication off: exclamation mark + risk notice (replaces "Account active") */
+    '#' + BAR_ID + ' .sb-ex{display:inline-flex;align-items:center;justify-content:center;' +
+    'width:15px;height:15px;margin-right:5px;border-radius:50%;flex:none;' +
+    'background:#ffcc00;color:#3a2a00;font-size:11px;font-weight:700;line-height:1;}' +
+    '#' + BAR_ID + ' .sb-risk-text{color:#ffcc00;}' +
     '#' + BAR_ID + ' .sb-r{display:flex;align-items:center;gap:8px;flex:none;}' +
     '#' + BAR_ID + ' .sb-btn{display:inline-block;padding:4px 11px;border-radius:7px;' +
     'border:1px solid rgba(0,255,140,.45);color:#00ff8c;text-decoration:none;' +
@@ -906,7 +911,20 @@
     } else {
       var t = document.createElement('span');
       t.className = 'sb-text';
-      t.textContent = acc.label || '';
+      if (acc.twofaOff) {
+        // Two-factor authentication is off: replace "Account active" entirely
+        // with an exclamation mark plus the risk notice.
+        // The server decides (account.twofaOff); this only displays it.
+        t.className = 'sb-text sb-risk-text';
+        var ex = document.createElement('span');
+        ex.className = 'sb-ex';
+        ex.textContent = '!';
+        ex.title = 'This account is at risk of being hijacked';
+        t.appendChild(ex);
+        t.appendChild(document.createTextNode(acc.riskLabelEn || 'This account is at risk of being hijacked'));
+      } else {
+        t.textContent = acc.label || '';
+      }
       left.appendChild(t);
     }
     bar.appendChild(left);

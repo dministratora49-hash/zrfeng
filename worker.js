@@ -5040,7 +5040,20 @@ const NOTFOUND_TEXT = {
   },
 };
 
-/** 极简 404 界面，配色与地区提示页保持一致 */
+/** 语种：站在哪个语种目录下就跟着走，根路径再按 Cookie / 地区判断 */
+function langForPath(request, path) {
+  if (path === '/en_us' || path.startsWith('/en_us/')) return 'en';
+  if (path === '/zh_cn' || path.startsWith('/zh_cn/')) return 'zh';
+  return pickLang(request);
+}
+
+/**
+ * 404 界面：站点自己的页面，不是浏览器那张「未找到」。
+ *
+ * 样式完全交给 /theme.css 与 /android.css —— 和站内其他页面吃同一套主题，
+ * 默认就是原生安卓（Material You / MD3）：surface 卡片、12~28 圆角、
+ * Roboto + 思源黑体、primary 色填充按钮。控制台里选过 light / dark 也跟着变。
+ */
 function notFoundPageHtml(lang) {
   const t = NOTFOUND_TEXT[lang] || NOTFOUND_TEXT.zh;
   const home = lang === 'en' ? '/en_us/' : '/zh_cn/';
@@ -5050,44 +5063,57 @@ function notFoundPageHtml(lang) {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex">
+<script>/* 主题尽早落地（和站内其他页面同一套开关，默认原生安卓） */(function(){var t='android';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark'||s==='android')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
 <title>${escHtml(t.title)} · zrfeng.top</title>
+<link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="/android.css">
 <style>
   *{margin:0;padding:0;box-sizing:border-box}
   body{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;
-    background:#050807;color:#e8f5ee;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
-    line-height:1.7}
-  .box{max-width:520px;width:100%;text-align:center}
-  .num{font-size:64px;font-weight:800;letter-spacing:2px;color:#00ff8c;margin-bottom:10px;
+    background:#050807;color:#e8f5ee;
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;line-height:1.7}
+  /* 兜底样式对应 dark；android / light 由两个主题文件接管 */
+  .nf{width:100%;max-width:420px;padding:34px 26px 28px;text-align:center;
+    background:rgba(10,18,14,.85);border:1px solid rgba(0,255,140,.35);border-radius:28px}
+  .nf .num{font-size:72px;font-weight:800;line-height:1;letter-spacing:3px;color:#00ff8c;
     font-family:ui-monospace,Menlo,Consolas,monospace}
-  h1{font-size:20px;font-weight:700;margin-bottom:10px;color:#e8f5ee}
-  p{font-size:14px;color:#9fb8ab;margin-bottom:24px}
-  a{display:inline-block;font-size:14px;color:#00ff8c;text-decoration:none;
-    border:1px solid rgba(0,255,140,.35);border-radius:999px;padding:9px 22px}
-  a:active{background:rgba(0,255,140,.12)}
+  .nf h1{font-size:20px;font-weight:700;margin:16px 0 8px}
+  .nf p{font-size:14px;color:#9fb8ab;margin-bottom:26px}
+  .nf a{display:inline-flex;align-items:center;justify-content:center;
+    min-height:44px;padding:0 28px;border-radius:999px;
+    background:#00ff8c;color:#050807;font-size:14px;font-weight:600;
+    text-decoration:none;transition:opacity .15s}
+  .nf a:active{opacity:.85}
+  .nf .site{margin-top:20px;font-size:11px;letter-spacing:1.5px;color:#3d5a4b;
+    font-family:ui-monospace,Menlo,Consolas,monospace}
+  /* 浅色主题 */
+  html[data-theme="light"] .nf{background:#fff;border-color:rgba(90,180,224,.38)}
+  html[data-theme="light"] .nf .num{color:#66ccff}
+  html[data-theme="light"] .nf p{color:#5a7a68}
+  html[data-theme="light"] .nf a{background:#66ccff;color:#fff}
+  html[data-theme="light"] .nf .site{color:#7d9a8b}
+  /* 原生安卓（Material You / MD3）：数字与按钮都用主题里的 primary 色 */
+  html[data-theme="android"] .nf .num{color:var(--md-primary)}
+  html[data-theme="android"] .nf a{background:var(--md-primary);color:var(--md-on-primary)}
+  html[data-theme="android"] .nf .site{color:var(--md-outline)}
+  html[data-theme="android"] .nf p{color:var(--md-on-surface-var)}
 </style>
 </head>
 <body>
-  <div class="box">
+  <div class="nf card">
     <div class="num">404</div>
     <h1>${escHtml(t.h1)}</h1>
     <p>${escHtml(t.body)}</p>
     <a href="${home}">${escHtml(t.back)}</a>
+    <div class="site">zrfeng.top</div>
   </div>
 </body>
 </html>`;
 }
 
-/**
- * /chat… 的 404 响应（状态码就是 404，不缓存）。
- * 语种跟着路径走：站在 /en_us/ 下就给英文，站在 /zh_cn/ 下就给中文，
- * 根路径则按 Cookie / 地区判断。
- */
-function chatNotFoundResponse(request, path) {
-  let lang;
-  if (path === '/en_us' || path.startsWith('/en_us/')) lang = 'en';
-  else if (path === '/zh_cn' || path.startsWith('/zh_cn/')) lang = 'zh';
-  else lang = pickLang(request);
-  return new Response(notFoundPageHtml(lang), {
+/** 404 响应（状态码就是 404，不缓存） */
+function notFoundResponse(request, path) {
+  return new Response(notFoundPageHtml(langForPath(request, path)), {
     status: 404,
     headers: {
       'content-type': 'text/html; charset=utf-8',
@@ -5667,12 +5693,25 @@ async function handleRequest(request, env) {
           const s = await getSession(env, request);
           const u = s ? await sessionUser(env, s) : null;
           const devTouched = !deviceIdOf(request);
+          const acc = accountStatus(u);
+          // 关掉二次验证的账户：状态栏额外给一个感叹号 + 风险提示。
+          // 判定在服务端，前端只管把标志显示出来。
+          // 只在状态确实是「账户正常」时标记 —— 试用倒计时、封禁、到期这些文案
+          // 不能被风险提示顶掉。
+          if (u && acc.state === 'active') {
+            const pref = await getPref(env, u.username);
+            if (!twofaEnabled(pref)) {
+              acc.twofaOff = true;
+              acc.riskLabel = '该账户有被劫持的风险';
+              acc.riskLabelEn = 'This account is at risk of being hijacked';
+            }
+          }
           return json({
             ok: true,
             loggedIn: !!s,
             username: u ? u.username : s ? s.username : null,
             isAdmin: !!(u && isAdminRole(roleOf(u))),
-            account: accountStatus(u),
+            account: acc,
             // 账户偏好（亮/暗色）：换设备登录时前端据此询问是否套用。
             // 只给已登录用户，且只回传主题名，不含任何其它信息。
             prefTheme: await (async () => {
@@ -5974,7 +6013,7 @@ async function handleRequest(request, env) {
     if (method === 'GET' || method === 'HEAD') {
       if (isPagePath(path)) {
         // 聊天室已下线：任何语种下的 /chat… 都直接 404，不再交给静态资源
-        if (isChatPath(path)) return chatNotFoundResponse(request, path);
+        if (isChatPath(path)) return notFoundResponse(request, path);
         const allow = handleRegionAllow(request, url);
         if (allow) return allow;
         const switched = handleLangSwitch(request, url);
@@ -5987,7 +6026,19 @@ async function handleRequest(request, env) {
       }
     }
 
-    if (env.ASSETS) return env.ASSETS.fetch(request);
+    if (env.ASSETS) {
+      const assetRes = await env.ASSETS.fetch(request);
+      // 不存在的页面 → 换成站点自己的 404 界面，而不是静态资源默认的「未找到」。
+      // 只处理页面；js / css / 图片这些静态资源 404 保持原样，免得前端拿到一段 HTML。
+      if (
+        assetRes.status === 404 &&
+        (method === 'GET' || method === 'HEAD') &&
+        isPagePath(path)
+      ) {
+        return notFoundResponse(request, path);
+      }
+      return assetRes;
+    }
     return new Response('Not Found', { status: 404 });
 }
 

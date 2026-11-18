@@ -776,6 +776,12 @@ html[data-theme="android"] #dsh-status-bar .sb-btn:active {
 }
 html[data-theme="android"] #dsh-status-bar a.sb-text { color: var(--md-primary); }
 html[data-theme="android"] #dsh-status-bar .sb-cd { color: #8a5000; }
+/* 二次验证已关闭：感叹号与风险提示走 M3 的 error 色 */
+html[data-theme="android"] #dsh-status-bar .sb-ex {
+  background: var(--md-error);
+  color: #ffffff;
+}
+html[data-theme="android"] #dsh-status-bar .sb-risk-text { color: var(--md-error); }
 
 /* ---------- 16. 状态栏弹窗 ---------- */
 html[data-theme="android"] #dsh-block-mask,

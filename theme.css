@@ -490,6 +490,9 @@ html[data-theme="light"] #dsh-status-bar .sb-btn {
 html[data-theme="light"] #dsh-status-bar .sb-btn:active { background: rgba(102, 204, 255, .20); }
 html[data-theme="light"] #dsh-status-bar a.sb-text { color: #66ccff; }
 html[data-theme="light"] #dsh-status-bar .sb-cd { color: #a06a00; }
+/* 二次验证已关闭：感叹号与风险提示（亮色下用更深的琥珀色保证对比度） */
+html[data-theme="light"] #dsh-status-bar .sb-ex { background: #b26a00; color: #ffffff; }
+html[data-theme="light"] #dsh-status-bar .sb-risk-text { color: #a06a00; }
 
 /* ---------- 18. 状态栏弹出的各类遮罩 / 弹窗 ---------- */
 html[data-theme="light"] #dsh-block-mask,
