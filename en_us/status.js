@@ -862,9 +862,13 @@
 
     var left = document.createElement('div');
     left.className = 'sb-l';
-    var dot = document.createElement('span');
-    dot.className = 'sb-dot ' + (acc.dot || 'red');
-    left.appendChild(dot);
+    // When two-factor authentication is off, drop the green dot — a dot means
+    // "account active", which contradicts the risk notice next to it.
+    if (!acc.twofaOff) {
+      var dot = document.createElement('span');
+      dot.className = 'sb-dot ' + (acc.dot || 'red');
+      left.appendChild(dot);
+    }
 
     var cdEl = null;
     var preEl = null;

@@ -862,9 +862,13 @@
 
     var left = document.createElement('div');
     left.className = 'sb-l';
-    var dot = document.createElement('span');
-    dot.className = 'sb-dot ' + (acc.dot || 'red');
-    left.appendChild(dot);
+    // 二次验证已关闭时不再显示绿点 —— 绿点代表「账户正常」，
+    // 风险提示和绿点放在一起会自相矛盾，直接去掉圆点。
+    if (!acc.twofaOff) {
+      var dot = document.createElement('span');
+      dot.className = 'sb-dot ' + (acc.dot || 'red');
+      left.appendChild(dot);
+    }
 
     var cdEl = null;
     var preEl = null;
