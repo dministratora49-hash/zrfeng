@@ -381,6 +381,11 @@
         '<div class="name">Change email</div>' +
         '<div class="meta">Current: ' + esc(u.email || '') + '. You must verify the current email first, then the new one</div></div>' +
         '<button data-em="change">Change</button></div>';
+      sec += '<div class="row"><div class="info">' +
+        '<div class="name">Delete email</div>' +
+        '<div class="meta">Current: ' + esc(u.email || '') + '. We send a code to this address first; the email is only unlinked after you enter it. ' +
+        'The account goes back to unverified afterwards</div></div>' +
+        '<button data-em="delete" class="warn">Delete</button></div>';
     }
     if (sec) html += '<div class="card"><h2>Account security</h2>' + sec + '</div>';
 
@@ -1101,7 +1106,76 @@
     emailAction = action;
     setErr('');
     if (action === 'add') return openEmailAdd();
+    if (action === 'delete') return openEmailDelete();
     return openEmailChangeOld();
+  }
+
+  /** Delete email · step 1: verify the current address (the code goes there) */
+  function openEmailDelete() {
+    dmTitle.textContent = 'Delete email';
+    dmStep.textContent = 'Step 1 / 2 · Verify the current email';
+    dmBody.innerHTML =
+      '<p>To delete the email you must <b>verify it first</b> — we send the code to the address currently bound to your account.</p>' +
+      '<p class="small">Once verified the address is unlinked and the account goes back to unverified. ' +
+      'If this was not you, just cancel.</p>';
+    dmActs.innerHTML =
+      '<button class="mute" id="emCancel">Cancel</button>' +
+      '<button class="warn" id="emSendDel">Send code to the current email</button>';
+    delMask.className = 'mask';
+    document.getElementById('emCancel').onclick = closeModal;
+    document.getElementById('emSendDel').onclick = function () {
+      var b = document.getElementById('emSendDel');
+      b.disabled = true;
+      setErr('');
+      fetch('/api/account/email/delete/request', {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}',
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          if (!j.ok) { setErr(j.message || 'Could not send the code'); b.disabled = false; return; }
+          emailDeleteCodeStep(j.message || '');
+        })
+        .catch(function () { setErr('Network error'); b.disabled = false; });
+    };
+  }
+
+  /** Delete email · step 2: enter the code */
+  function emailDeleteCodeStep(sentMsg) {
+    setErr('');
+    dmStep.textContent = 'Step 2 / 2 · Enter the code';
+    dmBody.innerHTML =
+      '<p>' + esc(sentMsg) + '</p>' +
+      '<p class="small">Valid for 10 minutes. Check your spam folder if it does not arrive.</p>' +
+      '<input type="text" class="code" id="emCode" inputmode="numeric" maxlength="6" placeholder="000000">';
+    dmActs.innerHTML =
+      '<button class="mute" id="emBack">Back</button>' +
+      '<button class="warn" id="emOk">Delete email</button>';
+    document.getElementById('emBack').onclick = function () { openEmailDelete(); };
+    document.getElementById('emOk').onclick = function () { confirmEmailDelete(this); };
+    var c = document.getElementById('emCode');
+    if (c) { c.focus(); c.onkeydown = function (e) { if (e.key === 'Enter') confirmEmailDelete(null); }; }
+  }
+
+  function confirmEmailDelete(btn) {
+    var code = ((document.getElementById('emCode') || {}).value || '').trim();
+    if (!/^\d{6}$/.test(code)) { setErr('Please enter the 6-digit code'); return; }
+    if (btn) btn.disabled = true;
+    setErr('');
+    fetch('/api/account/email/delete/confirm', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ code: code }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j.ok) { setErr(j.message || 'Verification failed'); if (btn) btn.disabled = false; return; }
+        dmTitle.textContent = 'Done';
+        dmStep.textContent = '';
+        dmBody.innerHTML = '<p>' + esc(j.message || 'The email was deleted') + '</p>';
+        dmActs.innerHTML = '<button id="emDone">OK</button>';
+        document.getElementById('emDone').onclick = function () { closeModal(); loadMe(); };
+        setTimeout(function () { closeModal(); loadMe(); }, 1800);
+      })
+      .catch(function () { setErr('Network error'); if (btn) btn.disabled = false; });
   }
 
   /** 添加邮箱（账户还没有邮箱）：验证新邮箱 + 密码 → 激活 */

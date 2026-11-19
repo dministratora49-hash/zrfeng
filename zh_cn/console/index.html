@@ -381,6 +381,11 @@
         '<div class="name">更改邮箱</div>' +
         '<div class="meta">当前：' + esc(u.email || '') + '。需要先验证当前邮箱，再验证新邮箱</div></div>' +
         '<button data-em="change">更改</button></div>';
+      sec += '<div class="row"><div class="info">' +
+        '<div class="name">删除邮箱</div>' +
+        '<div class="meta">当前：' + esc(u.email || '') + '。删除前会向这个邮箱发送验证码，验证通过才真正解绑。' +
+        '删除后账户会回到未激活状态</div></div>' +
+        '<button data-em="delete" class="warn">删除</button></div>';
     }
     if (sec) html += '<div class="card"><h2>账户安全</h2>' + sec + '</div>';
 
@@ -1100,7 +1105,76 @@
     emailAction = action;
     setErr('');
     if (action === 'add') return openEmailAdd();
+    if (action === 'delete') return openEmailDelete();
     return openEmailChangeOld();
+  }
+
+  /** 删除邮箱 · 第 1 步：先验证当前邮箱（验证码发到当前绑定的邮箱） */
+  function openEmailDelete() {
+    dmTitle.textContent = '删除邮箱';
+    dmStep.textContent = '第 1 / 2 步 · 验证当前邮箱';
+    dmBody.innerHTML =
+      '<p>删除前要<b>先验证当前邮箱</b>，我们会把验证码发到你现在绑定的邮箱。</p>' +
+      '<p class="small">验证通过后邮箱会被解绑，账户回到未激活状态。' +
+      '如果这不是你本人的操作，请直接取消。</p>';
+    dmActs.innerHTML =
+      '<button class="mute" id="emCancel">取消</button>' +
+      '<button class="warn" id="emSendDel">发送验证码到当前邮箱</button>';
+    delMask.className = 'mask';
+    document.getElementById('emCancel').onclick = closeModal;
+    document.getElementById('emSendDel').onclick = function () {
+      var b = document.getElementById('emSendDel');
+      b.disabled = true;
+      setErr('');
+      fetch('/api/account/email/delete/request', {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}',
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          if (!j.ok) { setErr(j.message || '发送失败'); b.disabled = false; return; }
+          emailDeleteCodeStep(j.message || '');
+        })
+        .catch(function () { setErr('网络错误'); b.disabled = false; });
+    };
+  }
+
+  /** 删除邮箱 · 第 2 步：输入验证码 */
+  function emailDeleteCodeStep(sentMsg) {
+    setErr('');
+    dmStep.textContent = '第 2 / 2 步 · 输入验证码';
+    dmBody.innerHTML =
+      '<p>' + esc(sentMsg) + '</p>' +
+      '<p class="small">10 分钟内有效。如果没收到，请查看垃圾箱。</p>' +
+      '<input type="text" class="code" id="emCode" inputmode="numeric" maxlength="6" placeholder="000000">';
+    dmActs.innerHTML =
+      '<button class="mute" id="emBack">返回</button>' +
+      '<button class="warn" id="emOk">确认删除</button>';
+    document.getElementById('emBack').onclick = function () { openEmailDelete(); };
+    document.getElementById('emOk').onclick = function () { confirmEmailDelete(this); };
+    var c = document.getElementById('emCode');
+    if (c) { c.focus(); c.onkeydown = function (e) { if (e.key === 'Enter') confirmEmailDelete(null); }; }
+  }
+
+  function confirmEmailDelete(btn) {
+    var code = ((document.getElementById('emCode') || {}).value || '').trim();
+    if (!/^\d{6}$/.test(code)) { setErr('请输入 6 位验证码'); return; }
+    if (btn) btn.disabled = true;
+    setErr('');
+    fetch('/api/account/email/delete/confirm', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ code: code }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j.ok) { setErr(j.message || '验证失败'); if (btn) btn.disabled = false; return; }
+        dmTitle.textContent = '完成';
+        dmStep.textContent = '';
+        dmBody.innerHTML = '<p>' + esc(j.message || '邮箱已删除') + '</p>';
+        dmActs.innerHTML = '<button id="emDone">好</button>';
+        document.getElementById('emDone').onclick = function () { closeModal(); loadMe(); };
+        setTimeout(function () { closeModal(); loadMe(); }, 1800);
+      })
+      .catch(function () { setErr('网络错误'); if (btn) btn.disabled = false; });
   }
 
   /** 添加邮箱（账户还没有邮箱）：验证新邮箱 + 密码 → 激活 */

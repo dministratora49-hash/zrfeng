@@ -41,6 +41,65 @@ const CODE_COOLDOWN = 60;
 /** 设备登录票据有效期（秒）：10 分钟 */
 const DEVLOGIN_TTL = 10 * 60;
 
+/* ---------------- 账户锁定 ----------------
+ * 两次独立的失败计数：
+ *   登录密码错 3 次   → 锁定 10 分钟
+ *   2FA 验证码错 5 次 → 锁定 10 分钟
+ *
+ * 两条规则的关键区别：**锁定不影响已登录的设备**。
+ * 锁定只拦「新的登录尝试」，已经建立的会话照常能用 ——
+ * 否则攻击者只要拿别人的密码狂试，就能把受害者正在用的账号踢下线。
+ *
+ * 计数存 KV：'lock:<用户名>'，带 TTL，到期自动消失。
+ */
+const LOCK_TTL = 10 * 60;
+const LOGIN_FAIL_MAX = 3;
+const TWOFA_FAIL_MAX = 5;
+
+/** 读取账户的锁定状态；没锁返回 null */
+async function getLock(env, username) {
+  const rec = await env.USERS.get('lock:' + String(username || '').toLowerCase(), 'json');
+  if (!rec || !rec.until || Date.now() >= rec.until) return null;
+  return rec;
+}
+
+/** 锁定账户：记录原因与到期时间 */
+async function lockAccount(env, username, reason) {
+  const until = Date.now() + LOCK_TTL * 1000;
+  await env.USERS.put(
+    'lock:' + String(username || '').toLowerCase(),
+    JSON.stringify({ until, reason: reason || '', at: Date.now() }),
+    { expirationTtl: LOCK_TTL }
+  );
+  return until;
+}
+
+/** 失败计数 +1；到上限就锁定。返回 { tries, locked, until } */
+async function recordFailure(env, username, kind, max) {
+  const key = 'lockfail:' + kind + ':' + String(username || '').toLowerCase();
+  const rec = (await env.USERS.get(key, 'json')) || { tries: 0 };
+  rec.tries = (rec.tries || 0) + 1;
+  rec.at = Date.now();
+  if (rec.tries >= max) {
+    await env.USERS.delete(key);
+    const until = await lockAccount(env, username, kind);
+    return { tries: rec.tries, locked: true, until };
+  }
+  await env.USERS.put(key, JSON.stringify(rec), { expirationTtl: LOCK_TTL * 2 });
+  return { tries: rec.tries, locked: false, until: 0 };
+}
+
+/** 失败计数清零（成功一次就重置） */
+async function clearFailures(env, username, kind) {
+  await env.USERS.delete('lockfail:' + kind + ':' + String(username || '').toLowerCase());
+}
+
+/** 锁定期内的统一提示文案 */
+function lockedMessage(rec) {
+  const left = Math.max(0, Math.ceil(((rec.until || 0) - Date.now()) / 60000));
+  return '密码错误次数过多，账户已锁定 ' + Math.max(1, left) + ' 分钟';
+}
+
 /** 每个账户最多记住几台设备 */
 const MAX_DEVICES = 20;
 
@@ -1171,10 +1230,33 @@ async function handleLogin(env, request, ip) {
   const user = await findByLogin(env, account);
   if (!user) return json({ ok: false, message: '账号或密码错误' }, 401);
 
+  // 账户被锁 → 直接拦下。已登录的设备不受影响（会话照常有效）。
+  const lock = await getLock(env, user.username);
+  if (lock) {
+    return json({ ok: false, message: lockedMessage(lock), locked: true, until: lock.until }, 429);
+  }
+
   const hash = await hashPassword(password, user.salt);
   if (!timingSafeEqual(hash, user.hash)) {
-    return json({ ok: false, message: '账号或密码错误' }, 401);
+    // 密码错：累计 3 次锁 10 分钟
+    const f = await recordFailure(env, user.username, 'login', LOGIN_FAIL_MAX);
+    if (f.locked) {
+      return json(
+        { ok: false, message: lockedMessage({ until: f.until }), locked: true, until: f.until },
+        429
+      );
+    }
+    return json(
+      {
+        ok: false,
+        message: '账号或密码错误',
+        triesLeft: Math.max(0, LOGIN_FAIL_MAX - f.tries),
+      },
+      401
+    );
   }
+  // 密码对了 → 失败计数清零
+  await clearFailures(env, user.username, 'login');
 
   // 登录时检测到 VPN / 代理：直接封号并拦下。
   // 管理员豁免（否则自己出差连酒店网络就被锁在门外）；
@@ -4343,6 +4425,121 @@ async function handleEmailConfirm(env, request) {
   });
 }
 
+/* ========================== 邮箱：删除现有邮箱 ========================== */
+
+/**
+ * 删除已绑定的邮箱。
+ *
+ * 为什么要有这个功能：有人换邮箱号，旧邮箱可能已经不再属于他；
+ * 留着绑定会让「用邮箱找回密码」这条路指向一个他收不到的地方。
+ *
+ * 流程和「更改邮箱」一样是两步，但方向相反：
+ *   1. 向**当前绑定的邮箱**发验证码 —— 证明操作者确实能收到这个邮箱的邮件；
+ *   2. 输入验证码确认，才真正解绑。
+ *
+ * 注意：删掉邮箱后账户会退回「未激活」状态（因为激活＝完成邮箱验证），
+ * 试用账户则回到试用倒计时。这是刻意的 —— 没有邮箱就无法验证，不能算已激活。
+ */
+
+/** 请求删除：发验证码到当前邮箱 */
+async function handleEmailDeleteRequest(env, request) {
+  const g = await emailGuard(env, request);
+  if (g.error) return g.error;
+  const { user } = g;
+
+  if (!user.email) {
+    return json({ ok: false, message: '该账户没有绑定邮箱，无需删除' }, 400);
+  }
+  if (user.isTrial) {
+    return json({ ok: false, message: '试用账户不能删除邮箱' }, 400);
+  }
+
+  // 账户锁定中不给发码（避免有人一边被锁一边继续试）
+  const lock = await getLock(env, user.username);
+  if (lock) {
+    return json({ ok: false, message: lockedMessage(lock), locked: true, until: lock.until }, 429);
+  }
+
+  // 限流：和其他邮箱操作共用冷却键
+  const ck = 'emailcooldown:' + user.username;
+  if (await env.USERS.get(ck)) {
+    return json({ ok: false, message: '验证码刚发过，请稍后再试或查看邮箱' }, 429);
+  }
+
+  const code = String(Math.floor(100000 + Math.random() * 900000));
+  const rec = { action: 'delete', stage: 'confirm', code, tries: 0 };
+  await env.USERS.put('emailcode:' + user.username, JSON.stringify(rec), { expirationTtl: EMAILCODE_TTL });
+  await env.USERS.put(ck, '1', { expirationTtl: CODE_COOLDOWN });
+
+  const sent = await sendMail(
+    env,
+    user.email,
+    '【zrfeng.top】删除邮箱确认',
+    '<div style="font-family:system-ui,-apple-system,\'PingFang SC\',\'Microsoft YaHei\',sans-serif;padding:24px;background:#050807;color:#e8f5ee">' +
+      '<h2 style="color:#00ff8c;margin:0 0 12px">删除邮箱确认</h2>' +
+      '<p style="color:#a9c6b8;margin:0 0 8px">账户 <b style="color:#00ff8c">' + user.username + '</b></p>' +
+      '<p style="color:#a9c6b8;margin:0 0 16px">有人正在为你的账户<b>删除绑定邮箱</b>。</p>' +
+      '<p style="color:#a9c6b8;margin:0 0 8px">确认码：</p>' +
+      '<p style="font-size:30px;letter-spacing:8px;font-weight:700;color:#00ff8c;margin:0 0 18px">' + code + '</p>' +
+      '<p style="color:#7fa893;font-size:13px;margin:0">10 分钟内有效。</p>' +
+      '<p style="color:#5c7a6b;font-size:12px;margin:16px 0 0">如果不是你本人操作，请忽略本邮件，邮箱不会有任何变化。</p>' +
+      '</div>'
+  );
+  if (!sent.ok) return json({ ok: false, message: sent.message }, 502);
+
+  return json({
+    ok: true,
+    message: '确认码已发送到 ' + maskEmail(user.email),
+    needCode: true,
+    email: maskEmail(user.email),
+  });
+}
+
+/** 确认删除：校验验证码后解绑邮箱 */
+async function handleEmailDeleteConfirm(env, request) {
+  const g = await emailGuard(env, request);
+  if (g.error) return g.error;
+  const { user } = g;
+
+  const code = String((await readJson(request)).code || '').trim();
+  if (!/^\d{6}$/.test(code)) return json({ ok: false, message: '请输入 6 位验证码' }, 400);
+
+  if (!user.email) return json({ ok: false, message: '该账户没有绑定邮箱' }, 400);
+
+  const key = 'emailcode:' + user.username;
+  const rec = await env.USERS.get(key, 'json');
+  if (!rec || rec.action !== 'delete') {
+    return json({ ok: false, message: '验证码已过期，请重新获取' }, 400);
+  }
+  if (rec.tries >= 5) {
+    await env.USERS.delete(key);
+    return json({ ok: false, message: '尝试次数过多，请重新获取验证码' }, 400);
+  }
+  if (String(code) !== String(rec.code)) {
+    rec.tries = (rec.tries || 0) + 1;
+    await env.USERS.put(key, JSON.stringify(rec), { expirationTtl: EMAILCODE_TTL });
+    return json({ ok: false, message: '验证码不正确' }, 400);
+  }
+
+  // 真正解绑
+  const oldEmail = user.email;
+  await env.USERS.delete('email:' + oldEmail);
+
+  user.email = '';
+  user.verified = false;   // 激活＝完成邮箱验证；没有邮箱就不算激活
+  user.emailDeletedAt = Date.now();
+  await putUser(env, user);
+  await env.USERS.delete(key);
+  await env.USERS.delete('emailcooldown:' + user.username);
+
+  return json({
+    ok: true,
+    message: '邮箱已删除，账户已回到未激活状态',
+    email: '',
+    account: accountStatus(user),
+  });
+}
+
 /* ========================== 维护期间：工作人员预览 ========================== */
 
 /** 从 Cookie 里取维护通行证 */
@@ -4609,6 +4806,13 @@ async function handleDeviceVerify(env, request) {
   const user = await getUser(env, rec.username);
   if (!user) return json({ ok: false, message: '账户不存在' }, 404);
 
+  // 账户被锁 → 直接拦下（已登录设备不受影响）
+  const lock = await getLock(env, rec.username);
+  if (lock) {
+    await env.USERS.delete(key);
+    return json({ ok: false, message: lockedMessage(lock), locked: true, until: lock.until }, 429);
+  }
+
   // 重发验证码
   if (body.resend) {
     if (await env.USERS.get('devcooldown:' + ticket)) {
@@ -4645,12 +4849,26 @@ async function handleDeviceVerify(env, request) {
     if (!/^\d{6}$/.test(code)) return json({ ok: false, message: '请输入 6 位验证码' }, 400);
     if (!timingSafeEqual(code, String(rec.code || ''))) {
       rec.tries = (rec.tries || 0) + 1;
+      // 2FA 验证码错 5 次 → 锁账户 10 分钟
+      const f = await recordFailure(env, rec.username, 'twofa', TWOFA_FAIL_MAX);
+      if (f.locked) {
+        await env.USERS.delete(key);
+        await env.USERS.delete('devcooldown:' + ticket);
+        return json(
+          { ok: false, message: lockedMessage({ until: f.until }), locked: true, until: f.until },
+          429
+        );
+      }
       await env.USERS.put(key, JSON.stringify(rec), { expirationTtl: DEVLOGIN_TTL });
-      return json({ ok: false, message: '验证码不正确' }, 401);
+      return json(
+        { ok: false, message: '验证码不正确', triesLeft: Math.max(0, TWOFA_FAIL_MAX - f.tries) },
+        401
+      );
     }
   }
 
-  // 通过：记住设备 + 建会话
+  // 通过：记住设备 + 建会话（失败计数清零）
+  await clearFailures(env, rec.username, 'twofa');
   await rememberDevice(env, user.username, rec.deviceId);
   await env.USERS.delete(key);
   await env.USERS.delete('devcooldown:' + ticket);
@@ -4709,6 +4927,7 @@ function readCookie(header, name) {
 /** 只有「页面」才参与地区跳转，静态资源（js/css/图片/字体…）一律不碰 */
 /** 只有「页面」才参与地区跳转，静态资源（js/css/图片/字体/文档…）一律不碰 */
 function isPagePath(path) {
+  if (/\/(LICENSE|LICENCE|COPYING|NOTICE|README)(\.[a-z0-9]+)?$/i.test(path)) return false;
   return !/\.(js|css|json|txt|xml|map|png|jpe?g|gif|svg|webp|avif|ico|bmp|woff2?|ttf|otf|eot|mp4|webm|mp3|pdf|zip|gz|docx?|xlsx?|pptx?|csv|epub|mobi)$/i.test(path);
 }
 
@@ -5366,6 +5585,14 @@ const EN_MESSAGES = {
   '缺少用户名': 'Missing username',
   '账户异常': 'Account restricted',
   '账户正常': 'Account active',
+  // 账户锁定 / 删除邮箱
+  '密码错误次数过多，账户已锁定 10 分钟':
+    'Too many wrong passwords. The account is locked for 10 minutes',
+  '该账户没有绑定邮箱，无需删除': 'This account has no email bound, nothing to delete',
+  '试用账户不能删除邮箱': 'Trial accounts cannot delete their email',
+  '该账户没有绑定邮箱': 'This account has no email bound',
+  '邮箱已删除，账户已回到未激活状态': 'The email was deleted; the account is unverified again',
+  '验证码已发送到 ': 'A verification code was sent to ',
   '登录以享受服务': 'Log in to use this site',
   '未激活，试用期已到': 'Trial period over',
   '人机验证未通过，请重试': 'Human verification failed. Please try again',
@@ -5925,6 +6152,14 @@ async function handleRequest(request, env) {
         }
         if (path === '/api/account/email/confirm' && method === 'POST') {
           return await handleEmailConfirm(env, request);
+        }
+
+        // 邮箱：删除现有邮箱（先向当前邮箱发码，验证码通过才解绑）
+        if (path === '/api/account/email/delete/request' && method === 'POST') {
+          return await handleEmailDeleteRequest(env, request);
+        }
+        if (path === '/api/account/email/delete/confirm' && method === 'POST') {
+          return await handleEmailDeleteConfirm(env, request);
         }
 
         // 管理员控制台
