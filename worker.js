@@ -2107,17 +2107,18 @@ async function handleChatSocket(env, request) {
   const who = await chatRequireLogin(env, request);
   if (who.error) return who.error;
 
-  const url = new URL(request.url);
-  // WebSocket 升级请求必须原样转发给 DO，但 query 要换成校验过的身份
-  const target = new URL(url.toString());
-  target.searchParams.set('name', who.name);
-  target.searchParams.set('account', who.account);
-  target.searchParams.set('admin', who.isAdmin ? '1' : '0');
-
+  // 身份用**请求头**传给 DO，不用 query —— query 会进访问日志。
+  // DO 只认 Worker 传过去的身份：客户端伪造 query 没用，
+  // 因为这条路由根本不会把未经校验的连接放行。
   const headers = new Headers(request.headers);
   headers.set('Upgrade', 'websocket');
+  headers.set('X-Chat-Name', who.name);
+  headers.set('X-Chat-Account', who.account);
+  headers.set('X-Chat-Admin', who.isAdmin ? '1' : '0');
 
-  return chatStub(env).fetch(new Request(target.toString(), { headers }));
+  // ⚠️ WebSocket 升级请求要原样转给 DO：不能重新 new 一个 Request(url, ...)
+  // 丢掉原来的连接信息，要用 new Request(request, { headers }) 保留原请求。
+  return chatStub(env).fetch(new Request(request, { headers }));
 }
 
 /** POST /api/chat：发一条消息（身份和限流都在这里做） */
@@ -5855,6 +5856,314 @@ export default {
   },
 };
 
-/* 聊天室 Durable Object：类定义在 chat-do.js，这里转出给 wrangler 识别。
- * 放在同一份 Worker 脚本里，部署时不用额外配置入口。 */
-export { ChatRoom } from './chat-do.js';
+/* ============================================================================
+ * 聊天室 Durable Object
+ * ----------------------------------------------------------------------------
+ * 界面与交互移植自 Syntrx888/ChatterBox（Vue3 + Socket.IO + SQLite），
+ * 但后端不能照搬：Cloudflare Workers 没有 Node 运行时，Socket.IO 的协议跑不了，
+ * 所以这里改用 Workers 原生 WebSocket + Durable Object。
+ *
+ * Durable Object 为什么合适：它是「单线程强一致」的，正好当聊天室的唯一真相源 ——
+ * 消息广播、在线人数、撤回消息都在同一个实例里算，不会出现两个连接同时读到
+ * 不同状态的问题。
+ *
+ * 消息本体存在 KV（env.USERS），DO 只负责「谁在线」「怎么广播」：
+ *   · 新连接进来 → 从 KV 拉历史消息给他
+ *   · 有人发消息 → 写 KV，再广播给所有连接
+ *   · 管理员撤回 → 删 KV，再广播删除事件
+ *
+ * ⚠️ 三条容易踩的坑，踩了就是「服务器内部错误」：
+ *
+ *   1) WebSocket 必须用 **ctx.acceptWebSocket()** 注册，**不能**自己 new 一个存进 Map。
+ *      注册之后要用 **ctx.getWebSockets()** 取回来 —— 自己存的对象在 DO 实例
+ *      被回收重建后就是死的，广播会静默失效。
+ *
+ *   2) 身份要存在 **serializeAttachment()** 里，不能只存在内存里。
+ *      DO 会休眠，醒来时构造函数会重跑，只有 attachment 能把身份带回来。
+ *
+ *   3) webSocketMessage 的 message 是 **string | ArrayBuffer**（正文在 message.data
+ *      或直接就是字符串），直接 JSON.parse(message) 会抛异常。
+ *
+ * 鉴权：连接建立时由 Worker 校验 session，通过后把用户名放进**请求头**
+ *       （X-Chat-Name 等）交给 DO —— 不用 query，query 会进访问日志。
+ *       DO 只认 Worker 传来的连接，客户端自己声明的身份一律不信。
+ * ============================================================================ */
+
+/* DurableObject 基类是 Workers 运行时内置的全局变量，不用 import。
+ * （写成 import { DurableObject } from 'cloudflare:workers' 也行，但那样本地
+ *   node 环境就加载不了这个文件了，不利于本地调试。）
+ */
+
+/** 单条消息最大字数 */
+const TEXT_MAX = 500;
+/** 昵称最大字数 */
+const NAME_MAX = 24;
+/** 同一账户两次发言的最小间隔（毫秒） */
+const COOLDOWN_MS = 1500;
+/** 同一 IP 每分钟最多发多少条 */
+const IP_PER_MIN = 20;
+/** 内存里保留的历史消息条数 */
+const HISTORY_MAX = 100;
+
+/** 从 KV 读历史消息（倒序存的，取回来要反一下） */
+async function listHistory(env) {
+  const all = await env.USERS.list({ prefix: 'chat:', limit: 300 });
+  const out = [];
+  for (const k of all.keys) {
+    const rec = await env.USERS.get(k.name, 'json');
+    if (rec && rec.text) {
+      out.push({
+        id: k.name.slice('chat:'.length),
+        at: Number(rec.at) || 0,
+        name: String(rec.name || ''),
+        text: String(rec.text || ''),
+        admin: !!rec.admin,
+        account: rec.account || '',
+      });
+    }
+  }
+  out.sort((a, b) => (a.at > b.at ? 1 : a.at < b.at ? -1 : 0));
+  return out.slice(-HISTORY_MAX);
+}
+
+export class ChatRoom extends DurableObject {
+  constructor(ctx, env) {
+    super(ctx, env);
+    this.env = env;
+
+    // DO 从休眠里醒来时，构造函数会重跑 —— 这时候要把还活着的连接捡回来。
+    // 官方示例就是这么做的：不恢复的话，醒来后广播就发不出去了。
+    for (const ws of this.ctx.getWebSockets()) {
+      const att = ws.deserializeAttachment();
+      if (att && att.name) {
+        // 身份存在 attachment 里，醒来后依然能读到
+        ws.serializeAttachment(att);
+      }
+    }
+  }
+
+  /**
+   * 取出当前所有在线连接。
+   * 只能从 ctx.getWebSockets() 拿 —— 自己存的对象不可靠。
+   */
+  sockets() {
+    return this.ctx.getWebSockets();
+  }
+
+  /** 从 WebSocket 的 tags 里读出身份（tags 是注册时写进去的） */
+  identityOf(ws) {
+    const tags = ws.deserializeAttachment ? ws.deserializeAttachment() : null;
+    if (tags && typeof tags === 'object') return tags;
+    return { name: '', account: '', admin: false };
+  }
+
+  /** WebSocket 升级请求：Worker 已经验过 session，这里直接接管 */
+  async fetch(request) {
+    if (request.headers.get('Upgrade') !== 'websocket') {
+      return new Response('Expected WebSocket', { status: 426 });
+    }
+
+    // 身份由 Worker 校验后放进**请求头**传过来（不是 query —— query 会进日志）
+    const name = String(request.headers.get('X-Chat-Name') || '').slice(0, NAME_MAX);
+    const account = String(request.headers.get('X-Chat-Account') || '').slice(0, 64);
+    const isAdmin = request.headers.get('X-Chat-Admin') === '1';
+
+    if (!name) {
+      return new Response('Unauthorized', { status: 401 });
+    }
+
+    const pair = new WebSocketPair();
+    const client = pair[0];
+    const server = pair[1];
+
+    // ⚠️ 必须走 ctx.acceptWebSocket，并且把身份存进 attachment：
+    // 这样即使 DO 实例被回收重建，webSocketMessage/webSocketClose 回调
+    // 也能拿到正确的身份，不靠内存里的 Map。
+    this.ctx.acceptWebSocket(server);
+    server.serializeAttachment({ name, account, admin: isAdmin });
+
+    // 新人进来：先把历史消息发给他，再广播「有人上线」
+    try {
+      const history = await listHistory(this.env);
+      server.send(JSON.stringify({ type: 'history', messages: history }));
+    } catch {
+      server.send(JSON.stringify({ type: 'history', messages: [] }));
+    }
+    this.broadcastOnline();
+
+    return new Response(null, { status: 101, webSocket: client });
+  }
+
+  /** 发给所有连接 */
+  broadcast(payload) {
+    const data = JSON.stringify(payload);
+    for (const ws of this.sockets()) {
+      try {
+        // 关到一半的 socket send 会抛（readyState 不是 OPEN），跳过它
+        if (ws.readyState !== undefined && ws.readyState !== 1) continue;
+        ws.send(data);
+      } catch {
+        /* 连接已经没了，close 回调会清理 */
+      }
+    }
+  }
+
+  /** 当前在线的人（同名只算一个） */
+  memberNames() {
+    const names = [];
+    for (const ws of this.sockets()) {
+      const info = this.identityOf(ws);
+      if (info.name && names.indexOf(info.name) === -1) names.push(info.name);
+    }
+    return names;
+  }
+
+  /** 广播在线状态：人数 + 名单（Chatterbox 的成员列表就是这么来的） */
+  broadcastOnline() {
+    this.broadcast({
+      type: 'online',
+      online: this.sockets().length,
+      members: this.memberNames(),
+    });
+  }
+
+  /** 有人发消息（Worker 校验完身份后调 DO 的内部接口） */
+  async post(payload) {
+    const text = String(payload.text || '').trim();
+    if (!text) return { ok: false, message: '消息不能为空' };
+    if (Array.from(text).length > TEXT_MAX) {
+      return { ok: false, message: '消息太长了，最多 ' + TEXT_MAX + ' 个字' };
+    }
+
+    const account = String(payload.account || '');
+    const who = account ? 'u:' + account.toLowerCase() : 'd:' + String(payload.device || 'anon');
+
+    // 同一人 1.5 秒一条。
+    // 冷却时间存在 KV 里而不是内存里 —— DO 会休眠，内存里的计数醒来就没了，
+    // 那样就能靠「等 DO 睡着」绕过限流。
+    const now = Date.now();
+    const cdKey = 'chatcd:' + who;
+    try {
+      const last = Number(await this.env.USERS.get(cdKey)) || 0;
+      if (now - last < COOLDOWN_MS) {
+        return { ok: false, message: '发得太快了，缓一缓再发' };
+      }
+      await this.env.USERS.put(cdKey, String(now), { expirationTtl: 60 });
+    } catch {
+      /* 读不到就不拦 */
+    }
+
+    // 同一个 IP 每分钟 20 条
+    const ip = String(payload.ip || '');
+    if (ip) {
+      const ipKey = 'chatip:' + ip + ':' + Math.floor(now / 60000);
+      try {
+        const n = Number(await this.env.USERS.get(ipKey)) || 0;
+        if (n >= IP_PER_MIN) {
+          return { ok: false, message: '发送过于频繁，请稍后再试' };
+        }
+        await this.env.USERS.put(ipKey, String(n + 1), { expirationTtl: 120 });
+      } catch {
+        /* 读不到就不拦 */
+      }
+    }
+
+    // 时间戳严格递增：同一毫秒连发两条也能保证顺序稳定
+    const all = await listHistory(this.env);
+    const lastAt = all.reduce((mx, m) => Math.max(mx, Number(m.at) || 0), 0);
+    const at = Math.max(now, lastAt + 1);
+    const id = String(at).padStart(15, '0') + '-' + Math.random().toString(16).slice(2, 8);
+
+    const rec = { at, name: String(payload.name || ''), text, who };
+    if (account) rec.account = account;
+    if (payload.admin) rec.admin = true;
+
+    try {
+      await this.env.USERS.put('chat:' + id, JSON.stringify(rec));
+    } catch {
+      return { ok: false, message: '消息没能保存，请稍后再试' };
+    }
+
+    // 冷却已经写进 KV 了，这里不用再记内存
+
+    // 只留最近 300 条
+    const keep = [id].concat(all.map((m) => m.id));
+    for (const old of keep.slice(300)) {
+      try {
+        await this.env.USERS.delete('chat:' + old);
+      } catch {
+        /* 忽略 */
+      }
+    }
+
+    this.broadcast({
+      type: 'message',
+      message: {
+        id,
+        at,
+        name: rec.name,
+        text,
+        admin: !!rec.admin,
+        account: rec.account || '',
+      },
+    });
+
+    return { ok: true, id, at };
+  }
+
+  /** 管理员撤回某条消息 */
+  async revoke(payload) {
+    const id = String(payload.id || '');
+    if (!id) return { ok: false, message: '参数不正确' };
+    try {
+      await this.env.USERS.delete('chat:' + id);
+    } catch {
+      /* 忽略 */
+    }
+    this.broadcast({ type: 'deleted', id });
+    return { ok: true };
+  }
+
+  /** 管理员清空整个聊天室 */
+  async clear() {
+    const all = await listHistory(this.env);
+    let n = 0;
+    for (const m of all) {
+      try {
+        await this.env.USERS.delete('chat:' + m.id);
+        n++;
+      } catch {
+        /* 忽略 */
+      }
+    }
+    this.broadcast({ type: 'cleared' });
+    return { ok: true, message: '已清空 ' + n + ' 条消息', deleted: n };
+  }
+
+  /** 当前在线人数 */
+  async stats() {
+    return { ok: true, online: this.sockets().length };
+  }
+
+  /**
+   * WebSocket 生命周期回调。
+   *
+   * 只有用 ctx.acceptWebSocket() 注册的连接才会触发这三个回调。
+   * message 是 MessageEvent，正文在 message.data 里 —— 直接 JSON.parse(message)
+   * 会抛「服务器内部错误」。
+   *
+   * 这里**不处理任何业务消息**：发送走 HTTP 接口（带 session Cookie），
+   * 便于做鉴权与限流。客户端发来的东西一律忽略。
+   */
+  webSocketMessage(ws, message) {
+    // 心跳由客户端自己处理，这里不需要回应
+  }
+
+  webSocketClose(ws, code, reason) {
+    this.broadcastOnline();
+  }
+
+  webSocketError(ws, error) {
+    this.broadcastOnline();
+  }
+}

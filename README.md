@@ -496,7 +496,7 @@ Socket.IO + SQLite 跑不起来，所以改写成 **Durable Objects + Workers �
 
 **实现要点**
 
-- `chat-do.js` 是 Durable Object，负责「谁在线、怎么广播」；消息本体仍存 KV（键 `chat:<15 位时间戳>-<随机>`）
+- `worker.js` 里的 `ChatRoom` 类是 Durable Object，负责「谁在线、怎么广播」；消息本体仍存 KV（键 `chat:<15 位时间戳>-<随机>`）
 - DO 是单线程强一致的，正好当聊天室的唯一真相源：广播、在线人数、撤回都在同一实例里算
 - 最多留 300 条，超出删最旧；键按字典序即时间序
 - 身份只有一种：登录用户的账户名。**没有游客**，也不用设备 cookie 派生昵称
