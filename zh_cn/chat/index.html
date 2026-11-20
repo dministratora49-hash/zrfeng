@@ -18,7 +18,6 @@
     color: #e8f5ee;
     padding: 70px 16px 24px;
   }
-  body.locked { overflow: hidden; }
 
   body::before {
     content: "";
@@ -26,13 +25,13 @@
     inset: 0;
     background-image:
       linear-gradient(rgba(0,255,140,0.03) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(0,255,140,0.03) 1px, transparent 1px);
+      linear-gradient(rgba(0,255,140,0.03) 1px, transparent 1px);
     background-size: 40px 40px;
     pointer-events: none;
     z-index: 0;
   }
 
-  .wrap { position: relative; z-index: 1; max-width: 760px; margin: 0 auto; }
+  .wrap { position: relative; z-index: 1; max-width: 780px; margin: 0 auto; }
 
   h1 {
     font-size: 26px;
@@ -53,7 +52,7 @@
     box-shadow: 0 0 18px rgba(0, 255, 140, 0.06);
     display: flex;
     flex-direction: column;
-    height: min(68vh, 620px);
+    height: min(70vh, 640px);
     overflow: hidden;
   }
 
@@ -75,28 +74,41 @@
   }
   .linkbtn:hover { color: #00ff8c; }
 
+  /* ---------- 消息区 ---------- */
   .msgs {
     flex: 1;
     overflow-y: auto;
     padding: 14px 16px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 12px;
     scroll-behavior: smooth;
   }
   .msgs::-webkit-scrollbar { width: 6px; }
   .msgs::-webkit-scrollbar-thumb { background: rgba(0,255,140,.2); border-radius: 3px; }
 
-  .m { display: flex; flex-direction: column; max-width: 82%; }
-  .m.mine { align-self: flex-end; align-items: flex-end; }
+  /* Chatterbox 的气泡布局：头像在左（自己的在右），气泡圆角卡片 */
+  .m { display: flex; gap: 10px; align-items: flex-start; max-width: 88%; }
+  .m.mine { align-self: flex-end; flex-direction: row-reverse; }
+  .m .ava {
+    width: 36px; height: 36px; border-radius: 50%; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0, 255, 140, 0.12);
+    border: 1px solid rgba(0, 255, 140, 0.3);
+    color: #00ff8c; font-size: 14px; font-weight: 700;
+    overflow: hidden;
+  }
+  .m .ava img { width: 100%; height: 100%; object-fit: cover; }
+  .m-body { min-width: 0; }
+  .m.mine .m-body { display: flex; flex-direction: column; align-items: flex-end; }
   .m-meta { font-size: 10.5px; color: #5d7a6c; margin-bottom: 3px; display: flex; gap: 6px; align-items: center; }
   .m-meta .nm { color: #7fa893; }
   .m.admin .m-meta .nm { color: #ffb020; }
   .m-bubble {
-    background: rgba(0, 255, 140, 0.07);
-    border: 1px solid rgba(0, 255, 140, 0.16);
-    border-radius: 12px;
-    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(0, 255, 140, 0.14);
+    border-radius: 4px 14px 14px 14px;
+    padding: 9px 13px;
     font-size: 13.5px;
     line-height: 1.7;
     color: #cfe8dc;
@@ -104,18 +116,27 @@
     word-break: break-word;
   }
   .m.mine .m-bubble {
-    background: rgba(0, 255, 140, 0.16);
-    border-color: rgba(0, 255, 140, 0.34);
+    background: rgba(0, 255, 140, 0.14);
+    border-color: rgba(0, 255, 140, 0.3);
+    border-radius: 14px 4px 14px 14px;
     color: #e8f5ee;
   }
   .m.sys { align-self: center; max-width: 100%; }
   .m.sys .m-bubble {
     background: transparent; border: none; color: #5d7a6c;
-    font-size: 11.5px; padding: 2px 0;
+    font-size: 11.5px; padding: 2px 0; text-align: center;
   }
+  /* 撤回按钮（管理员） */
+  .m-del {
+    display: none; background: none; border: none; color: #5d7a6c;
+    font-size: 10.5px; cursor: pointer; font-family: inherit; padding: 2px 0 0;
+  }
+  .m.mine.can-del .m-del, .m:not(.mine).can-del .m-del { display: block; }
+  .m-del:hover { color: #ff7b7b; }
 
   .empty { text-align: center; color: #4a6a58; font-size: 13px; padding: 30px 0; }
 
+  /* ---------- 输入区 ---------- */
   .composer {
     border-top: 1px solid rgba(0, 255, 140, 0.14);
     padding: 10px 12px 12px;
@@ -147,7 +168,7 @@
   .links a:hover { color: #00ff8c; }
   footer { text-align: center; color: #3d5a4b; font-size: 11px; margin-top: 18px; letter-spacing: 1px; }
 
-  /* ---------- 进入前的两道弹窗 ---------- */
+  /* ---------- 弹窗（未登录 / 成员 / 安全提醒） ---------- */
   .mask {
     position: fixed; inset: 0; z-index: 50;
     background: rgba(2, 6, 4, 0.86);
@@ -197,162 +218,64 @@
     background: transparent; color: #9fb8ab;
   }
   .dlg-acts button:active { filter: brightness(1.3); }
-  .dlg-acts button.primary-warn {
-    border-color: rgba(255, 176, 32, 0.55);
-    background: rgba(255, 176, 32, 0.14);
-    color: #ffb020;
-  }
 
-  /* ---------- 聊天室灯色覆盖（theme.css 没有聊天室的规则，这里自己补） ---------- */
-  html[data-theme="light"] body {
-    background: #f2f7f3;
-    background-image:
-      radial-gradient(circle at 15% 10%, rgba(0, 145, 88, 0.05) 0%, transparent 45%),
-      radial-gradient(circle at 85% 85%, rgba(0, 145, 88, 0.03) 0%, transparent 45%);
-    color: #10231a;
+  /* ---------- 成员列表（Chatterbox 的 MembersView 简化版） ---------- */
+  .member-list { max-height: 320px; overflow-y: auto; margin: 4px 0 0; }
+  .member {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 2px; border-bottom: 1px solid rgba(0, 255, 140, 0.1);
   }
-  html[data-theme="light"] body::before {
-    background-image:
-      linear-gradient(rgba(0,145,88,0.03) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(0,145,88,0.03) 1px, transparent 1px);
+  .member:last-child { border-bottom: none; }
+  .member .ava {
+    width: 32px; height: 32px; border-radius: 50%; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0, 255, 140, 0.12);
+    border: 1px solid rgba(0, 255, 140, 0.28);
+    color: #00ff8c; font-size: 13px; font-weight: 700;
   }
+  .member .nm { font-size: 13.5px; color: #cfe8dc; }
+  .member .desc { font-size: 11px; color: #5d7a6c; margin-top: 2px; }
+  .member .me-tag { font-size: 10px; color: #00ff8c; margin-left: 6px; }
+
+  /* ---------- 浅色 / 原生安卓主题 ---------- */
+  html[data-theme="light"] body { background: #f2f7f3; color: #10231a; }
   html[data-theme="light"] h1 { color: #10231a; }
-  html[data-theme="light"] .sub { color: #5a7a68; }
-  html[data-theme="light"] .chat-card {
-    background: rgba(255, 255, 255, 0.9);
-    border-color: rgba(0, 145, 88, 0.2);
-  }
-  html[data-theme="light"] .chat-head {
-    border-color: rgba(0, 145, 88, 0.12);
-    color: #5a7a68;
-  }
+  html[data-theme="light"] .chat-card { background: rgba(255,255,255,.94); border-color: rgba(0,145,88,.2); }
+  html[data-theme="light"] .chat-head { border-bottom-color: rgba(0,145,88,.16); color: #5a7a68; }
   html[data-theme="light"] .chat-head b { color: #009658; }
-  html[data-theme="light"] .linkbtn { color: #5a7a68; }
-  html[data-theme="light"] .linkbtn:hover { color: #009658; }
-  html[data-theme="light"] .msgs::-webkit-scrollbar-thumb { background: rgba(0,145,88,.2); }
-  html[data-theme="light"] .m-meta { color: #6a8a78; }
+  html[data-theme="light"] .m-bubble { background: #f4f7f5; border-color: rgba(0,145,88,.16); color: #2a4a3a; }
+  html[data-theme="light"] .m.mine .m-bubble { background: #d6ecff; border-color: rgba(0,145,88,.26); color: #10231a; }
   html[data-theme="light"] .m-meta .nm { color: #5a7a68; }
-  html[data-theme="light"] .m.admin .m-meta .nm { color: #b8860b; }
-  html[data-theme="light"] .m-bubble {
-    background: rgba(0, 145, 88, 0.06);
-    border-color: rgba(0, 145, 88, 0.14);
-    color: #2a4a3a;
-  }
-  html[data-theme="light"] .m.mine .m-bubble {
-    background: rgba(0, 145, 88, 0.12);
-    border-color: rgba(0, 145, 88, 0.28);
-    color: #10231a;
-  }
-  html[data-theme="light"] .empty { color: #7a9a88; }
-  html[data-theme="light"] .composer {
-    border-color: rgba(0, 145, 88, 0.12);
-    background: rgba(242, 247, 243, 0.5);
-  }
-  html[data-theme="light"] .composer textarea {
-    border-color: rgba(0, 145, 88, 0.2);
-    background: rgba(0, 0, 0, 0.03);
-    color: #10231a;
-  }
-  html[data-theme="light"] .composer textarea:focus { border-color: rgba(0, 145, 88, 0.5); }
-  html[data-theme="light"] .composer button.send {
-    border-color: rgba(0, 145, 88, 0.35);
-    background: rgba(0, 145, 88, 0.08);
-    color: #009658;
-  }
-  html[data-theme="light"] .composer .hint { color: #7a9a88; }
-  html[data-theme="light"] .composer .hint .err { color: #cc4444; }
+  html[data-theme="light"] .composer { background: rgba(255,255,255,.7); border-top-color: rgba(0,145,88,.16); }
+  html[data-theme="light"] .composer textarea { background: #fff; border-color: rgba(0,145,88,.25); color: #10231a; }
+  html[data-theme="light"] .composer button.send { border-color: rgba(0,145,88,.35); background: rgba(0,145,88,.08); color: #009658; }
+  html[data-theme="light"] .empty, html[data-theme="light"] .composer .hint { color: #7a9a88; }
   html[data-theme="light"] .links a { color: #5a7a68; }
-  html[data-theme="light"] .links a:hover { color: #009658; }
-  html[data-theme="light"] footer { color: #9aaa98; }
-  html[data-theme="light"] .mask { background: rgba(242, 247, 243, 0.86); }
-  html[data-theme="light"] .dlg {
-    background: rgba(255, 255, 255, 0.98);
-    border-color: rgba(184, 134, 11, 0.3);
-    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.1);
-  }
-  html[data-theme="light"] .dlg.danger { border-color: rgba(204, 68, 68, 0.3); }
-  html[data-theme="light"] .dlg h2 { color: #b8860b; }
-  html[data-theme="light"] .dlg.danger h2 { color: #cc4444; }
-  html[data-theme="light"] .dlg p { color: #3a5a4a; }
-  html[data-theme="light"] .dlg p strong { color: #10231a; }
-  html[data-theme="light"] .dlg .warnbox {
-    background: rgba(184, 134, 11, 0.05);
-    border-left-color: rgba(184, 134, 11, 0.4);
-    color: #6a5a3a;
-  }
-  html[data-theme="light"] .dlg .check { color: #5a7a68; }
-  html[data-theme="light"] .dlg-acts button {
-    border-color: rgba(0, 145, 88, 0.35);
-    background: rgba(0, 145, 88, 0.08);
-    color: #009658;
-  }
-  html[data-theme="light"] .dlg-acts button.ghost {
-    border-color: rgba(0, 0, 0, 0.1);
-    background: transparent;
-    color: #5a7a68;
-  }
-  html[data-theme="light"] .dlg-acts button.primary-warn {
-    border-color: rgba(184, 134, 11, 0.45);
-    background: rgba(184, 134, 11, 0.1);
-    color: #b8860b;
-  }
+  html[data-theme="light"] footer { color: #7a9a88; }
 
-  /* CN 用户拦截弹窗 */
-  #cnBlockMask { z-index: 60; }
-  #cnBlockMask .dlg { border-color: rgba(255, 107, 107, 0.5); max-width: 420px; }
-  #cnBlockMask .dlg-icon { font-size: 36px; }
-  #cnBlockMask h2 { color: #ff7b7b; }
-  #cnBlockMask p { color: #b9d2c5; }
-  #cnBlockMask .cn-note {
-    font-size: 12px; color: #6d8a7b; margin-top: 10px; line-height: 1.7;
-    background: rgba(255,107,107,0.06); border-radius: 8px; padding: 8px 12px;
+  @media (max-width: 520px) {
+    body { padding-top: 56px; }
+    h1 { font-size: 22px; }
+    .m { max-width: 94%; }
   }
-
-  /* 居住地址审核弹窗 */
-  #addrMask { z-index: 70; }
-  #addrMask .dlg { max-width: 460px; }
-  #addrMask h2 { color: #00ff8c; }
-  .addr-in {
-    width: 100%; min-height: 84px; resize: vertical;
-    padding: 11px 13px; margin-top: 4px;
-    font-family: inherit; font-size: 13.5px; line-height: 1.7;
-    color: #e8f5ee; background: rgba(0,255,140,0.05);
-    border: 1px solid rgba(0,255,140,0.22); border-radius: 10px;
-    outline: none;
-  }
-  .addr-in:focus { border-color: rgba(0,255,140,0.5); }
-  .addr-in::placeholder { color: #6d8a7b; }
-  .addr-err { font-size: 12.5px; color: #ff8a8a; line-height: 1.7; margin-top: 8px; min-height: 18px; white-space: pre-line; }
-  .addr-tip { font-size: 12px; color: #6d8a7b; line-height: 1.7; margin-top: 8px; }
-  html[data-theme="light"] #addrMask h2 { color: #009658; }
-  html[data-theme="light"] .addr-in {
-    color: #10231a; background: rgba(0,145,88,0.04); border-color: rgba(0,145,88,0.25);
-  }
-  html[data-theme="light"] .addr-in::placeholder { color: #7d9a8b; }
-  html[data-theme="light"] .addr-err { color: #cc4444; }
-  html[data-theme="light"] .addr-tip { color: #5a7a68; }
-  html[data-theme="android"] #addrMask h2 { color: var(--md-primary); }
-  html[data-theme="android"] .addr-in {
-    color: var(--md-on-surface); background: var(--md-surface-2);
-    border-color: var(--md-outline-var);
-  }
-  html[data-theme="android"] .addr-in::placeholder { color: var(--md-on-surface-var); }
-  html[data-theme="android"] .addr-err { color: var(--md-error); }
-  html[data-theme="android"] .addr-tip { color: var(--md-on-surface-var); }
 </style>
 <link rel="stylesheet" href="/theme.css">
 <link rel="stylesheet" href="/android.css">
 </head>
-<body class="locked">
+<body>
 <div class="wrap">
   <h1>聊天室</h1>
-  <p class="sub">公开频道 · 消息不加密 · 请勿发送敏感信息</p>
+  <p class="sub">实时消息 · 仅登录用户可见 · 消息不加密，请勿发送敏感信息</p>
 
   <div class="chat-card">
     <div class="chat-head">
-      <div class="left"><span class="dot" id="onDot"></span><span>在线 <b id="onCount">–</b> 人</span></div>
+      <div class="left">
+        <span class="dot" id="onDot"></span>
+        <span>在线 <b id="onCount">–</b> 人</span>
+      </div>
       <div class="head-acts">
         <span id="meLine">—</span>
+        <button class="linkbtn" id="membersBtn" type="button">成员</button>
         <button class="linkbtn" id="refreshBtn" type="button">刷新</button>
         <button class="linkbtn" id="clearBtn" type="button" hidden>清空</button>
       </div>
@@ -371,22 +294,31 @@
   </div>
 
   <div class="links">
-    <a href="/zh_cn/guide/">导航站</a>
-    <a href="/zh_cn/">主站</a>
-    <a href="/zh_cn/contact/">联系我们</a>
+    <a href="/zh_cn/guide">← 返回导航站</a>
+    <a href="/zh_cn/contact">联系我们</a>
   </div>
-  <footer>zrfeng.top · 聊天室（Beta）</footer>
+  <footer>zrfeng.top · 聊天室</footer>
 </div>
 
-<!-- 第一道：未加密警告 -->
+<!-- 未登录：挡住整页 -->
+<div class="mask" id="loginMask" hidden>
+  <div class="dlg">
+    <div class="dlg-icon">🔒</div>
+    <h2>请先登录</h2>
+    <p>聊天室只对<strong>已登录的用户</strong>开放，这样每个人的发言都有身份。</p>
+    <p class="small">登录之后就能进来聊天了。</p>
+    <div class="dlg-acts">
+      <a class="ghost" href="/zh_cn/login/" style="padding:10px 20px;border-radius:10px;font-size:13px;text-decoration:none;border:1px solid rgba(255,255,255,.18);color:#9fb8ab">去登录</a>
+    </div>
+  </div>
+</div>
+
+<!-- 安全提醒 -->
 <div class="mask" id="warnMask" hidden>
-  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="warnTitle">
+  <div class="dlg">
     <div class="dlg-icon">⚠️</div>
-    <h2 id="warnTitle">安全提醒</h2>
-    <p>该聊天室<strong>没有使用端到端加密技术</strong>，因此不建议你使用该聊天室。</p>
-    <p>你的消息以明文形式存放在服务器上，管理员可以查看。</p>
+    <h2>安全提醒</h2>
     <div class="warnbox">请不要在这里发送密码、身份证号、手机号、住址等任何敏感信息。</div>
-    <p>如果仍要使用，请点击下方「确定」。</p>
     <label class="check"><input type="checkbox" id="noMore"> 不再提醒</label>
     <div class="dlg-acts">
       <button class="ghost" id="warnCancel" type="button">取消</button>
@@ -395,253 +327,58 @@
   </div>
 </div>
 
-<!-- 第二道：粗糙上线提醒 -->
-<div class="mask" id="bugMask" hidden>
-  <div class="dlg danger" role="dialog" aria-modal="true" aria-labelledby="bugTitle">
-    <div class="dlg-icon">🐛</div>
-    <h2 id="bugTitle">关于这个页面</h2>
-    <p>该页面上线匆忙，可能有诸多 bug。</p>
-    <p>如遇 bug，请前往<strong>「联系我们」</strong>页面提交，我们会尽快处理。</p>
+<!-- 成员列表 -->
+<div class="mask" id="memberMask" hidden>
+  <div class="dlg">
+    <div class="dlg-icon">👥</div>
+    <h2>在线成员</h2>
+    <div class="member-list" id="memberList"></div>
     <div class="dlg-acts">
-      <button id="bugOk" type="button">确定</button>
+      <button class="ghost" id="memberClose" type="button">关闭</button>
     </div>
   </div>
 </div>
 
-<script src="/zh_cn/status.js" defer></script>
 <script>
 (function () {
   'use strict';
 
-  var ACK_KEY = 'zrfeng-chat-ack';        // 勾了「不再提醒」记在本机
-  var POLL_MS = 2500;
+  var ACK_KEY = 'dsh-chat-ack';
+  var MAX_TEXT = 500;
 
-  var el = function (id) { return document.getElementById(id); };
+  function el(id) { return document.getElementById(id); }
   function esc(s) {
     return String(s == null ? '' : s)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
-  function p2(n) { return n < 10 ? '0' + n : '' + n; }
   function fmt(ts) {
-    var d = new Date(Number(ts));
-    var today = new Date();
-    var sameDay = d.getFullYear() === today.getFullYear()
-      && d.getMonth() === today.getMonth() && d.getDate() === today.getDate();
-    var t = p2(d.getHours()) + ':' + p2(d.getMinutes());
-    return sameDay ? t : (d.getMonth() + 1) + '/' + d.getDate() + ' ' + t;
+    var d = new Date(ts);
+    function p(n) { return n < 10 ? '0' + n : '' + n; }
+    return p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  }
+  /** 取名字首字符当头像（Chatterbox 也是这个思路：没有头像就显示首字母） */
+  function initial(name) {
+    var s = String(name || '?').trim();
+    return s ? s.charAt(0).toUpperCase() : '?';
   }
 
-  /* ---------------- 进入前的两道确认 ---------------- */
-  var entered = false;
+  var seen = {};
   var lastId = '';
-  var pollTimer = null;
+  var myName = '';
+  var isAdmin = false;
+  var ws = null;
+  var wsTimer = null;
+  var reconnect = 0;
 
-  function acked() {
-    try { return localStorage.getItem(ACK_KEY) === '1'; } catch (e) { return false; }
-  }
-
-  function lockBody(on) {
-    document.body.classList.toggle('locked', !!on);
-  }
-
-  /** 取消 → 回导航站 */
-  function leave() {
-    location.href = '/zh_cn/guide/';
-  }
-
-  function showWarn() {
-    el('warnMask').hidden = false;
-    lockBody(true);
-  }
-
-  function showBug() {
-    el('warnMask').hidden = true;
-    el('bugMask').hidden = false;
-    lockBody(true);
-  }
-
-  function enterChat() {
-    el('warnMask').hidden = true;
-    el('bugMask').hidden = true;
-    lockBody(false);
-    if (entered) return;
-    entered = true;
-    load(true);
-    pollTimer = setInterval(function () { if (!document.hidden) load(false); }, POLL_MS);
-  }
-
-  /* ---------------- 地区门槛（居住地址审核） ----------------
-     判定在服务端做，这里只负责收集信息、显示结果：
-       · 服务端说 deny:'cn' → 中国大陆，弹拦截框，连地址都不问
-       · 服务端说 need:'address' → 弹地址框
-       · 服务端说 ok → 继续走原来的提醒弹窗
-     真正拦住人的是服务端（/api/chat 自己也会查通行证），这里只是把话说清楚。 */
-  var gatePassed = false;
-
-  /** 浏览器时区，比如 Asia/Shanghai */
-  function deviceTz() {
-    try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; }
-    catch (e) { return ''; }
-  }
-
-  /** 设备地区：从语言标签里抠国家码（zh-CN → CN）。浏览器没有更准的接口，这只能算近似 */
-  function deviceRegion() {
-    var langs = [];
-    try {
-      if (navigator.languages && navigator.languages.length) {
-        langs = Array.prototype.slice.call(navigator.languages);
-      }
-      if (navigator.language) langs.push(navigator.language);
-    } catch (e) { /* 忽略 */ }
-    for (var i = 0; i < langs.length; i++) {
-      var m = String(langs[i] || '').match(/[-_]([A-Za-z]{2})\b/);
-      if (m) return m[1].toUpperCase();
-    }
-    return '';
-  }
-
-  /** 问服务端「我能进吗」；带 address 就是「提交地址再判一次」 */
-  function gateCheck(address) {
-    return fetch('/api/chat/gate', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ tz: deviceTz(), region: deviceRegion(), address: address || '' })
-    })
-      .then(function (r) { return r.json(); })
-      .catch(function () { return null; });
-  }
-
-  function showAddr(msg) {
-    el('warnMask').hidden = true;
-    el('bugMask').hidden = true;
-    el('cnBlockMask').hidden = true;
-    el('addrMask').hidden = false;
-    lockBody(true);
-    el('addrErr').textContent = msg || '';
-    var box = el('addrInput');
-    if (box) setTimeout(function () { try { box.focus(); } catch (e) { /* 忽略 */ } }, 40);
-  }
-
-  var addrBusy = false;
-
-  function submitAddr() {
-    if (addrBusy) return;
-    var v = String(el('addrInput').value || '').trim();
-    if (v.length < 6) {
-      el('addrErr').textContent = '地址太短了，请写详细一些';
-      return;
-    }
-    addrBusy = true;
-    el('addrSubmit').disabled = true;
-    el('addrErr').textContent = '审核中…';
-    gateCheck(v).then(function (j) {
-      addrBusy = false;
-      el('addrSubmit').disabled = false;
-      if (j && j.ok) {
-        gatePassed = true;
-        el('addrMask').hidden = true;
-        afterGate();
-        return;
-      }
-      if (j && j.deny === 'cn') { showCnBlock(); return; }
-      // 服务端在失败时会带一句 detail（没绑 AI / 模型报错 / 输出解析不了），
-      // 直接显示出来，不然三种完全不同的故障看起来一模一样，没法查
-      var msg = (j && j.message) || '审核没通过，请再试一次';
-      if (j && j.detail) msg += '\n技术信息：' + String(j.detail).slice(0, 140);
-      el('addrErr').textContent = msg;
-    });
-  }
-
-  function bindAddr() {
-    el('addrLeave').onclick = leave;
-    el('addrSubmit').onclick = submitAddr;
-    // 手机上没有 Ctrl+Enter 的余地，回车直接提交
-    el('addrInput').addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        submitAddr();
-      }
-    });
-  }
-
-  /** 已经过了门槛，接着走原来的「注意隐私」提醒 */
-  function afterGate() {
-    if (acked()) showBug();
-    else showWarn();
-  }
-
-  /** 聊天中途通行证过期 / 服务端不认了：退回门槛，别再空转轮询 */
-  function gateKicked(j) {
-    entered = false;
-    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-    lockBody(true);
-    if (j && j.deny === 'cn') showCnBlock();
-    else showAddr((j && j.message) || '');
-  }
-
-  function showCnBlock() {
-    el('warnMask').hidden = true;
-    el('bugMask').hidden = true;
-    var mask = el('cnBlockMask');
-    if (mask) mask.hidden = false;
-    lockBody(true);
-    var close = el('cnClose');
-    if (close) close.onclick = function () { location.href = '/zh_cn/guide/'; };
-  }
-
-  /* ---------------- 管理员：清空聊天室 ----------------
-     这个函数以前只有调用、没有定义（boot() 第二行就 bindAdmin()），
-     结果 boot 一进来就抛 ReferenceError，后面所有弹窗和加载都没执行 ——
-     页面看着像「进去了但什么都不弹」，其实就是脚本第一步就死了。 */
-  function bindAdmin() {
-    var btn = el('clearBtn');
-    if (!btn) return;
-    btn.onclick = function () {
-      if (btn.disabled) return;
-      if (!confirm('确定清空整个聊天室吗？此操作不可撤销。')) return;
-      btn.disabled = true;
-      fetch('/api/admin/chat/clear', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'content-type': 'application/json' },
-        body: '{}'
-      })
-        .then(function (r) { return r.json(); })
-        .then(function (j) {
-          btn.disabled = false;
-          if (j && j.ok) {
-            seen = {};
-            lastId = '';
-            el('msgs').innerHTML = '<div class="empty">还没有消息，来打个招呼吧</div>';
-            setHint(j.message || '已清空', false);
-          } else {
-            setHint((j && j.message) || '清空失败', true);
-          }
-        })
-        .catch(function () {
-          btn.disabled = false;
-          setHint('网络异常，清空失败', true);
-        });
-    };
-  }
-
-  function bindGate() {
-    el('warnOk').onclick = function () {
-      if (el('noMore').checked) {
-        try { localStorage.setItem(ACK_KEY, '1'); } catch (e) { /* 忽略 */ }
-      }
-      showBug();
-    };
-    el('warnCancel').onclick = leave;
-    el('bugOk').onclick = enterChat;
-    // 点遮罩空白处不算通过，避免误触进站
+  /* ---------------- 提示 ---------------- */
+  function setHint(text, isErr) {
+    var h = el('hintText');
+    h.textContent = text;
+    h.className = isErr ? 'err' : '';
   }
 
   /* ---------------- 消息渲染 ---------------- */
-  var seen = {};   // id -> true，增量渲染时去重
-
   function appendMessage(m) {
     if (seen[m.id]) return false;
     seen[m.id] = true;
@@ -651,7 +388,14 @@
     if (empty) box.innerHTML = '';
 
     var div = document.createElement('div');
-    div.className = 'm' + (m.mine ? ' mine' : '') + (m.admin ? ' admin' : '');
+    div.className = 'm' + (m.mine ? ' mine' : '') + (m.admin ? ' admin' : '') + (isAdmin ? ' can-del' : '');
+
+    var ava = document.createElement('div');
+    ava.className = 'ava';
+    ava.textContent = initial(m.name);
+
+    var body = document.createElement('div');
+    body.className = 'm-body';
 
     var meta = document.createElement('div');
     meta.className = 'm-meta';
@@ -665,10 +409,22 @@
 
     var bubble = document.createElement('div');
     bubble.className = 'm-bubble';
-    bubble.textContent = m.text;   // 用 textContent，天然防 XSS
+    bubble.textContent = m.text;   // textContent：天然防 XSS
 
-    div.appendChild(meta);
-    div.appendChild(bubble);
+    body.appendChild(meta);
+    body.appendChild(bubble);
+
+    if (isAdmin) {
+      var del = document.createElement('button');
+      del.className = 'm-del';
+      del.type = 'button';
+      del.textContent = '撤回';
+      del.onclick = function () { revoke(m.id); };
+      body.appendChild(del);
+    }
+
+    div.appendChild(ava);
+    div.appendChild(body);
     box.appendChild(div);
     return true;
   }
@@ -677,74 +433,133 @@
     var box = el('msgs');
     return box.scrollHeight - box.scrollTop - box.clientHeight < 80;
   }
-
   function scrollDown(force) {
     var box = el('msgs');
     if (force) box.scrollTop = box.scrollHeight;
   }
 
-  function renderMe(me, online) {
-    el('onCount').textContent = String(online || 0);
-    var line = (me.loggedIn ? '已登录：' : '游客：') + me.name;
-    el('meLine').textContent = line;
-    el('clearBtn').hidden = !me.isAdmin;
+  function renderMe(me) {
+    myName = (me && me.name) || '';
+    isAdmin = !!(me && me.isAdmin);
+    el('meLine').textContent = myName ? ('你好，' + myName) : '—';
+    el('clearBtn').hidden = !isAdmin;
     el('sendBtn').disabled = false;
   }
 
-  /* ---------------- 拉取 ---------------- */
-  var loading = false;
+  /* ---------------- WebSocket ---------------- */
+  function wsUrl() {
+    var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return proto + '//' + location.host + '/api/chat/socket';
+  }
 
-  function load(initial) {
-    if (loading) return;
-    loading = true;
-    var url = '/api/chat' + (initial || !lastId ? '' : '?since=' + encodeURIComponent(lastId));
-    fetch(url, { cache: 'no-store', credentials: 'same-origin' })
-      .then(function (r) { return r.json(); })
-      .then(function (j) {
-        loading = false;
-        if (!j || !j.ok) {
-          // 服务端说「你没过门槛」：通行证过期了，退回地址框
-          if (j && j.gate === 'address') { gateKicked(j); return; }
-          setHint((j && j.message) || '加载失败', true);
-          return;
-        }
-        var stick = atBottom();
-        var box = el('msgs');
-        var added = 0;
-        (j.messages || []).forEach(function (m) {
-          if (appendMessage(m)) {
-            added++;
+  function connect() {
+    if (ws) { try { ws.close(); } catch (e) {} ws = null; }
+    el('onDot').classList.remove('off');
+
+    try {
+      ws = new WebSocket(wsUrl());
+    } catch (e) {
+      el('onDot').classList.add('off');
+      setHint('无法建立连接，正在重试…', true);
+      scheduleReconnect();
+      return;
+    }
+
+    ws.onopen = function () {
+      reconnect = 0;
+      el('onDot').classList.remove('off');
+      setHint('已连接', false);
+    };
+
+    ws.onmessage = function (ev) {
+      var d = null;
+      try { d = JSON.parse(ev.data); } catch (e) { return; }
+      if (!d || !d.type) return;
+
+      if (d.type === 'history') {
+        (d.messages || []).forEach(function (m) {
+          if (appendMessage({ id: m.id, at: m.at, name: m.name, text: m.text, admin: m.admin, mine: m.name === myName })) {
             if (!lastId || m.id > lastId) lastId = m.id;
           }
         });
-        if (initial && !added) {
-          box.innerHTML = '<div class="empty">还没有消息，来打个招呼吧</div>';
+        var box = el('msgs');
+        if (!box.querySelector('.m')) box.innerHTML = '<div class="empty">还没有消息，来打个招呼吧</div>';
+        scrollDown(true);
+        return;
+      }
+      if (d.type === 'message') {
+        var m = d.message || {};
+        var stick = atBottom();
+        if (appendMessage({ id: m.id, at: m.at, name: m.name, text: m.text, admin: m.admin, mine: m.name === myName })) {
+          if (m.id > lastId) lastId = m.id;
+          if (stick) scrollDown(true);
         }
-        if (added && (stick || initial)) scrollDown(true);
-        renderMe(j.me || {}, j.online);
-        touchCounter(j.max);
+        return;
+      }
+      if (d.type === 'online') {
+        el('onCount').textContent = String(d.online || 0);
+        members = {};
+        (d.members || []).forEach(function (n) { members[n] = true; });
+        return;
+      }
+      if (d.type === 'deleted') {
+        var box2 = el('msgs');
+        var node = box2.querySelector('[data-mid="' + d.id + '"]');
+        if (node) node.remove();
+        return;
+      }
+      if (d.type === 'cleared') {
+        seen = {};
+        lastId = '';
+        el('msgs').innerHTML = '<div class="empty">还没有消息，来打个招呼吧</div>';
+        return;
+      }
+    };
+
+    ws.onclose = function () {
+      el('onDot').classList.add('off');
+      setHint('连接断开，正在重新连接…', true);
+      scheduleReconnect();
+    };
+    ws.onerror = function () {
+      el('onDot').classList.add('off');
+    };
+  }
+
+  function scheduleReconnect() {
+    clearTimeout(wsTimer);
+    reconnect = Math.min(reconnect + 1, 6);
+    var delay = Math.min(1000 * reconnect, 8000);
+    wsTimer = setTimeout(connect, delay);
+  }
+
+  /* ---------------- 拉取历史（首次加载 + 手动刷新） ---------------- */
+  function load() {
+    fetch('/api/chat', { cache: 'no-store', credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j || !j.ok) {
+          if (j && j.needLogin) { showLogin(); return; }
+          setHint((j && j.message) || '加载失败', true);
+          return;
+        }
+        renderMe(j.me || {});
+        el('onCount').textContent = String(j.online || 0);
+        seen = {};
+        lastId = '';
+        var box = el('msgs');
+        box.innerHTML = '';
+        (j.messages || []).forEach(function (m) {
+          if (appendMessage(m)) { if (!lastId || m.id > lastId) lastId = m.id; }
+        });
+        if (!box.querySelector('.m')) box.innerHTML = '<div class="empty">还没有消息，来打个招呼吧</div>';
+        scrollDown(true);
       })
-      .catch(function () {
-        loading = false;
-        el('onDot').classList.add('off');
-        setHint('网络异常，稍后自动重试', true);
-      });
-  }
-
-  function touchCounter(max) {
-    var n = el('input').value.length;
-    el('counter').textContent = n + '/' + (max || 500);
-  }
-
-  function setHint(text, isErr) {
-    var h = el('hintText');
-    h.textContent = text;
-    h.className = isErr ? 'err' : '';
+      .catch(function () { setHint('网络异常，稍后自动重试', true); });
   }
 
   /* ---------------- 发送 ---------------- */
   var sending = false;
-
   function send() {
     var input = el('input');
     var text = String(input.value || '').trim();
@@ -763,17 +578,22 @@
       .then(function (j) {
         sending = false;
         el('sendBtn').disabled = false;
-        if (j && j.ok) {
-          input.value = '';
-          touchCounter();
-          setHint('消息会公开显示，且不做端到端加密', false);
-          appendMessage({ id: j.id, at: j.at, name: (j.me && j.me.name) || 'me', text: text, mine: true });
-          if (j.id && (!lastId || j.id > lastId)) lastId = j.id;
-          scrollDown(true);
-        } else if (j && j.gate === 'address') {
-          gateKicked(j);
-        } else {
+        if (!j || !j.ok) {
+          if (j && j.needLogin) { showLogin(); return; }
           setHint((j && j.message) || '发送失败', true);
+          return;
+        }
+        input.value = '';
+        touchCounter();
+        setHint('消息会公开显示，且不做端到端加密', false);
+        // 兜底：广播可能因为 WebSocket 断开而收不到，
+        // 这里先把刚发的消息显示出来（服务端也会广播一次，appendMessage 会去重）。
+        if (j.id) {
+          var stick = atBottom();
+          if (appendMessage({ id: j.id, at: j.at, name: myName || '我', text: text, admin: isAdmin, mine: true })) {
+            if (j.id > lastId) lastId = j.id;
+            if (stick) scrollDown(true);
+          }
         }
       })
       .catch(function () {
@@ -783,37 +603,126 @@
       });
   }
 
-  /* ---------------- 初始化 ---------------- */
-  function boot() {
-    bindGate();
-    bindAdmin();
-    bindAddr();
-    // 先确认所有 mask 都是隐藏的，再按顺序显示
-    el('warnMask').hidden = true;
-    el('bugMask').hidden = true;
-    el('cnBlockMask').hidden = true;
-    el('addrMask').hidden = true;
-    lockBody(true);
+  /* ---------------- 管理员撤回 / 清空 ---------------- */
+  function revoke(id) {
+    fetch('/api/chat/revoke', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: id }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j || !j.ok) { setHint((j && j.message) || '撤回失败', true); return; }
+        setHint('已撤回', false);
+      })
+      .catch(function () { setHint('网络异常，撤回失败', true); });
+  }
 
-    // 先过地区门槛：中国大陆直接拒；其他人先要一个居住地址
-    gateCheck('').then(function (j) {
-      if (j && j.ok) {
-        gatePassed = true;
-        afterGate();
-        return;
+  function bindClear() {
+    var btn = el('clearBtn');
+    if (!btn) return;
+    btn.onclick = function () {
+      if (btn.disabled) return;
+      if (!confirm('确定清空整个聊天室吗？此操作不可撤销。')) return;
+      btn.disabled = true;
+      fetch('/api/admin/chat/clear', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          btn.disabled = false;
+          if (j && j.ok) { setHint(j.message || '已清空', false); }
+          else { setHint((j && j.message) || '清空失败', true); }
+        })
+        .catch(function () { btn.disabled = false; setHint('网络异常，清空失败', true); });
+    };
+  }
+
+  /* ---------------- 未登录 ---------------- */
+  function showLogin() {
+    el('loginMask').hidden = false;
+    el('msgs').innerHTML = '';
+    el('sendBtn').disabled = true;
+    el('onDot').classList.add('off');
+  }
+
+  /* ---------------- 安全提醒 ---------------- */
+  function bindWarn() {
+    el('warnOk').onclick = function () {
+      if (el('noMore').checked) {
+        try { localStorage.setItem(ACK_KEY, '1'); } catch (e) { /* 忽略 */ }
       }
-      if (j && j.deny === 'cn') {
-        showCnBlock();
-        return;
+      el('warnMask').hidden = true;
+      connect();
+      load();
+    };
+    el('warnCancel').onclick = function () {
+      el('warnMask').hidden = true;
+      connect();
+      load();
+    };
+  }
+
+  /* ---------------- 成员列表 ---------------- */
+  function bindMembers() {
+    el('membersBtn').onclick = function () {
+      var box = el('memberList');
+      box.innerHTML = '<div class="empty">读取中…</div>';
+      el('memberMask').hidden = false;
+      // 在线成员就是当前连着的人 —— WebSocket 里维护，前端自己记一份
+      var list = onlineMembers();
+      if (!list.length) {
+        box.innerHTML = '<div class="empty">暂无在线成员</div>';
+      } else {
+        box.innerHTML = list.map(function (n) {
+          var tag = (n === myName) ? '<span class="me-tag">（我）</span>' : '';
+          return '<div class="member"><div class="ava">' + esc(initial(n)) + '</div>' +
+            '<div><div class="nm">' + esc(n) + tag + '</div></div></div>';
+        }).join('');
       }
-      if (j && j.need === 'address') {
-        showAddr('');
-        return;
-      }
-      // 服务端没给出明确结论（网络断了、AI 挂了）：不偷偷放行，
-      // 也不把人锁死 —— 把地址框和原因一起显示出来，让人可以重试
-      showAddr((j && j.message) || '暂时无法确认地区，请检查网络后重试');
+    };
+    el('memberClose').onclick = function () { el('memberMask').hidden = true; };
+  }
+
+  var members = {};
+  function onlineMembers() {
+    return Object.keys(members);
+  }
+
+  /* ---------------- 计数器 ---------------- */
+  function touchCounter() {
+    var n = el('input').value.length;
+    el('counter').textContent = n + '/' + MAX_TEXT;
+  }
+
+  /* ---------------- 启动 ---------------- */
+  function boot() {
+    el('input').addEventListener('input', touchCounter);
+    el('sendBtn').onclick = send;
+    el('refreshBtn').onclick = load;
+    el('input').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
     });
+    bindWarn();
+    bindClear();
+    bindMembers();
+
+    // 先看登录状态：没登录就把整页挡住，不建立 WebSocket
+    fetch('/api/status', { cache: 'no-store', credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j || !j.loggedIn) { showLogin(); return; }
+        renderMe({ name: j.username, isAdmin: j.isAdmin });
+        var acked = false;
+        try { acked = localStorage.getItem(ACK_KEY) === '1'; } catch (e) { /* 忽略 */ }
+        if (acked) { connect(); load(); }
+        else { el('warnMask').hidden = false; }
+      })
+      .catch(function () { showLogin(); });
   }
 
   if (document.readyState === 'loading') {
@@ -823,37 +732,7 @@
   }
 })();
 </script>
+  <script src="/status.js" defer></script>
 <p style="text-align:center;font-size:12px;margin:16px 0"><a href="/en_us/chat/?lang=en" style="color:#7fa893;text-decoration:none">English</a></p>
-
-<!-- 居住地址审核 -->
-<div class="mask" id="addrMask" hidden>
-  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="addrTitle">
-    <div class="dlg-icon">🏠</div>
-    <h2 id="addrTitle">先确认一下你住在哪里</h2>
-    <p>聊天室只对<b>中国大陆以外</b>的用户开放。请填写你<b>当前居住的详细地址</b>，会交给 AI 审核。</p>
-    <textarea class="addr-in" id="addrInput" maxlength="200"
-              placeholder="例如：日本东京都涩谷区代代木 2-2-1 3F"></textarea>
-    <div class="addr-err" id="addrErr"></div>
-    <div class="addr-tip">地址只用于这一次审核，<b>不会保存到服务器</b>。填假的会被拒绝。</div>
-    <div class="dlg-acts">
-      <button class="ghost" id="addrLeave" type="button">离开</button>
-      <button id="addrSubmit" type="button">提交审核</button>
-    </div>
-  </div>
-</div>
-
-<!-- 中国大陆用户拦截 -->
-<div class="mask" id="cnBlockMask" hidden>
-  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="cnTitle">
-    <div class="dlg-icon">⛔</div>
-    <h2 id="cnTitle">无法访问</h2>
-    <p>为遵守中国大陆法律法规，本网站暂时不提供中国大陆聊天室。</p>
-    <p>如对此判定有异议，请联系管理员。</p>
-    <div class="dlg-acts">
-      <button class="ghost" id="cnClose" type="button">返回</button>
-    </div>
-  </div>
-</div>
-
 </body>
 </html>

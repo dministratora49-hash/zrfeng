@@ -468,31 +468,49 @@ en_us/
 
 ## 💬 聊天室
 
-`/zh_cn/chat/`（英文 `/en_us/chat/`），公开频道，KV 轮询实现（不用 Durable Objects）。
+`/zh_cn/chat/`（英文 `/en_us/chat/`），**仅登录用户可见**的实时聊天室。
 
-**进入前有两道确认弹窗**
-1. 未加密警告：说明没有端到端加密、消息明文存在服务器上、管理员可查看，
-   带「不再提醒」勾选（记在 localStorage），两个按钮：**确定** → 第二道；**取消** → 回导航站；
-2. 粗糙上线提醒：说明可能有很多 bug，请到「联系我们」提交。只有**确定**，点了才真正进入。
+界面与交互移植自 [Syntrx888/ChatterBox](https://github.com/Syntrx888/ChatterBox)（MIT），
+但后端**没有照搬** —— Cloudflare Workers 没有 Node 运行时，Chatterbox 用的
+Socket.IO + SQLite 跑不起来，所以改写成 **Durable Objects + Workers 原生 WebSocket**。
 
-点了「不再提醒」的人下次跳过第一道，但第二道仍然弹一次（不静默进站）。
+**与 Chatterbox 的差异**
+
+| | Chatterbox 原版 | 本站 |
+|---|---|---|
+| 账号 | 自带注册/登录（JWT + bcrypt + SQLite） | **直接用站内的 session**，无独立账号体系 |
+| 进入门槛 | 无 | **必须登录**，未登录直接挡住整页 |
+| 昵称 | 注册时自己填 | 用账户名，可临时改 |
+| 管理员 | 独立的管理员密码 | **站内的管理员**（主/副），能撤回和清空 |
+| 实时性 | Socket.IO | Workers 原生 WebSocket |
+| 存储 | SQLite | Cloudflare KV（与站点其它数据同一个命名空间） |
 
 **接口**
-- `GET /api/chat?since=<最后一条 id>` —— 拉消息 + 在线人数 + 我的身份；带 `since` 只返增量
+
+- `GET /api/chat/socket` —— WebSocket 升级。**身份在这里校验**：Worker 先验 session，
+  通过后把用户名塞进 query 交给 DO；客户端自己声明的身份一律不信
+- `GET /api/chat` —— 拉历史消息 + 在线人数（页面首次加载用，之后走 WebSocket）
 - `POST /api/chat` —— 发一条，限 500 字
+- `POST /api/chat/revoke` —— 管理员撤回单条
 - `POST /api/admin/chat/clear` —— 管理员清空
 
 **实现要点**
-- 键 `chat:<15 位时间戳>-<随机>`，字典序即时间序；最多留 300 条，超出删最旧
-- 前端每 2.5 秒轮询一次，页面切到后台（`document.hidden`）自动暂停
-- 在线人数用 `chat:online:<who>` 键 + 90 秒 TTL 自动过期，不需要定时任务
-- 身份：登录用户用账户名（管理员额外标黄并显示 · 管理员），未登录按设备 cookie 派生 `guest-xxxx`，
-  游客**不能**自己改昵称冒充别人
+
+- `chat-do.js` 是 Durable Object，负责「谁在线、怎么广播」；消息本体仍存 KV（键 `chat:<15 位时间戳>-<随机>`）
+- DO 是单线程强一致的，正好当聊天室的唯一真相源：广播、在线人数、撤回都在同一实例里算
+- 最多留 300 条，超出删最旧；键按字典序即时间序
+- 身份只有一种：登录用户的账户名。**没有游客**，也不用设备 cookie 派生昵称
 - 限流：同一人 1.5 秒一条、同一 IP 每分钟 20 条、消息最长 500 字
 - 渲染全用 `textContent`，消息内容不会当 HTML 执行
+- 发完消息前端**立即本地显示**（不等广播），避免 WebSocket 抖动时界面没反应；
+  服务端广播的那条会被去重，不会显示两遍
 - 已登记进 `MAINT_PAGES` 和 `status.js` 的 `PAGE_PATHS`，可以在控制台单独对它做「页面维护」
 
+> **部署提醒**：加了 Durable Object 之后，第一次部署需要跑一次 `npx wrangler deploy`，
+> wrangler 会自动创建 DO 实例，不需要手动建。
+
 > 只是「不建议用」的提示，**不是**安全背书：消息明文存 KV，管理员和 Cloudflare 都能看到。
+
 
 ## 📌 剩余更新清单
 
@@ -542,6 +560,17 @@ en_us/
 > 遵循 GPLv3 协议开源。
 
 这是 GPLv3 本身的要求，也希望后来的人能找到原作者。
+
+## 🙏 第三方项目
+
+本项目借鉴 / 使用了以下开源项目：
+
+| 项目 | 协议 | 用在哪 |
+|------|------|--------|
+| [Syntrx888/ChatterBox](https://github.com/Syntrx888/ChatterBox) | MIT | 聊天室的界面与交互设计（后端因 Workers 无 Node 运行时而重写为 Durable Objects） |
+
+MIT 协议要求保留版权声明与许可声明 —— 原项目的版权与许可条款保留在
+[Syntrx888/ChatterBox](https://github.com/Syntrx888/ChatterBox) 的 `LICENSE` 文件里。
 
 ---
 

@@ -32,6 +32,29 @@ binding = "USERS"
 id = "fa1730e5c959430c82fc69708b68dba9"
 
 # ---------------------------------------------------------------------------
+# Durable Object：聊天室
+#
+# 界面与交互移植自 Syntrx888/ChatterBox（Vue3 + Socket.IO + SQLite），
+# 但后端没法照搬 —— Workers 没有 Node 运行时，Socket.IO 协议跑不了，
+# 所以改用 Workers 原生 WebSocket + Durable Object。
+#
+# DO 负责「谁在线、怎么广播」；消息本体仍存在上面的 USERS KV 里。
+# 部署命令（加了 DO 之后需要重新部署一次）：
+#
+#     npx wrangler deploy
+#
+# 首次部署会自动创建 DO，无需手动建。
+# ---------------------------------------------------------------------------
+[[durable_objects.bindings]]
+name = "CHATROOM"
+class_name = "ChatRoom"
+
+# DO 的脚本入口：单独的模块，导出 ChatRoom 类
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ChatRoom"]
+
+# ---------------------------------------------------------------------------
 # 密钥（不要把明文写进本文件，它会提交到公开仓库！）
 # 请在 Cloudflare 后台「变量和机密」里逐条添加：
 #

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<script>/* Apply the saved theme as early as possible (default Android; only Console → Appearance writes it) */(function(){var t='android';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark'||s==='android')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
+<script>/* 尽早落地主题（默认原生安卓；只认控制台「外观」里存下的值，避免闪色） */(function(){var t='android';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark'||s==='android')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
 <title>Chat Room</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -18,7 +18,6 @@
     color: #e8f5ee;
     padding: 70px 16px 24px;
   }
-  body.locked { overflow: hidden; }
 
   body::before {
     content: "";
@@ -26,13 +25,13 @@
     inset: 0;
     background-image:
       linear-gradient(rgba(0,255,140,0.03) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(0,255,140,0.03) 1px, transparent 1px);
+      linear-gradient(rgba(0,255,140,0.03) 1px, transparent 1px);
     background-size: 40px 40px;
     pointer-events: none;
     z-index: 0;
   }
 
-  .wrap { position: relative; z-index: 1; max-width: 760px; margin: 0 auto; }
+  .wrap { position: relative; z-index: 1; max-width: 780px; margin: 0 auto; }
 
   h1 {
     font-size: 26px;
@@ -45,7 +44,7 @@
   }
   p.sub { text-align: center; color: #7fa893; font-size: 12px; letter-spacing: 1px; margin-bottom: 18px; }
 
-  /* ---------- chat body ---------- */
+  /* ---------- 聊天主体 ---------- */
   .chat-card {
     background: rgba(10, 18, 14, 0.85);
     border: 1px solid rgba(0, 255, 140, 0.22);
@@ -53,7 +52,7 @@
     box-shadow: 0 0 18px rgba(0, 255, 140, 0.06);
     display: flex;
     flex-direction: column;
-    height: min(68vh, 620px);
+    height: min(70vh, 640px);
     overflow: hidden;
   }
 
@@ -75,28 +74,41 @@
   }
   .linkbtn:hover { color: #00ff8c; }
 
+  /* ---------- 消息区 ---------- */
   .msgs {
     flex: 1;
     overflow-y: auto;
     padding: 14px 16px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 12px;
     scroll-behavior: smooth;
   }
   .msgs::-webkit-scrollbar { width: 6px; }
   .msgs::-webkit-scrollbar-thumb { background: rgba(0,255,140,.2); border-radius: 3px; }
 
-  .m { display: flex; flex-direction: column; max-width: 82%; }
-  .m.mine { align-self: flex-end; align-items: flex-end; }
+  /* Chatterbox 的气泡布局：头像在左（自己的在右），气泡圆角卡片 */
+  .m { display: flex; gap: 10px; align-items: flex-start; max-width: 88%; }
+  .m.mine { align-self: flex-end; flex-direction: row-reverse; }
+  .m .ava {
+    width: 36px; height: 36px; border-radius: 50%; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0, 255, 140, 0.12);
+    border: 1px solid rgba(0, 255, 140, 0.3);
+    color: #00ff8c; font-size: 14px; font-weight: 700;
+    overflow: hidden;
+  }
+  .m .ava img { width: 100%; height: 100%; object-fit: cover; }
+  .m-body { min-width: 0; }
+  .m.mine .m-body { display: flex; flex-direction: column; align-items: flex-end; }
   .m-meta { font-size: 10.5px; color: #5d7a6c; margin-bottom: 3px; display: flex; gap: 6px; align-items: center; }
   .m-meta .nm { color: #7fa893; }
   .m.admin .m-meta .nm { color: #ffb020; }
   .m-bubble {
-    background: rgba(0, 255, 140, 0.07);
-    border: 1px solid rgba(0, 255, 140, 0.16);
-    border-radius: 12px;
-    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(0, 255, 140, 0.14);
+    border-radius: 4px 14px 14px 14px;
+    padding: 9px 13px;
     font-size: 13.5px;
     line-height: 1.7;
     color: #cfe8dc;
@@ -104,13 +116,27 @@
     word-break: break-word;
   }
   .m.mine .m-bubble {
-    background: rgba(0, 255, 140, 0.16);
-    border-color: rgba(0, 255, 140, 0.34);
+    background: rgba(0, 255, 140, 0.14);
+    border-color: rgba(0, 255, 140, 0.3);
+    border-radius: 14px 4px 14px 14px;
     color: #e8f5ee;
   }
+  .m.sys { align-self: center; max-width: 100%; }
+  .m.sys .m-bubble {
+    background: transparent; border: none; color: #5d7a6c;
+    font-size: 11.5px; padding: 2px 0; text-align: center;
+  }
+  /* 撤回按钮（管理员） */
+  .m-del {
+    display: none; background: none; border: none; color: #5d7a6c;
+    font-size: 10.5px; cursor: pointer; font-family: inherit; padding: 2px 0 0;
+  }
+  .m.mine.can-del .m-del, .m:not(.mine).can-del .m-del { display: block; }
+  .m-del:hover { color: #ff7b7b; }
 
   .empty { text-align: center; color: #4a6a58; font-size: 13px; padding: 30px 0; }
 
+  /* ---------- 输入区 ---------- */
   .composer {
     border-top: 1px solid rgba(0, 255, 140, 0.14);
     padding: 10px 12px 12px;
@@ -142,7 +168,7 @@
   .links a:hover { color: #00ff8c; }
   footer { text-align: center; color: #3d5a4b; font-size: 11px; margin-top: 18px; letter-spacing: 1px; }
 
-  /* ---------- the two dialogs shown before entering ---------- */
+  /* ---------- 弹窗（未登录 / 成员 / 安全提醒） ---------- */
   .mask {
     position: fixed; inset: 0; z-index: 50;
     background: rgba(2, 6, 4, 0.86);
@@ -192,162 +218,64 @@
     background: transparent; color: #9fb8ab;
   }
   .dlg-acts button:active { filter: brightness(1.3); }
-  .dlg-acts button.primary-warn {
-    border-color: rgba(255, 176, 32, 0.55);
-    background: rgba(255, 176, 32, 0.14);
-    color: #ffb020;
-  }
 
-  /* ---------- 聊天室灯色覆盖（theme.css 没有聊天室的规则，这里自己补） ---------- */
-  html[data-theme="light"] body {
-    background: #f2f7f3;
-    background-image:
-      radial-gradient(circle at 15% 10%, rgba(0, 145, 88, 0.05) 0%, transparent 45%),
-      radial-gradient(circle at 85% 85%, rgba(0, 145, 88, 0.03) 0%, transparent 45%);
-    color: #10231a;
+  /* ---------- 成员列表（Chatterbox 的 MembersView 简化版） ---------- */
+  .member-list { max-height: 320px; overflow-y: auto; margin: 4px 0 0; }
+  .member {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 2px; border-bottom: 1px solid rgba(0, 255, 140, 0.1);
   }
-  html[data-theme="light"] body::before {
-    background-image:
-      linear-gradient(rgba(0,145,88,0.03) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(0,145,88,0.03) 1px, transparent 1px);
+  .member:last-child { border-bottom: none; }
+  .member .ava {
+    width: 32px; height: 32px; border-radius: 50%; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0, 255, 140, 0.12);
+    border: 1px solid rgba(0, 255, 140, 0.28);
+    color: #00ff8c; font-size: 13px; font-weight: 700;
   }
+  .member .nm { font-size: 13.5px; color: #cfe8dc; }
+  .member .desc { font-size: 11px; color: #5d7a6c; margin-top: 2px; }
+  .member .me-tag { font-size: 10px; color: #00ff8c; margin-left: 6px; }
+
+  /* ---------- 浅色 / 原生安卓主题 ---------- */
+  html[data-theme="light"] body { background: #f2f7f3; color: #10231a; }
   html[data-theme="light"] h1 { color: #10231a; }
-  html[data-theme="light"] .sub { color: #5a7a68; }
-  html[data-theme="light"] .chat-card {
-    background: rgba(255, 255, 255, 0.9);
-    border-color: rgba(0, 145, 88, 0.2);
-  }
-  html[data-theme="light"] .chat-head {
-    border-color: rgba(0, 145, 88, 0.12);
-    color: #5a7a68;
-  }
+  html[data-theme="light"] .chat-card { background: rgba(255,255,255,.94); border-color: rgba(0,145,88,.2); }
+  html[data-theme="light"] .chat-head { border-bottom-color: rgba(0,145,88,.16); color: #5a7a68; }
   html[data-theme="light"] .chat-head b { color: #009658; }
-  html[data-theme="light"] .linkbtn { color: #5a7a68; }
-  html[data-theme="light"] .linkbtn:hover { color: #009658; }
-  html[data-theme="light"] .msgs::-webkit-scrollbar-thumb { background: rgba(0,145,88,.2); }
-  html[data-theme="light"] .m-meta { color: #6a8a78; }
+  html[data-theme="light"] .m-bubble { background: #f4f7f5; border-color: rgba(0,145,88,.16); color: #2a4a3a; }
+  html[data-theme="light"] .m.mine .m-bubble { background: #d6ecff; border-color: rgba(0,145,88,.26); color: #10231a; }
   html[data-theme="light"] .m-meta .nm { color: #5a7a68; }
-  html[data-theme="light"] .m.admin .m-meta .nm { color: #b8860b; }
-  html[data-theme="light"] .m-bubble {
-    background: rgba(0, 145, 88, 0.06);
-    border-color: rgba(0, 145, 88, 0.14);
-    color: #2a4a3a;
-  }
-  html[data-theme="light"] .m.mine .m-bubble {
-    background: rgba(0, 145, 88, 0.12);
-    border-color: rgba(0, 145, 88, 0.28);
-    color: #10231a;
-  }
-  html[data-theme="light"] .empty { color: #7a9a88; }
-  html[data-theme="light"] .composer {
-    border-color: rgba(0, 145, 88, 0.12);
-    background: rgba(242, 247, 243, 0.5);
-  }
-  html[data-theme="light"] .composer textarea {
-    border-color: rgba(0, 145, 88, 0.2);
-    background: rgba(0, 0, 0, 0.03);
-    color: #10231a;
-  }
-  html[data-theme="light"] .composer textarea:focus { border-color: rgba(0, 145, 88, 0.5); }
-  html[data-theme="light"] .composer button.send {
-    border-color: rgba(0, 145, 88, 0.35);
-    background: rgba(0, 145, 88, 0.08);
-    color: #009658;
-  }
-  html[data-theme="light"] .composer .hint { color: #7a9a88; }
-  html[data-theme="light"] .composer .hint .err { color: #cc4444; }
+  html[data-theme="light"] .composer { background: rgba(255,255,255,.7); border-top-color: rgba(0,145,88,.16); }
+  html[data-theme="light"] .composer textarea { background: #fff; border-color: rgba(0,145,88,.25); color: #10231a; }
+  html[data-theme="light"] .composer button.send { border-color: rgba(0,145,88,.35); background: rgba(0,145,88,.08); color: #009658; }
+  html[data-theme="light"] .empty, html[data-theme="light"] .composer .hint { color: #7a9a88; }
   html[data-theme="light"] .links a { color: #5a7a68; }
-  html[data-theme="light"] .links a:hover { color: #009658; }
-  html[data-theme="light"] footer { color: #9aaa98; }
-  html[data-theme="light"] .mask { background: rgba(242, 247, 243, 0.86); }
-  html[data-theme="light"] .dlg {
-    background: rgba(255, 255, 255, 0.98);
-    border-color: rgba(184, 134, 11, 0.3);
-    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.1);
-  }
-  html[data-theme="light"] .dlg.danger { border-color: rgba(204, 68, 68, 0.3); }
-  html[data-theme="light"] .dlg h2 { color: #b8860b; }
-  html[data-theme="light"] .dlg.danger h2 { color: #cc4444; }
-  html[data-theme="light"] .dlg p { color: #3a5a4a; }
-  html[data-theme="light"] .dlg p strong { color: #10231a; }
-  html[data-theme="light"] .dlg .warnbox {
-    background: rgba(184, 134, 11, 0.05);
-    border-left-color: rgba(184, 134, 11, 0.4);
-    color: #6a5a3a;
-  }
-  html[data-theme="light"] .dlg .check { color: #5a7a68; }
-  html[data-theme="light"] .dlg-acts button {
-    border-color: rgba(0, 145, 88, 0.35);
-    background: rgba(0, 145, 88, 0.08);
-    color: #009658;
-  }
-  html[data-theme="light"] .dlg-acts button.ghost {
-    border-color: rgba(0, 0, 0, 0.1);
-    background: transparent;
-    color: #5a7a68;
-  }
-  html[data-theme="light"] .dlg-acts button.primary-warn {
-    border-color: rgba(184, 134, 11, 0.45);
-    background: rgba(184, 134, 11, 0.1);
-    color: #b8860b;
-  }
+  html[data-theme="light"] footer { color: #7a9a88; }
 
-  /* CN 用户拦截弹窗 */
-  #cnBlockMask { z-index: 60; }
-  #cnBlockMask .dlg { border-color: rgba(255, 107, 107, 0.5); max-width: 420px; }
-  #cnBlockMask .dlg-icon { font-size: 36px; }
-  #cnBlockMask h2 { color: #ff7b7b; }
-  #cnBlockMask p { color: #b9d2c5; }
-  #cnBlockMask .cn-note {
-    font-size: 12px; color: #6d8a7b; margin-top: 10px; line-height: 1.7;
-    background: rgba(255,107,107,0.06); border-radius: 8px; padding: 8px 12px;
+  @media (max-width: 520px) {
+    body { padding-top: 56px; }
+    h1 { font-size: 22px; }
+    .m { max-width: 94%; }
   }
-
-  /* Residential address review dialog */
-  #addrMask { z-index: 70; }
-  #addrMask .dlg { max-width: 460px; }
-  #addrMask h2 { color: #00ff8c; }
-  .addr-in {
-    width: 100%; min-height: 84px; resize: vertical;
-    padding: 11px 13px; margin-top: 4px;
-    font-family: inherit; font-size: 13.5px; line-height: 1.7;
-    color: #e8f5ee; background: rgba(0,255,140,0.05);
-    border: 1px solid rgba(0,255,140,0.22); border-radius: 10px;
-    outline: none;
-  }
-  .addr-in:focus { border-color: rgba(0,255,140,0.5); }
-  .addr-in::placeholder { color: #6d8a7b; }
-  .addr-err { font-size: 12.5px; color: #ff8a8a; line-height: 1.7; margin-top: 8px; min-height: 18px; white-space: pre-line; }
-  .addr-tip { font-size: 12px; color: #6d8a7b; line-height: 1.7; margin-top: 8px; }
-  html[data-theme="light"] #addrMask h2 { color: #009658; }
-  html[data-theme="light"] .addr-in {
-    color: #10231a; background: rgba(0,145,88,0.04); border-color: rgba(0,145,88,0.25);
-  }
-  html[data-theme="light"] .addr-in::placeholder { color: #7d9a8b; }
-  html[data-theme="light"] .addr-err { color: #cc4444; }
-  html[data-theme="light"] .addr-tip { color: #5a7a68; }
-  html[data-theme="android"] #addrMask h2 { color: var(--md-primary); }
-  html[data-theme="android"] .addr-in {
-    color: var(--md-on-surface); background: var(--md-surface-2);
-    border-color: var(--md-outline-var);
-  }
-  html[data-theme="android"] .addr-in::placeholder { color: var(--md-on-surface-var); }
-  html[data-theme="android"] .addr-err { color: var(--md-error); }
-  html[data-theme="android"] .addr-tip { color: var(--md-on-surface-var); }
 </style>
 <link rel="stylesheet" href="/theme.css">
 <link rel="stylesheet" href="/android.css">
 </head>
-<body class="locked">
+<body>
 <div class="wrap">
   <h1>Chat Room</h1>
-  <p class="sub">Public channel · Not encrypted · Do not send sensitive information</p>
+  <p class="sub">Live messages · Only visible to signed-in users · Not encrypted, please do not send sensitive information</p>
 
   <div class="chat-card">
     <div class="chat-head">
-      <div class="left"><span class="dot" id="onDot"></span><span>Online: <b id="onCount">–</b></span></div>
+      <div class="left">
+        <span class="dot" id="onDot"></span>
+        <span><b id="onCount">–</b> online</span>
+      </div>
       <div class="head-acts">
         <span id="meLine">—</span>
+        <button class="linkbtn" id="membersBtn" type="button">Members</button>
         <button class="linkbtn" id="refreshBtn" type="button">Refresh</button>
         <button class="linkbtn" id="clearBtn" type="button" hidden>Clear</button>
       </div>
@@ -359,30 +287,39 @@
         <button class="send" id="sendBtn" type="button">Send</button>
       </div>
       <div class="hint">
-        <span id="hintText">Messages are public and are not end-to-end encrypted</span>
+        <span id="hintText">Messages are public and not end-to-end encrypted</span>
         <span id="counter">0/500</span>
       </div>
     </div>
   </div>
 
   <div class="links">
-    <a href="/en_us/guide/">Directory</a>
-    <a href="/en_us/">Home</a>
+    <a href="/en_us/guide/">← Back to Directory</a>
     <a href="/en_us/contact/">Contact us</a>
   </div>
-  <footer>zrfeng.top · Chat Room (Beta)</footer>
+  <footer>zrfeng.top · Chat Room</footer>
 </div>
 
-<!-- First gate: no end-to-end encryption -->
+<!-- 未登录：挡住整页 -->
+<div class="mask" id="loginMask" hidden>
+  <div class="dlg">
+    <div class="dlg-icon">🔒</div>
+    <h2>Please sign in</h2>
+    <p>The chat room is open to <strong>signed-in users</strong> only, so every message has a real identity behind it.</p>
+    <p class="small">Sign in and you can join in.</p>
+    <div class="dlg-acts">
+      <a class="ghost" href="/en_us/login/" style="padding:10px 20px;border-radius:10px;font-size:13px;text-decoration:none;border:1px solid rgba(255,255,255,.18);color:#9fb8ab">Sign in</a>
+    </div>
+  </div>
+</div>
+
+<!-- 安全提醒 -->
 <div class="mask" id="warnMask" hidden>
-  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="warnTitle">
+  <div class="dlg">
     <div class="dlg-icon">⚠️</div>
-    <h2 id="warnTitle">Security notice</h2>
-    <p>This chat room <strong>does not use end-to-end encryption</strong>, so we do not recommend using it.</p>
-    <p>Your messages are stored on the server in plain text and can be read by the administrators.</p>
-    <div class="warnbox">Please do not send passwords, ID numbers, phone numbers, addresses or any other sensitive information here.</div>
-    <p>If you still want to use it, click “OK” below.</p>
-    <label class="check"><input type="checkbox" id="noMore"> Don't remind me again</label>
+    <h2>Safety reminder</h2>
+    <div class="warnbox">Please do not post passwords, ID numbers, phone numbers, home addresses or any other sensitive information here.</div>
+    <label class="check"><input type="checkbox" id="noMore"> Do not remind me again</label>
     <div class="dlg-acts">
       <button class="ghost" id="warnCancel" type="button">Cancel</button>
       <button class="primary-warn" id="warnOk" type="button">OK</button>
@@ -390,249 +327,58 @@
   </div>
 </div>
 
-<!-- Second gate: rough launch notice -->
-<div class="mask" id="bugMask" hidden>
-  <div class="dlg danger" role="dialog" aria-modal="true" aria-labelledby="bugTitle">
-    <div class="dlg-icon">🐛</div>
-    <h2 id="bugTitle">About this page</h2>
-    <p>This page was shipped in a hurry and probably has quite a few bugs.</p>
-    <p>If you run into one, please report it on the <strong>Contact us</strong> page and we will look into it.</p>
+<!-- 成员列表 -->
+<div class="mask" id="memberMask" hidden>
+  <div class="dlg">
+    <div class="dlg-icon">👥</div>
+    <h2>Online members</h2>
+    <div class="member-list" id="memberList"></div>
     <div class="dlg-acts">
-      <button id="bugOk" type="button">OK</button>
+      <button class="ghost" id="memberClose" type="button">Close</button>
     </div>
   </div>
 </div>
 
-<script src="/en_us/status.js" defer></script>
 <script>
 (function () {
   'use strict';
 
-  var ACK_KEY = 'zrfeng-chat-ack';        // "don't remind me again" is remembered on this device
-  var POLL_MS = 2500;
+  var ACK_KEY = 'dsh-chat-ack';
+  var MAX_TEXT = 500;
 
-  var el = function (id) { return document.getElementById(id); };
-  function p2(n) { return n < 10 ? '0' + n : '' + n; }
+  function el(id) { return document.getElementById(id); }
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
   function fmt(ts) {
-    var d = new Date(Number(ts));
-    var today = new Date();
-    var sameDay = d.getFullYear() === today.getFullYear()
-      && d.getMonth() === today.getMonth() && d.getDate() === today.getDate();
-    var t = p2(d.getHours()) + ':' + p2(d.getMinutes());
-    return sameDay ? t : (d.getMonth() + 1) + '/' + d.getDate() + ' ' + t;
+    var d = new Date(ts);
+    function p(n) { return n < 10 ? '0' + n : '' + n; }
+    return p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  }
+  /** 取名字首字符当头像（Chatterbox 也是这个思路：没有头像就显示首字母） */
+  function initial(name) {
+    var s = String(name || '?').trim();
+    return s ? s.charAt(0).toUpperCase() : '?';
   }
 
-  /* ---------------- the two gates before entering ---------------- */
-  var entered = false;
+  var seen = {};
   var lastId = '';
-  var pollTimer = null;
+  var myName = '';
+  var isAdmin = false;
+  var ws = null;
+  var wsTimer = null;
+  var reconnect = 0;
 
-  function acked() {
-    try { return localStorage.getItem(ACK_KEY) === '1'; } catch (e) { return false; }
+  /* ---------------- 提示 ---------------- */
+  function setHint(text, isErr) {
+    var h = el('hintText');
+    h.textContent = text;
+    h.className = isErr ? 'err' : '';
   }
 
-  function lockBody(on) {
-    document.body.classList.toggle('locked', !!on);
-  }
-
-  /** Cancel → go back to the directory */
-  function leave() {
-    location.href = '/en_us/guide/';
-  }
-
-  function showWarn() {
-    el('warnMask').hidden = false;
-    lockBody(true);
-  }
-
-  function showBug() {
-    el('warnMask').hidden = true;
-    el('bugMask').hidden = false;
-    lockBody(true);
-  }
-
-  function enterChat() {
-    el('warnMask').hidden = true;
-    el('bugMask').hidden = true;
-    lockBody(false);
-    if (entered) return;
-    entered = true;
-    load(true);
-    pollTimer = setInterval(function () { if (!document.hidden) load(false); }, POLL_MS);
-  }
-
-  /* ---------------- Region gate (residential address review) ----------------
-     The decision is made on the server; this side only collects input and shows the verdict:
-       · deny:'cn'        → mainland China, show the block dialog without asking for an address
-       · need:'address'   → show the address dialog
-       · ok               → continue to the usual privacy notice
-     The server is what actually enforces it (/api/chat checks the pass itself);
-     this is just the polite half. */
-  var gatePassed = false;
-
-  /** Browser time zone, e.g. Asia/Shanghai */
-  function deviceTz() {
-    try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; }
-    catch (e) { return ''; }
-  }
-
-  /** Device region: pull the country code out of the language tag (en-US → US).
-      Browsers have no better API for this, so it is only an approximation. */
-  function deviceRegion() {
-    var langs = [];
-    try {
-      if (navigator.languages && navigator.languages.length) {
-        langs = Array.prototype.slice.call(navigator.languages);
-      }
-      if (navigator.language) langs.push(navigator.language);
-    } catch (e) { /* ignore */ }
-    for (var i = 0; i < langs.length; i++) {
-      var m = String(langs[i] || '').match(/[-_]([A-Za-z]{2})\b/);
-      if (m) return m[1].toUpperCase();
-    }
-    return '';
-  }
-
-  /** Ask the server "may I come in?"; passing an address means "review this one" */
-  function gateCheck(address) {
-    return fetch('/api/chat/gate', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ tz: deviceTz(), region: deviceRegion(), address: address || '' })
-    })
-      .then(function (r) { return r.json(); })
-      .catch(function () { return null; });
-  }
-
-  function showAddr(msg) {
-    el('warnMask').hidden = true;
-    el('bugMask').hidden = true;
-    el('cnBlockMask').hidden = true;
-    el('addrMask').hidden = false;
-    lockBody(true);
-    el('addrErr').textContent = msg || '';
-    var box = el('addrInput');
-    if (box) setTimeout(function () { try { box.focus(); } catch (e) { /* ignore */ } }, 40);
-  }
-
-  var addrBusy = false;
-
-  function submitAddr() {
-    if (addrBusy) return;
-    var v = String(el('addrInput').value || '').trim();
-    if (v.length < 6) {
-      el('addrErr').textContent = 'That address is too short — please be more specific';
-      return;
-    }
-    addrBusy = true;
-    el('addrSubmit').disabled = true;
-    el('addrErr').textContent = 'Checking…';
-    gateCheck(v).then(function (j) {
-      addrBusy = false;
-      el('addrSubmit').disabled = false;
-      if (j && j.ok) {
-        gatePassed = true;
-        el('addrMask').hidden = true;
-        afterGate();
-        return;
-      }
-      if (j && j.deny === 'cn') { showCnBlock(); return; }
-      // The server attaches a short "detail" on failure (no AI binding / model error /
-      // unparseable output). Showing it makes three very different faults distinguishable.
-      var msg = (j && j.message) || 'That did not pass — please try again';
-      if (j && j.detail) msg += '\nDetails: ' + String(j.detail).slice(0, 140);
-      el('addrErr').textContent = msg;
-    });
-  }
-
-  function bindAddr() {
-    el('addrLeave').onclick = leave;
-    el('addrSubmit').onclick = submitAddr;
-    el('addrInput').addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        submitAddr();
-      }
-    });
-  }
-
-  /** Gate cleared — carry on to the usual "mind your privacy" notice */
-  function afterGate() {
-    if (acked()) showBug();
-    else showWarn();
-  }
-
-  /** Pass expired mid-session or the server no longer accepts us: go back to the gate */
-  function gateKicked(j) {
-    entered = false;
-    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-    lockBody(true);
-    if (j && j.deny === 'cn') showCnBlock();
-    else showAddr((j && j.message) || '');
-  }
-
-  function showCnBlock() {
-    el('warnMask').hidden = true;
-    el('bugMask').hidden = true;
-    var mask = el('cnBlockMask');
-    if (mask) mask.hidden = false;
-    lockBody(true);
-    var close = el('cnClose');
-    if (close) close.onclick = function () { location.href = '/en_us/guide/'; };
-  }
-
-  /* ---------------- Admin: clear the chat room ----------------
-     This function used to be called but never defined (bindAdmin() is the second
-     line of boot()), so boot() threw a ReferenceError immediately and none of the
-     dialogs or the initial load ever ran — the page looked "entered but empty". */
-  function bindAdmin() {
-    var btn = el('clearBtn');
-    if (!btn) return;
-    btn.onclick = function () {
-      if (btn.disabled) return;
-      if (!confirm('Clear the whole chat room? This cannot be undone.')) return;
-      btn.disabled = true;
-      fetch('/api/admin/chat/clear', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'content-type': 'application/json' },
-        body: '{}'
-      })
-        .then(function (r) { return r.json(); })
-        .then(function (j) {
-          btn.disabled = false;
-          if (j && j.ok) {
-            seen = {};
-            lastId = '';
-            el('msgs').innerHTML = '<div class="empty">No messages yet — say hello</div>';
-            setHint(j.message || 'Cleared', false);
-          } else {
-            setHint((j && j.message) || 'Could not clear', true);
-          }
-        })
-        .catch(function () {
-          btn.disabled = false;
-          setHint('Network error — could not clear', true);
-        });
-    };
-  }
-
-  function bindGate() {
-    el('warnOk').onclick = function () {
-      if (el('noMore').checked) {
-        try { localStorage.setItem(ACK_KEY, '1'); } catch (e) { /* ignore */ }
-      }
-      showBug();
-    };
-    el('warnCancel').onclick = leave;
-    el('bugOk').onclick = enterChat;
-    // Clicking the backdrop does nothing, so nobody enters by accident
-  }
-
-  /* ---------------- rendering ---------------- */
-  var seen = {};   // id -> true, dedupes incremental loads
-
+  /* ---------------- 消息渲染 ---------------- */
   function appendMessage(m) {
     if (seen[m.id]) return false;
     seen[m.id] = true;
@@ -642,13 +388,20 @@
     if (empty) box.innerHTML = '';
 
     var div = document.createElement('div');
-    div.className = 'm' + (m.mine ? ' mine' : '') + (m.admin ? ' admin' : '');
+    div.className = 'm' + (m.mine ? ' mine' : '') + (m.admin ? ' admin' : '') + (isAdmin ? ' can-del' : '');
+
+    var ava = document.createElement('div');
+    ava.className = 'ava';
+    ava.textContent = initial(m.name);
+
+    var body = document.createElement('div');
+    body.className = 'm-body';
 
     var meta = document.createElement('div');
     meta.className = 'm-meta';
     var nm = document.createElement('span');
     nm.className = 'nm';
-    nm.textContent = m.name + (m.admin ? ' · admin' : '');
+    nm.textContent = m.name + (m.admin ? ' · Admin' : '');
     var tm = document.createElement('span');
     tm.textContent = fmt(m.at);
     meta.appendChild(nm);
@@ -656,10 +409,22 @@
 
     var bubble = document.createElement('div');
     bubble.className = 'm-bubble';
-    bubble.textContent = m.text;   // textContent keeps this XSS-safe
+    bubble.textContent = m.text;   // textContent：天然防 XSS
 
-    div.appendChild(meta);
-    div.appendChild(bubble);
+    body.appendChild(meta);
+    body.appendChild(bubble);
+
+    if (isAdmin) {
+      var del = document.createElement('button');
+      del.className = 'm-del';
+      del.type = 'button';
+      del.textContent = 'Revoke';
+      del.onclick = function () { revoke(m.id); };
+      body.appendChild(del);
+    }
+
+    div.appendChild(ava);
+    div.appendChild(body);
     box.appendChild(div);
     return true;
   }
@@ -668,73 +433,133 @@
     var box = el('msgs');
     return box.scrollHeight - box.scrollTop - box.clientHeight < 80;
   }
-
   function scrollDown(force) {
     var box = el('msgs');
     if (force) box.scrollTop = box.scrollHeight;
   }
 
-  function renderMe(me, online) {
-    el('onCount').textContent = String(online || 0);
-    el('meLine').textContent = (me.loggedIn ? 'Signed in as ' : 'Guest: ') + me.name;
-    el('clearBtn').hidden = !me.isAdmin;
+  function renderMe(me) {
+    myName = (me && me.name) || '';
+    isAdmin = !!(me && me.isAdmin);
+    el('meLine').textContent = myName ? ('Hi, ' + myName) : '—';
+    el('clearBtn').hidden = !isAdmin;
     el('sendBtn').disabled = false;
   }
 
-  /* ---------------- polling ---------------- */
-  var loading = false;
+  /* ---------------- WebSocket ---------------- */
+  function wsUrl() {
+    var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return proto + '//' + location.host + '/api/chat/socket';
+  }
 
-  function load(initial) {
-    if (loading) return;
-    loading = true;
-    var url = '/api/chat' + (initial || !lastId ? '' : '?since=' + encodeURIComponent(lastId));
-    fetch(url, { cache: 'no-store', credentials: 'same-origin' })
-      .then(function (r) { return r.json(); })
-      .then(function (j) {
-        loading = false;
-        if (!j || !j.ok) {
-          // Server says we have not cleared the gate: the pass expired, back to the address dialog
-          if (j && j.gate === 'address') { gateKicked(j); return; }
-          setHint((j && j.message) || 'Failed to load', true);
-          return;
-        }
-        var stick = atBottom();
-        var box = el('msgs');
-        var added = 0;
-        (j.messages || []).forEach(function (m) {
-          if (appendMessage(m)) {
-            added++;
+  function connect() {
+    if (ws) { try { ws.close(); } catch (e) {} ws = null; }
+    el('onDot').classList.remove('off');
+
+    try {
+      ws = new WebSocket(wsUrl());
+    } catch (e) {
+      el('onDot').classList.add('off');
+      setHint('Could not connect — retrying…', true);
+      scheduleReconnect();
+      return;
+    }
+
+    ws.onopen = function () {
+      reconnect = 0;
+      el('onDot').classList.remove('off');
+      setHint('Connected', false);
+    };
+
+    ws.onmessage = function (ev) {
+      var d = null;
+      try { d = JSON.parse(ev.data); } catch (e) { return; }
+      if (!d || !d.type) return;
+
+      if (d.type === 'history') {
+        (d.messages || []).forEach(function (m) {
+          if (appendMessage({ id: m.id, at: m.at, name: m.name, text: m.text, admin: m.admin, mine: m.name === myName })) {
             if (!lastId || m.id > lastId) lastId = m.id;
           }
         });
-        if (initial && !added) {
-          box.innerHTML = '<div class="empty">No messages yet — say hello!</div>';
+        var box = el('msgs');
+        if (!box.querySelector('.m')) box.innerHTML = '<div class="empty">No messages yet — say hello!</div>';
+        scrollDown(true);
+        return;
+      }
+      if (d.type === 'message') {
+        var m = d.message || {};
+        var stick = atBottom();
+        if (appendMessage({ id: m.id, at: m.at, name: m.name, text: m.text, admin: m.admin, mine: m.name === myName })) {
+          if (m.id > lastId) lastId = m.id;
+          if (stick) scrollDown(true);
         }
-        if (added && (stick || initial)) scrollDown(true);
-        renderMe(j.me || {}, j.online);
-        touchCounter(j.max);
+        return;
+      }
+      if (d.type === 'online') {
+        el('onCount').textContent = String(d.online || 0);
+        members = {};
+        (d.members || []).forEach(function (n) { members[n] = true; });
+        return;
+      }
+      if (d.type === 'deleted') {
+        var box2 = el('msgs');
+        var node = box2.querySelector('[data-mid="' + d.id + '"]');
+        if (node) node.remove();
+        return;
+      }
+      if (d.type === 'cleared') {
+        seen = {};
+        lastId = '';
+        el('msgs').innerHTML = '<div class="empty">No messages yet — say hello!</div>';
+        return;
+      }
+    };
+
+    ws.onclose = function () {
+      el('onDot').classList.add('off');
+      setHint('Disconnected — reconnecting…', true);
+      scheduleReconnect();
+    };
+    ws.onerror = function () {
+      el('onDot').classList.add('off');
+    };
+  }
+
+  function scheduleReconnect() {
+    clearTimeout(wsTimer);
+    reconnect = Math.min(reconnect + 1, 6);
+    var delay = Math.min(1000 * reconnect, 8000);
+    wsTimer = setTimeout(connect, delay);
+  }
+
+  /* ---------------- 拉取历史（首次加载 + 手动刷新） ---------------- */
+  function load() {
+    fetch('/api/chat', { cache: 'no-store', credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j || !j.ok) {
+          if (j && j.needLogin) { showLogin(); return; }
+          setHint((j && j.message) || 'Could not load', true);
+          return;
+        }
+        renderMe(j.me || {});
+        el('onCount').textContent = String(j.online || 0);
+        seen = {};
+        lastId = '';
+        var box = el('msgs');
+        box.innerHTML = '';
+        (j.messages || []).forEach(function (m) {
+          if (appendMessage(m)) { if (!lastId || m.id > lastId) lastId = m.id; }
+        });
+        if (!box.querySelector('.m')) box.innerHTML = '<div class="empty">No messages yet — say hello!</div>';
+        scrollDown(true);
       })
-      .catch(function () {
-        loading = false;
-        el('onDot').classList.add('off');
-        setHint('Network error, retrying shortly', true);
-      });
+      .catch(function () { setHint('Network error — retrying soon', true); });
   }
 
-  function touchCounter(max) {
-    var n = el('input').value.length;
-    el('counter').textContent = n + '/' + (max || 500);
-  }
-
-  function setHint(text, isErr) {
-    var h = el('hintText');
-    h.textContent = text;
-    h.className = isErr ? 'err' : '';
-  }
-
-  /* ---------------- sending ---------------- */
+  /* ---------------- 发送 ---------------- */
   var sending = false;
-
   function send() {
     var input = el('input');
     var text = String(input.value || '').trim();
@@ -753,57 +578,152 @@
       .then(function (j) {
         sending = false;
         el('sendBtn').disabled = false;
-        if (j && j.ok) {
-          input.value = '';
-          touchCounter();
-          setHint('Messages are public and are not end-to-end encrypted', false);
-          appendMessage({ id: j.id, at: j.at, name: (j.me && j.me.name) || 'me', text: text, mine: true });
-          if (j.id && (!lastId || j.id > lastId)) lastId = j.id;
-          scrollDown(true);
-        } else if (j && j.gate === 'address') {
-          gateKicked(j);
-        } else {
-          setHint((j && j.message) || 'Failed to send', true);
+        if (!j || !j.ok) {
+          if (j && j.needLogin) { showLogin(); return; }
+          setHint((j && j.message) || 'Could not send', true);
+          return;
+        }
+        input.value = '';
+        touchCounter();
+        setHint('Messages are public and not end-to-end encrypted', false);
+        // Fallback: the broadcast may not arrive if the WebSocket is down,
+        // so show the message right away (the server also broadcasts it,
+        // and appendMessage de-duplicates by id).
+        if (j.id) {
+          var stick = atBottom();
+          if (appendMessage({ id: j.id, at: j.at, name: myName || 'me', text: text, admin: isAdmin, mine: true })) {
+            if (j.id > lastId) lastId = j.id;
+            if (stick) scrollDown(true);
+          }
         }
       })
       .catch(function () {
         sending = false;
         el('sendBtn').disabled = false;
-        setHint('Network error, message not sent', true);
+        setHint('Network error — message not sent', true);
       });
   }
 
-  /* ---------------- boot ---------------- */
-  function boot() {
-    bindGate();
-    bindAdmin();
-    bindAddr();
-    // Hide all masks first, then show them in order
-    el('warnMask').hidden = true;
-    el('bugMask').hidden = true;
-    el('cnBlockMask').hidden = true;
-    el('addrMask').hidden = true;
-    lockBody(true);
+  /* ---------------- 管理员撤回 / 清空 ---------------- */
+  function revoke(id) {
+    fetch('/api/chat/revoke', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: id }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j || !j.ok) { setHint((j && j.message) || 'Could not revoke', true); return; }
+        setHint('Revoked', false);
+      })
+      .catch(function () { setHint('Network error — revoke failed', true); });
+  }
 
-    // Region gate first: mainland China is refused outright, everyone else gets the address dialog
-    gateCheck('').then(function (j) {
-      if (j && j.ok) {
-        gatePassed = true;
-        afterGate();
-        return;
+  function bindClear() {
+    var btn = el('clearBtn');
+    if (!btn) return;
+    btn.onclick = function () {
+      if (btn.disabled) return;
+      if (!confirm('Clear the whole chat room? This cannot be undone.')) return;
+      btn.disabled = true;
+      fetch('/api/admin/chat/clear', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          btn.disabled = false;
+          if (j && j.ok) { setHint(j.message || 'Cleared', false); }
+          else { setHint((j && j.message) || 'Could not clear', true); }
+        })
+        .catch(function () { btn.disabled = false; setHint('Network error — clear failed', true); });
+    };
+  }
+
+  /* ---------------- 未登录 ---------------- */
+  function showLogin() {
+    el('loginMask').hidden = false;
+    el('msgs').innerHTML = '';
+    el('sendBtn').disabled = true;
+    el('onDot').classList.add('off');
+  }
+
+  /* ---------------- 安全提醒 ---------------- */
+  function bindWarn() {
+    el('warnOk').onclick = function () {
+      if (el('noMore').checked) {
+        try { localStorage.setItem(ACK_KEY, '1'); } catch (e) { /* ignore */ }
       }
-      if (j && j.deny === 'cn') {
-        showCnBlock();
-        return;
+      el('warnMask').hidden = true;
+      connect();
+      load();
+    };
+    el('warnCancel').onclick = function () {
+      el('warnMask').hidden = true;
+      connect();
+      load();
+    };
+  }
+
+  /* ---------------- 成员列表 ---------------- */
+  function bindMembers() {
+    el('membersBtn').onclick = function () {
+      var box = el('memberList');
+      box.innerHTML = '<div class="empty">Loading…</div>';
+      el('memberMask').hidden = false;
+      // 在线成员就是当前连着的人 —— WebSocket 里维护，前端自己记一份
+      var list = onlineMembers();
+      if (!list.length) {
+        box.innerHTML = '<div class="empty">Nobody online right now</div>';
+      } else {
+        box.innerHTML = list.map(function (n) {
+          var tag = (n === myName) ? '<span class="me-tag">(me)</span>' : '';
+          return '<div class="member"><div class="ava">' + esc(initial(n)) + '</div>' +
+            '<div><div class="nm">' + esc(n) + tag + '</div></div></div>';
+        }).join('');
       }
-      if (j && j.need === 'address') {
-        showAddr('');
-        return;
-      }
-      // No clear verdict (offline, AI down): neither sneak them in nor lock them out —
-      // show the dialog with the reason so they can retry
-      showAddr((j && j.message) || 'Could not confirm your region — check your connection and try again');
+    };
+    el('memberClose').onclick = function () { el('memberMask').hidden = true; };
+  }
+
+  var members = {};
+  function onlineMembers() {
+    return Object.keys(members);
+  }
+
+  /* ---------------- 计数器 ---------------- */
+  function touchCounter() {
+    var n = el('input').value.length;
+    el('counter').textContent = n + '/' + MAX_TEXT;
+  }
+
+  /* ---------------- 启动 ---------------- */
+  function boot() {
+    el('input').addEventListener('input', touchCounter);
+    el('sendBtn').onclick = send;
+    el('refreshBtn').onclick = load;
+    el('input').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
     });
+    bindWarn();
+    bindClear();
+    bindMembers();
+
+    // 先看登录状态：没登录就把整页挡住，不建立 WebSocket
+    fetch('/api/status', { cache: 'no-store', credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j || !j.loggedIn) { showLogin(); return; }
+        renderMe({ name: j.username, isAdmin: j.isAdmin });
+        var acked = false;
+        try { acked = localStorage.getItem(ACK_KEY) === '1'; } catch (e) { /* ignore */ }
+        if (acked) { connect(); load(); }
+        else { el('warnMask').hidden = false; }
+      })
+      .catch(function () { showLogin(); });
   }
 
   if (document.readyState === 'loading') {
@@ -813,37 +733,7 @@
   }
 })();
 </script>
+  <script src="/en_us/status.js" defer></script>
 <p style="text-align:center;font-size:12px;margin:16px 0"><a href="/zh_cn/chat/?lang=zh" style="color:#7fa893;text-decoration:none">中文</a></p>
-
-<!-- Residential address review -->
-<div class="mask" id="addrMask" hidden>
-  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="addrTitle">
-    <div class="dlg-icon">🏠</div>
-    <h2 id="addrTitle">First, where do you live?</h2>
-    <p>The chat room is open to users <b>outside mainland China</b> only. Please enter the <b>full address where you currently live</b> — an AI will review it.</p>
-    <textarea class="addr-in" id="addrInput" maxlength="200"
-              placeholder="e.g. 3F, 2-2-1 Yoyogi, Shibuya, Tokyo, Japan"></textarea>
-    <div class="addr-err" id="addrErr"></div>
-    <div class="addr-tip">The address is used for this check only and is <b>not stored on the server</b>. Made-up addresses will be rejected.</div>
-    <div class="dlg-acts">
-      <button class="ghost" id="addrLeave" type="button">Leave</button>
-      <button id="addrSubmit" type="button">Submit for review</button>
-    </div>
-  </div>
-</div>
-
-<!-- China mainland block -->
-<div class="mask" id="cnBlockMask" hidden>
-  <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="cnTitle">
-    <div class="dlg-icon">⛔</div>
-    <h2 id="cnTitle">Access denied</h2>
-    <p>Due to mainland China regulations, this chat room is not available to users in China.</p>
-    <p>If you believe this is incorrect, please contact the administrator.</p>
-    <div class="dlg-acts">
-      <button class="ghost" id="cnClose" type="button">Go back</button>
-    </div>
-  </div>
-</div>
-
 </body>
 </html>

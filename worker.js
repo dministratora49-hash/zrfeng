@@ -2058,440 +2058,106 @@ async function listChat(env, limit = CHAT_PAGE_MAX) {
   return out;
 }
 
-/**
- * 聊天室身份：登录用户用账户名，未登录按设备 cookie 派生一个 guest 昵称。
- * who 是稳定内部标识，只用来判断「这条是不是我发的」，不对外暴露设备 id。
- */
-async function chatIdentity(env, request, deviceOverride) {
-  let account = '';
-  let role = 'guest';
-  let isAdmin = false;
-  try {
-    const s = await getSession(env, request);
-    if (s) {
-      const u = await sessionUser(env, s);
-      account = (u && u.username) || s.username || '';
-      role = u ? roleOf(u) : 'user';
-      isAdmin = !!u && isAdminRole(role);
-    }
-  } catch {
-    account = '';
-  }
-
-  if (account) {
-    return { who: 'u:' + account.toLowerCase(), name: account, account, isAdmin, role, loggedIn: true };
-  }
-  // deviceOverride：门槛接口刚给这台机器发了一张新设备 Cookie，但那会儿请求里还没有它，
-  // 所以允许调用方把算好的设备标记传进来，避免第一次通过时被算成共用的 'anon'
-  const device = deviceOverride || deviceIdOf(request) || 'anon';
-  return {
-    who: 'd:' + device,
-    name: 'guest-' + String(device).slice(0, 4),
-    account: '',
-    isAdmin: false,
-    role: 'guest',
-    loggedIn: false,
-  };
-}
-
-/** 轮询时维持「在线」标记 */
-async function touchOnline(env, identity) {
-  try {
-    await env.USERS.put(
-      CHAT_ONLINE_PREFIX + identity.who,
-      JSON.stringify({ name: identity.name, at: Date.now() }),
-      { expirationTtl: CHAT_ONLINE_TTL }
-    );
-  } catch {
-    /* 在线状态丢了不影响聊天 */
-  }
-}
-
-/** 数在线人数（键自动过期，不用清理） */
-async function countOnline(env) {
-  try {
-    const r = await env.USERS.list({ prefix: CHAT_ONLINE_PREFIX, limit: 200 });
-    return ((r && r.keys) || []).length;
-  } catch {
-    return 0;
-  }
-}
-
-/* ---------------- 聊天室地区门槛 ----------------
- * 进聊天室之前要过一道「你住哪」的审核，判定顺序是死的：
- *
- *   1. Cloudflare 认出来源国是中国大陆        → 直接拒（不弹地址框、不烧 AI 额度）
- *   2. 浏览器时区 + 设备地区都指向中国大陆     → 直接拒（同上，连问都不问）
- *   3. 其余情况要填「当前居住的详细地址」      → 交给 Workers AI 判两件事：
- *        是不是编的、是不是在中国大陆；命中任一条就拒
- *   4. 通过后发一张 12 小时的通行证（存 KV），期间不再问
- *
- * 两个刻意的取舍：
- *   · 地址**不落盘**。KV 里只记通过时间、时区、地区代码，绝不把用户的家庭住址
- *     存在服务器上——这东西泄露一次就没法挽回，而它对我们没有任何复用价值。
- *   · **管理员也不放行**。这道门是为了遵守中国大陆法律法规而设的，
- *     跟「谁在管这个站」无关，所以身份再高也一样拦。
- */
-const CHAT_GATE_TTL = 12 * 3600;
-const CHAT_GATE_ADDR_MIN = 6;
-const CHAT_GATE_ADDR_MAX = 200;
-const CHAT_GATE_TRY_PER_HOUR = 8;
-
-/** 中国大陆的 IANA 时区（含几个历史别名，某些老设备/老系统还在用） */
-const CN_TIMEZONES = new Set([
-  'asia/shanghai', 'asia/chongqing', 'asia/harbin',
-  'asia/urumqi', 'asia/kashgar', 'prc',
-]);
-
-function isCnTimezone(tz) {
-  return CN_TIMEZONES.has(String(tz || '').trim().toLowerCase());
-}
-
-/** 通行证的 KV 键：绑到「人」而不是「机器」——登录用户跟账户走，游客跟设备标记走 */
-function chatGateKey(identity) {
-  if (!identity || !identity.who) return null;
-  // 没有设备 Cookie 的游客全都叫 'd:anon'，共用一个键就等于给所有人发证，绝不能写
-  if (identity.who === 'd:anon') return null;
-  return 'chatgate:' + identity.who;
-}
-
-/** 读通行证；过期或没有都返回 null */
-async function chatGatePass(env, identity) {
-  const key = chatGateKey(identity);
-  if (!key) return null;
-  try {
-    const v = await env.USERS.get(key, 'json');
-    if (!v || typeof v.at !== 'number') return null;
-    if (Date.now() - v.at > CHAT_GATE_TTL * 1000) return null;
-    return v;
-  } catch {
-    return null;
-  }
-}
-
-/** 发通行证。info 里只有通过时间、时区、地区，没有地址 */
-async function grantChatGate(env, identity, info) {
-  const key = chatGateKey(identity);
-  if (!key) return false;
-  try {
-    await env.USERS.put(
-      key,
-      JSON.stringify(Object.assign({ at: Date.now() }, info || {})),
-      { expirationTtl: CHAT_GATE_TTL }
-    );
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-const CHAT_GATE_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
-
-const CHAT_GATE_SYSTEM =
-  'You check the address a user says they currently live at, for a small website\'s chat room. ' +
-  'Reply with ONE JSON object and nothing else — no prose, no markdown fence:\n' +
-  '{"real": true|false, "country": "<two-letter ISO 3166-1 country code, or XX if you cannot tell>", "reason": "<one short sentence in Chinese>"}\n' +
-  'How to decide "real":\n' +
-  '- real=true when the text reads like a plausible, specific place someone could live: ' +
-  'a street/road/village/lane plus a house or building number, with a district or city.\n' +
-  '- real=false for: gibberish, jokes, insults, a single word, placeholder text ' +
-  '(test, asdf, 123, 不知道, 你猜), a bare city or country name, a famous landmark with no street address, ' +
-  'or text that contradicts itself.\n' +
-  '- Do not require the address to be verifiable — if it is detailed and plausible, real=true. ' +
-  'Only set real=false when it clearly is not an address.\n' +
-  'How to decide "country":\n' +
-  '- Give the country the address sits in. Mainland China (中国大陆: provinces, 北京/上海/广州/深圳 etc.) ' +
-  'is "CN". Hong Kong, Macao and Taiwan are "HK"/"MO"/"TW", NOT "CN".\n' +
-  '- If the text gives no usable geographic clue, use "XX".\n' +
-  'Never invent details that are not in the text.';
-
-/** 从模型输出里抠出 JSON 对象：允许 ```json 围栏、允许前后夹着解释文字 */
-function extractJsonObject(out) {
-  const text = String(out || '').replace(/```(?:json)?/gi, '');
-  const cands = [];
-  // 先试「最短的完整对象」——模型把两个花括号写在一起时，贪婪匹配会把它们黏成一坨
-  const short = text.match(/\{[\s\S]*?\}/);
-  if (short) cands.push(short[0]);
-  const greedy = text.match(/\{[\s\S]*\}/);
-  if (greedy && (!short || greedy[0] !== short[0])) cands.push(greedy[0]);
-  for (const c of cands) {
-    try {
-      const v = JSON.parse(c);
-      if (v && typeof v === 'object' && !Array.isArray(v)) return v;
-    } catch {
-      /* 换下一个候选 */
-    }
-  }
-  return null;
-}
-
-/**
- * 布尔值归一。llama 这类模型经常把 true 写成字符串 "true"，甚至写「是」，
- * 只认 typeof === 'boolean' 会白扔一半本来合格的回答。
- */
-function asBool(v) {
-  if (typeof v === 'boolean') return v;
-  if (typeof v === 'number') return v !== 0;
-  const s = String(v == null ? '' : v).trim().toLowerCase();
-  if (['true', 'yes', 'y', '1', '是', '真', '真实'].indexOf(s) >= 0) return true;
-  if (['false', 'no', 'n', '0', '否', '假', '虚假'].indexOf(s) >= 0) return false;
-  return null;
-}
-
-/** 把模型输出洗成 { real, country, reason }；洗不出来返回 null（调用方按「审核失败」处理） */
-function parseChatGateVerdict(out) {
-  const v = extractJsonObject(out);
-  if (!v) return null;
-  // 键名也容错：real / is_real / valid 都认
-  const raw = v.real !== undefined ? v.real : v.is_real !== undefined ? v.is_real : v.valid;
-  const real = asBool(raw);
-  if (real === null) return null;
-  const country = String(v.country || v.country_code || '').trim().toUpperCase();
-  return {
-    real,
-    country: /^[A-Z]{2}$/.test(country) ? country : 'XX',
-    reason: capText(String(v.reason || '').trim(), 120),
-  };
-}
-
-/**
- * 从 Workers AI 的返回里抠出文本。
- * 不同模型/不同版本把结果放在不同字段：response、result、text、choices[0].message.content、
- * 甚至数组里。以前只认 response / result，模型换了返回形状就变成「空响应」——
- * 线上表现为「审核服务暂时不可用」，其实模型答得好好的，只是我们没接住。
- */
-function pickAiText(r) {
-  if (!r) return '';
-  if (typeof r === 'string') return r;
-  const cands = [
-    r.response,
-    r.result,
-    r.text,
-    r.output_text,
-    r.result && r.result.response,
-    r.choices && r.choices[0] && r.choices[0].message && r.choices[0].message.content,
-    r.choices && r.choices[0] && r.choices[0].text,
-  ];
-  for (const c of cands) {
-    if (typeof c === 'string' && c.trim()) return c;
-  }
-  if (Array.isArray(r.output)) {
-    for (const o of r.output) {
-      if (typeof o === 'string' && o.trim()) return o;
-      if (o && typeof o.content === 'string' && o.content.trim()) return o.content;
-    }
-  }
-  return '';
-}
-
-/**
- * 让 AI 看一段地址。返回 { ok:true, verdict } 或 { ok:false, message, detail }。
- * 模型没绑、超时、输出洗不出来，一律按「审核不可用」处理 —— 宁可让人稍后再试，
- * 也不能因为 AI 挂了就把门敞开。
- *
- * 失败时把真正的原因塞进 detail：以前只回一句「暂时不可用」，
- * 结果「没绑 AI」「模型报错」「输出解析不了」三种完全不同的故障长得一模一样，根本没法查。
- */
-async function reviewChatGateAddress(env, address) {
-  if (!env.AI) {
-    return { ok: false, code: 'no_ai', message: '审核服务未配置（缺少 Workers AI 绑定），请联系管理员' };
-  }
-  let detail = '';
-  // 同一段地址最多试两次：温度 0 也可能偶尔吐出半截 JSON，重试一次常常就好了
-  for (let attempt = 0; attempt < 2; attempt++) {
-    let out = '';
-    try {
-      const r = await env.AI.run(CHAT_GATE_MODEL, {
-        max_tokens: 260,
-        temperature: 0,
-        messages: [
-          { role: 'system', content: CHAT_GATE_SYSTEM },
-          { role: 'user', content: address },
-        ],
-      });
-      out = pickAiText(r);
-    } catch (e) {
-      detail = 'run: ' + String((e && e.message) || e).slice(0, 140);
-      continue;
-    }
-    if (!out) {
-      detail = 'empty response';
-      continue;
-    }
-    const verdict = parseChatGateVerdict(out);
-    if (verdict) return { ok: true, verdict };
-    detail = 'unparsed: ' + capText(out.trim(), 140);
-  }
-  return { ok: false, code: 'ai_error', message: '审核服务暂时不可用，请稍后再试', detail };
-}
-
-/**
- * GET /api/chat/gate/probe：地址审核自检。
- * 用一段写死的测试地址跑一次完整审核，把「有没有绑 AI」「模型判了什么」「报什么错」
- * 一次吐出来。地址不是调用方给的，所以没法拿它当免费 AI 接口刷。
- * 每个 IP 每分钟一次，够排障用了。
- */
-async function handleChatGateProbe(env, request, ip) {
-  const now = Date.now();
-  if (ip) {
-    const k = 'chatgateprobe:' + ip + ':' + Math.floor(now / 60000);
-    try {
-      if (await env.USERS.get(k)) {
-        return json({ ok: false, message: '请求过于频繁，请稍后再试' }, 429);
-      }
-      await env.USERS.put(k, '1', { expirationTtl: 120 });
-    } catch {
-      /* KV 挂了也照跑，排障要紧 */
-    }
-  }
-
-  const out = { ok: true, aiBound: !!env.AI, model: CHAT_GATE_MODEL };
-  if (!env.AI) {
-    out.hint = 'env.AI 是空的：wrangler.toml 的 [ai] binding 没生效，或账户没开通 Workers AI';
-    return json(out);
-  }
-
-  const rev = await reviewChatGateAddress(env, '3F, 2-2-1 Yoyogi, Shibuya-ku, Tokyo 151-0053, Japan');
-  if (rev.ok) {
-    out.verdict = rev.verdict;
-  } else {
-    out.code = rev.code;
-    out.detail = rev.detail;
-    // 解析不出来时把模型返回的原始形状也吐出来，否则「空响应」三个字没法往下查
-    try {
-      const raw = await env.AI.run(CHAT_GATE_MODEL, {
-        max_tokens: 64,
-        temperature: 0,
-        messages: [{ role: 'user', content: 'Reply with exactly: OK' }],
-      });
-      out.raw = {
-        type: typeof raw,
-        keys: raw && typeof raw === 'object' ? Object.keys(raw).slice(0, 20) : [],
-        preview: (() => {
-          try { return JSON.stringify(raw).slice(0, 500); } catch { return String(raw).slice(0, 500); }
-        })(),
-      };
-    } catch (e) {
-      out.raw = { error: String((e && e.message) || e).slice(0, 300) };
-    }
-  }
-  return json(out);
-}
-
-/** 每小时允许提交几次地址，免得有人把它当成免费的 AI 接口刷 */
-async function chatGateTryAllowed(env, identity, now) {
-  const key = 'chatgtry:' + (identity.who || 'anon') + ':' + Math.floor(now / 3600000);
-  try {
-    const n = Number(await env.USERS.get(key)) || 0;
-    if (n >= CHAT_GATE_TRY_PER_HOUR) return false;
-    await env.USERS.put(key, String(n + 1), { expirationTtl: 3700 });
-    return true;
-  } catch {
-    return true;   // KV 出问题时不拿这个当理由拦人
-  }
-}
-
-/**
- * POST /api/chat/gate：进聊天室前的地区门槛。
- * 不带 address 时只做前两步判断，返回 need:'address' 让前端弹输入框。
- */
-async function handleChatGate(env, request) {
-  const body = await readJson(request);
-  const tz = capText(String(body.tz || '').trim(), 64);
-  const region = capText(String(body.region || '').trim().toUpperCase(), 8);
-  const address = capText(String(body.address || '').trim(), CHAT_GATE_ADDR_MAX + 1);
-
-  // 这台机器还没有设备标记时，现在就发一个：通行证要靠它认人，
-  // 不能等到进了聊天室再发（那时 'anon' 会把所有人的通行证混成一个）
-  let deviceId = deviceIdOf(request);
-  let newDevice = null;
-  if (!deviceId) {
-    deviceId = randomHex(16);
-    newDevice = deviceCookie(deviceId);
-  }
-  const identity = await chatIdentity(env, request, deviceId);
-  const extra = newDevice ? { 'set-cookie': newDevice } : {};
-
-  // 注意：这里没有管理员豁免。这道门槛是合规要求，不因身份放行。
-
-  // 1) 来源国就是中国大陆
-  const country = String((request.cf && request.cf.country) || '').toUpperCase();
-  if (country === 'CN') {
-    return json({ ok: false, deny: 'cn', message: '本网站暂时不提供中国大陆聊天室' }, 403, extra);
-  }
-
-  // 2) 时区 + 设备地区都指向中国大陆：连地址都不问，直接拒
-  if (isCnTimezone(tz) && region === 'CN') {
-    return json({ ok: false, deny: 'cn', message: '本网站暂时不提供中国大陆聊天室' }, 403, extra);
-  }
-
-  // 已经通过过，通行证还在有效期内
-  if (await chatGatePass(env, identity)) {
-    return json({ ok: true, message: '已通过验证' }, 200, extra);
-  }
-
-  // 3) 还没填地址：让前端弹框
-  if (!address) {
-    return json({ ok: false, need: 'address', message: '请填写你当前居住的详细地址' }, 200, extra);
-  }
-  const len = Array.from(address).length;
-  if (len < CHAT_GATE_ADDR_MIN) {
-    return json({ ok: false, deny: 'fake', message: '地址太短了，请写详细一些' }, 200, extra);
-  }
-  if (len > CHAT_GATE_ADDR_MAX) {
-    return json({ ok: false, deny: 'fake', message: '地址太长了，最多 ' + CHAT_GATE_ADDR_MAX + ' 个字' }, 200, extra);
-  }
-  if (!(await chatGateTryAllowed(env, identity, Date.now()))) {
-    return json({ ok: false, message: '提交次数太多了，请过一小时再试' }, 429, extra);
-  }
-
-  // 4) 交给 AI 判
-  const rev = await reviewChatGateAddress(env, address);
-  if (!rev.ok) {
-    const body = { ok: false, message: rev.message };
-    if (rev.code) body.code = rev.code;
-    if (rev.detail) body.detail = rev.detail;
-    return json(body, 503, extra);
-  }
-
-  if (!rev.verdict.real) {
-    return json({ ok: false, deny: 'fake', message: '这个地址看起来不像是真实住址，请如实填写' }, 200, extra);
-  }
-  if (rev.verdict.country === 'CN') {
-    return json({ ok: false, deny: 'cn', message: '本网站暂时不提供中国大陆聊天室' }, 403, extra);
-  }
-
-  await grantChatGate(env, identity, { tz, region, country: rev.verdict.country });
-  return json({ ok: true, message: '验证通过' }, 200, extra);
-}
-
-/**
- * 聊天接口自己的门槛检查：没过门槛就返回 403，页面据此弹框。
- * 放在服务端而不是只在前端拦，是因为 /api/chat 是公开接口 ——
- * 前端弹窗只能劝人，挡不住直接发请求。
- */
-async function chatGateBlocked(env, request, identity) {
-  // 同样没有管理员豁免：合规门槛对所有人一视同仁
-  const country = String((request.cf && request.cf.country) || '').toUpperCase();
-  if (country === 'CN') {
-    return json({ ok: false, deny: 'cn', gate: 'address', message: '本网站暂时不提供中国大陆聊天室' }, 403);
-  }
-  if (await chatGatePass(env, identity)) return null;
-  return json({ ok: false, gate: 'address', message: '请先填写当前居住的地址' }, 403);
-}
-
 /** GET /api/chat?since=…：拉消息 + 在线人数 + 我的身份 */
-async function handleChatList(env, request) {
+/**
+ * 聊天室身份：只认已登录用户。
+ *
+ * 与旧版最大的区别 —— 未登录的人**进不来**。
+ * 旧版给游客派一个 guest-xxxx 的临时昵称，那套已经下线了。
+ * 现在身份完全来自站内的 session（HttpOnly Cookie），客户端声明的一律不信。
+ */
+async function chatRequireLogin(env, request) {
+  const session = await getSession(env, request);
+  if (!session) {
+    return { error: json({ ok: false, needLogin: true, message: '请先登录后再进入聊天室' }, 401) };
+  }
+  const user = await sessionUser(env, session);
+  if (!user) {
+    return { error: json({ ok: false, needLogin: true, message: '账户不存在，请重新登录' }, 401) };
+  }
+  const ban = banState(user, Date.now());
+  if (ban.banned) {
+    return { error: json({ ok: false, message: '该账户已被封禁' }, 403) };
+  }
+  const isAdmin = isAdminRole(roleOf(user));
+  return {
+    who: 'u:' + String(user.username).toLowerCase(),
+    name: user.username,
+    account: user.username,
+    isAdmin,
+    role: roleOf(user),
+    loggedIn: true,
+    device: deviceIdOf(request) || '',
+  };
+}
+
+/** 拿到唯一的聊天室 DO 实例 */
+function chatStub(env) {
+  return env.CHATROOM.get(env.CHATROOM.idFromName('main'));
+}
+
+/**
+ * GET /api/chat/socket：WebSocket 升级。
+ *
+ * 身份在这里校验通过后，才把用户名塞进 query 交给 DO。
+ * DO 只认 Worker 传过去的身份 —— 客户端伪造 query 没用，
+ * 因为这条路由根本不会把未经校验的连接放行。
+ */
+async function handleChatSocket(env, request) {
+  const who = await chatRequireLogin(env, request);
+  if (who.error) return who.error;
+
   const url = new URL(request.url);
-  const identity = await chatIdentity(env, request);
-  const blocked = await chatGateBlocked(env, request, identity);
-  if (blocked) return blocked;
-  await touchOnline(env, identity);
+  // WebSocket 升级请求必须原样转发给 DO，但 query 要换成校验过的身份
+  const target = new URL(url.toString());
+  target.searchParams.set('name', who.name);
+  target.searchParams.set('account', who.account);
+  target.searchParams.set('admin', who.isAdmin ? '1' : '0');
+
+  const headers = new Headers(request.headers);
+  headers.set('Upgrade', 'websocket');
+
+  return chatStub(env).fetch(new Request(target.toString(), { headers }));
+}
+
+/** POST /api/chat：发一条消息（身份和限流都在这里做） */
+async function handleChatSend(env, request, ip) {
+  const who = await chatRequireLogin(env, request);
+  if (who.error) return who.error;
+
+  const body = await readJson(request);
+  const text = capText(String(body.text || '').trim(), CHAT_TEXT_MAX + 1);
+  if (!text) return json({ ok: false, message: '消息不能为空' }, 400);
+  if (Array.from(text).length > CHAT_TEXT_MAX) {
+    return json({ ok: false, message: '消息太长了，最多 ' + CHAT_TEXT_MAX + ' 个字' }, 400);
+  }
+
+  // 登录用户可以顺手改昵称
+  let name = who.name;
+  const rawName = capText(String(body.name || '').trim(), CHAT_NAME_MAX + 1);
+  if (rawName) name = rawName;
+
+  const res = await chatStub(env).post({
+    text,
+    name,
+    account: who.account,
+    admin: who.isAdmin,
+    device: who.device,
+    ip: ip || '',
+  });
+
+  return json(res, res.ok ? 200 : 429);
+}
+
+/** GET /api/chat：拉历史消息 + 在线人数（页面首次加载用，之后走 WebSocket） */
+async function handleChatList(env, request) {
+  const who = await chatRequireLogin(env, request);
+  if (who.error) return who.error;
 
   const all = await listChat(env, CHAT_MAX_KEEP);
-  const since = String(url.searchParams.get('since') || '').trim();
-  const fresh = since ? all.filter((m) => m.id > since) : all.slice(0, CHAT_PAGE_MAX);
-  const ordered = fresh.slice().reverse().slice(-CHAT_PAGE_MAX);
+  const ordered = all.slice(-CHAT_PAGE_MAX);
+
+  const stats = await chatStub(env).stats();
 
   return json({
     ok: true,
@@ -2501,112 +2167,33 @@ async function handleChatList(env, request) {
       name: String(m.name || ''),
       text: String(m.text || ''),
       admin: !!m.admin,
-      mine: m.who === identity.who,
+      mine: m.who === who.who,
     })),
-    online: await countOnline(env),
-    me: { name: identity.name, loggedIn: identity.loggedIn, isAdmin: identity.isAdmin },
+    online: (stats && stats.online) || 0,
+    me: { name: who.name, loggedIn: true, isAdmin: who.isAdmin },
     max: CHAT_TEXT_MAX,
   });
 }
 
-/** POST /api/chat：发一条消息 */
-async function handleChatPost(env, request, ip) {
+/** POST /api/chat/revoke：管理员撤回一条消息 */
+async function handleChatRevoke(env, request) {
+  const guard = await requireAdmin(env, request);
+  if (guard.error) return guard.error;
+
   const body = await readJson(request);
-  const text = capText(String(body.text || '').trim(), CHAT_TEXT_MAX + 1);
-  if (!text) return json({ ok: false, message: '消息不能为空' }, 400);
-  if (Array.from(text).length > CHAT_TEXT_MAX) {
-    return json({ ok: false, message: '消息太长了，最多 ' + CHAT_TEXT_MAX + ' 个字' }, 400);
-  }
+  const id = String(body.id || '').trim();
+  if (!id) return json({ ok: false, message: '参数不正确' }, 400);
 
-  const identity = await chatIdentity(env, request);
-  const blocked = await chatGateBlocked(env, request, identity);
-  if (blocked) return blocked;
-
-  // 登录用户可以顺手改昵称，不填就沿用账户名；guest 只能用派生的昵称
-  let name = identity.name;
-  const rawName = capText(String(body.name || '').trim(), CHAT_NAME_MAX + 1);
-  if (rawName && identity.loggedIn) name = rawName;
-
-  const now = Date.now();
-
-  // 同一个人 1.5 秒一条
-  const cdKey = 'chatcd:' + identity.who;
-  try {
-    const last = Number(await env.USERS.get(cdKey)) || 0;
-    if (now - last < CHAT_COOLDOWN_MS) {
-      return json({ ok: false, message: '发得太快了，缓一缓再发' }, 429);
-    }
-  } catch {
-    /* 读不到就不拦 */
-  }
-
-  // 同一个 IP 每分钟 20 条
-  if (ip) {
-    const ipKey = 'chatip:' + ip + ':' + Math.floor(now / 60000);
-    try {
-      const n = Number(await env.USERS.get(ipKey)) || 0;
-      if (n >= CHAT_IP_PER_MIN) {
-        return json({ ok: false, message: '发送过于频繁，请稍后再试' }, 429);
-      }
-      await env.USERS.put(ipKey, String(n + 1), { expirationTtl: 120 });
-    } catch {
-      /* 忽略 */
-    }
-  }
-
-  // 时间戳严格递增：同一毫秒连发两条也能保证顺序稳定
-  const all = await listChat(env, CHAT_MAX_KEEP + 20);
-  const lastAt = all.reduce((mx, m) => Math.max(mx, Number(m.at) || 0), 0);
-  const at = Math.max(now, lastAt + 1);
-  const id = String(at).padStart(15, '0') + '-' + randomHex(3);
-
-  const rec = { at, name, text, who: identity.who };
-  if (identity.account) rec.account = identity.account;
-  if (identity.isAdmin) rec.admin = true;
-
-  try {
-    await env.USERS.put(CHAT_PREFIX + id, JSON.stringify(rec));
-  } catch {
-    return json({ ok: false, message: '消息没能保存，请稍后再试' }, 500);
-  }
-
-  // 冷却键单独写、单独兜底：它写失败只影响防刷屏，绝不能让已经存好的消息
-  // 被报成「发送失败」（这个坑真踩过一次：TTL 低于 KV 下限导致这里抛错）。
-  try {
-    await env.USERS.put(cdKey, String(now), { expirationTtl: 60 });
-  } catch {
-    /* 冷却没记上就算了 */
-  }
-
-  // 只留最近 CHAT_MAX_KEEP 条
-  const keep = [id].concat(all.map((m) => m.id));
-  for (const old of keep.slice(CHAT_MAX_KEEP)) {
-    try {
-      await env.USERS.delete(CHAT_PREFIX + old);
-    } catch {
-      /* 忽略 */
-    }
-  }
-
-  await touchOnline(env, identity);
-  return json({ ok: true, message: '已发送', id, at });
+  const res = await chatStub(env).revoke({ id });
+  return json(res, res.ok ? 200 : 400);
 }
 
 /** 管理员清空聊天室 */
 async function handleChatClear(env, request) {
   const guard = await requireAdmin(env, request);
   if (guard.error) return guard.error;
-  const all = await listChat(env, CHAT_MAX_KEEP + 50);
-  let n = 0;
-  for (const m of all) {
-    try {
-      await env.USERS.delete(CHAT_PREFIX + m.id);
-      n++;
-    } catch {
-      /* 忽略 */
-    }
-  }
-  return json({ ok: true, message: '已清空 ' + n + ' 条消息', deleted: n });
+  const res = await chatStub(env).clear();
+  return json(res, res.ok ? 200 : 500);
 }
 
 /* ========================== 剩余更新清单 ========================== */
@@ -5227,24 +4814,6 @@ function escHtml(s) {
 /** 「暂未开通」提示页：纯服务端渲染，不依赖任何外部资源 */
 /* ---------------------- 404 界面 ---------------------- */
 
-/**
- * 聊天室已下线：/chat、/zh_cn/chat/、/en_us/chat/ 以及其下任意路径，
- * 一律返回 404 界面，不再把页面本身交出去。
- * 页面文件仍留在仓库里，只是外部再也访问不到。
- */
-function isChatPath(path) {
-  let p = path;
-  if (p === '/zh_cn' || p.startsWith('/zh_cn/')) p = p.slice(6) || '/';
-  else if (p === '/en_us' || p.startsWith('/en_us/')) p = p.slice(6) || '/';
-  return (
-    p === '/chat' ||
-    p === '/chat/' ||
-    p === '/chat.html' ||
-    p === '/chat/index.html' ||
-    p.startsWith('/chat/')
-  );
-}
-
 const NOTFOUND_TEXT = {
   zh: {
     title: '404 · 页面不存在',
@@ -5843,18 +5412,21 @@ async function handleRequest(request, env) {
           return await handleTicketSubmit(env, request, ip);
         }
 
-        // 聊天室（KV 轮询）
-        if (path === '/api/chat/gate' && method === 'POST') {
-          return await handleChatGate(env, request);
+        // 聊天室（Durable Object + WebSocket）
+        // 界面移植自 Syntrx888/ChatterBox，但后端改写成 Workers 原生 WebSocket：
+        // Workers 没有 Node 运行时，Socket.IO 跑不了。
+        // 聊天只对已登录用户开放 —— 身份直接用站内的 session。
+        if (path === '/api/chat/socket' && method === 'GET') {
+          return await handleChatSocket(env, request);
         }
-        if (path === '/api/chat/gate/probe' && method === 'GET') {
-          return await handleChatGateProbe(env, request, ip);
+        if (path === '/api/chat' && method === 'POST') {
+          return await handleChatSend(env, request, ip);
         }
         if (path === '/api/chat' && method === 'GET') {
           return await handleChatList(env, request);
         }
-        if (path === '/api/chat' && method === 'POST') {
-          return await handleChatPost(env, request, ip);
+        if (path === '/api/chat/revoke' && method === 'POST') {
+          return await handleChatRevoke(env, request);
         }
         if (path === '/api/admin/chat/clear' && method === 'POST') {
           return await handleChatClear(env, request);
@@ -6248,8 +5820,6 @@ async function handleRequest(request, env) {
     // 非 API：先处理语种与地区跳转，再原样交给静态资源
     if (method === 'GET' || method === 'HEAD') {
       if (isPagePath(path)) {
-        // 聊天室已下线：任何语种下的 /chat… 都直接 404，不再交给静态资源
-        if (isChatPath(path)) return notFoundResponse(request, path);
         const allow = handleRegionAllow(request, url);
         if (allow) return allow;
         const switched = handleLangSwitch(request, url);
@@ -6284,3 +5854,7 @@ export default {
     return await localizeResponse(res, request);
   },
 };
+
+/* 聊天室 Durable Object：类定义在 chat-do.js，这里转出给 wrangler 识别。
+ * 放在同一份 Worker 脚本里，部署时不用额外配置入口。 */
+export { ChatRoom } from './chat-do.js';
