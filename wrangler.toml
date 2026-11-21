@@ -50,11 +50,15 @@ id = "fa1730e5c959430c82fc69708b68dba9"
 name = "CHATROOM"
 class_name = "ChatRoom"
 
-# 新语法：exports 取代旧的 [[migrations]] 数组。
-# storage = "sqlite" 表示用 SQLite 后端（Cloudflare 现在推荐新 DO 都用这个）。
-[exports.ChatRoom]
-type = "durable-object"
-storage = "sqlite"
+# DO 类的迁移声明。用经典的 migrations 语法（兼容性最好）：
+# Cloudflare 的 Git 自动构建用的 wrangler 版本不一定认识新的 [exports.X] 写法，
+# 用旧的 [[migrations]] 更稳。
+#
+# new_sqlite_classes：新建用 SQLite 后端的 DO 类（Cloudflare 现在推荐这个）。
+# 第一次部署会自动创建命名空间，之后不用再改。
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ChatRoom"]
 
 # ---------------------------------------------------------------------------
 # 密钥（不要把明文写进本文件，它会提交到公开仓库！）

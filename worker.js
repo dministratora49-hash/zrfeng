@@ -26,6 +26,8 @@
 
 /* ========================== 常量配置 ========================== */
 
+import { DurableObject } from 'cloudflare:workers';
+
 /** 只允许这些邮箱后缀，其余一律拒绝 */
 const ALLOWED_SUFFIXES = ['.com', '.cn', '.net', '.top'];
 
@@ -2042,7 +2044,14 @@ async function listChat(env, limit = CHAT_PAGE_MAX) {
   } catch {
     return [];
   }
-  keys = keys.filter((k) => !k.name.startsWith(CHAT_ONLINE_PREFIX));
+  // 只留真正的消息键：'chat:' 前缀下还有 chatcd:（冷却）、chatip:（IP 限流）、
+  // chat:online:（在线标记），它们不是消息，别混进来
+  keys = keys.filter(
+    (k) =>
+      !k.name.startsWith(CHAT_ONLINE_PREFIX) &&
+      !k.name.startsWith('chatcd:') &&
+      !k.name.startsWith('chatip:')
+  );
   keys.sort((a, b) => (a.name < b.name ? 1 : a.name > b.name ? -1 : 0));
   const out = [];
   for (const k of keys) {
@@ -5889,10 +5898,6 @@ export default {
  *       DO 只认 Worker 传来的连接，客户端自己声明的身份一律不信。
  * ============================================================================ */
 
-/* DurableObject 基类是 Workers 运行时内置的全局变量，不用 import。
- * （写成 import { DurableObject } from 'cloudflare:workers' 也行，但那样本地
- *   node 环境就加载不了这个文件了，不利于本地调试。）
- */
 
 /** 单条消息最大字数 */
 const TEXT_MAX = 500;
@@ -5910,8 +5915,16 @@ async function listHistory(env) {
   const all = await env.USERS.list({ prefix: 'chat:', limit: 300 });
   const out = [];
   for (const k of all.keys) {
-    const rec = await env.USERS.get(k.name, 'json');
-    if (rec && rec.text) {
+    // ⚠️ 'chat:' 前缀下不只有消息键，还有 chatcd:（冷却）、chatip:（IP 限流）、
+    //    chat:online:（在线标记）—— 它们的值是**字符串**不是 JSON 对象。
+    //    get(...,'json') 解析字符串会直接抛异常，必须一个个 try 住。
+    let rec = null;
+    try {
+      rec = await env.USERS.get(k.name, 'json');
+    } catch {
+      continue;   // 不是 JSON，跳过
+    }
+    if (rec && typeof rec === 'object' && rec.text) {
       out.push({
         id: k.name.slice('chat:'.length),
         at: Number(rec.at) || 0,
