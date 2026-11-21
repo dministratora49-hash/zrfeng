@@ -381,6 +381,64 @@
     });
   }
 
+  /* ==================== Region → language site ====================
+   * Once an account picks a region in the console, a signed-in visitor should stay
+   * on the matching language site: chosen the US but sitting on /zh_cn/ → move to
+   * the same page under /en_us/ (and the other way round).
+   *
+   * Only once per device: sessionStorage remembers that we already jumped for this
+   * region, so a visitor who manually switches back to Chinese is not bounced away.
+   */
+  var REGION_REDIRECT_KEY = 'zrfeng-region-redirect:';
+
+  function regionRedirectKey(user, region) {
+    return REGION_REDIRECT_KEY + String(user || '').toLowerCase() + ':' + String(region || '');
+  }
+
+  function regionAlreadyJumped(user, region) {
+    try { return sessionStorage.getItem(regionRedirectKey(user, region)) === '1'; } catch (e) { return false; }
+  }
+
+  function markRegionJumped(user, region) {
+    try { sessionStorage.setItem(regionRedirectKey(user, region), '1'); } catch (e) { }
+  }
+
+  /** Region code → target language directory (kept in sync with SITE_REGIONS in worker.js) */
+  function siteLangOfRegion(region) {
+    var r = String(region || '').toUpperCase();
+    if (r === 'CN') return 'zh';
+    if (r === 'US') return 'en';
+    return null;
+  }
+
+  function maybeFollowRegion(data) {
+    if (!data || !data.loggedIn) return;
+    var user = String(data.username || '');
+    var region = data.prefRegion || null;
+    if (!user || !region) return;
+
+    var wantLang = siteLangOfRegion(region);
+    if (!wantLang) return;
+
+    var path = location.pathname;
+    var onEn = path === '/en_us' || path.indexOf('/en_us/') === 0;
+    var onZh = path === '/zh_cn' || path.indexOf('/zh_cn/') === 0;
+    // Only swap between the two language directories; the root / picker is server-side
+    if (!onEn && !onZh) return;
+
+    var curLang = onEn ? 'en' : 'zh';
+    if (curLang === wantLang) {
+      // Already on the right site → clear the flag so a region change can jump again
+      try { sessionStorage.removeItem(regionRedirectKey(user, region)); } catch (e) { }
+      return;
+    }
+    if (regionAlreadyJumped(user, region)) return;
+
+    markRegionJumped(user, region);
+    var rest = onEn ? path.slice('/en_us'.length) : path.slice('/zh_cn'.length);
+    if (!rest) rest = '/';
+    location.replace((wantLang === 'en' ? '/en_us' : '/zh_cn') + rest + location.search);
+  }
 
 
   function injectCss() {
@@ -965,6 +1023,8 @@
     // 记录本次状态；顺便判断要不要问「是否套用账户偏好」（每页只问一次）
     lastStatus = data;
     maybeAskUsePref(data);
+    // Account has a region → stay on that language site (once per device per region)
+    maybeFollowRegion(data);
 
     // 与服务端重新对齐：只有真的 blocked 才弹窗
     if (acc.state === 'blocked') {

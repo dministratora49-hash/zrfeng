@@ -435,17 +435,41 @@ en_us/
 - 中文站在 `zh_cn/`，英文站在 `en_us/`，两套页面共用 `/theme.css`、`/api/*` 和 KV 数据（账户、公告、工单都是同一套）。
 - 页面底部有语言切换：中文站写「English」→ `/en_us/...?lang=en`，英文站写「中文」→ `/zh_cn/...?lang=zh`；
   `?lang=` 会写 `zrfeng-lang` Cookie 再跳回去掉参数的原路径。
-- **地区准入（严格白名单）**：只有**中国大陆 → `/zh_cn/`**、**美国 → `/en_us/`** 放行；
-  其他地区（含识别不到地区的请求）一律返回 403「暂未在您所在地区开通服务」提示页，
-  按地区语言显示，内置 en / ja / ko / zh-Hant / de / fr / es / pt / it / ru / uk / nl / pl /
-  tr / ar / vi / th / id / ms / sv / hi 共 21 种，阿拉伯语自动 RTL，查不到的回退英文。
+
+#### 进哪个站：不再按 IP，按「所在地区」
+
+**站点不再看 IP 决定语种**。判定顺序（`worker.js` 的 `resolveSiteLang`）：
+
+1. **登录账户在控制台选的「所在地区」** —— 最高优先，跨设备生效；
+2. **本机语种 Cookie `zrfeng-lang`** —— 点过页面底部语言切换、或在中英选择页点过一次；
+3. 都没有 → **中英选择页**（`langPickerPageHtml`，和 404 页同一套主题），选完写 Cookie 再进站。
+
+- 控制台「所在地区」卡片：`中华人民共和国` → 中文站，`美利坚合众国` → 英文站；
+  还能「清除」，清除后回到按本机语种 / 选择页的默认行为。
+- 地区表是 `worker.js` 的 `SITE_REGIONS`，**加地区只改这一张表**，控制台和 `/api/me` 会自动下发；
+  语种映射由 `langOfRegion` 负责，不认识的地区一律当「没选」。
+- 保存地区**不弹二次确认**，选中即存账户并立刻写语种 Cookie，然后跳到对应语种站；
+  保存主题仍然走原来的「是否保存到账户」提示。
+- 登录 / 注册 / 新设备验证成功后，`/api/login`、`/api/login/verify` 会回一个 `site` 字段
+  （`/zh_cn/` 或 `/en_us/`），登录页据此跳转；账户没选地区就留在登录页所在语种。
+- 状态栏 `status.js` 的 `maybeFollowRegion`：登录状态下账户地区与当前语种站不符时自动换站，
+  用 `sessionStorage` 保证**每台设备每个地区只跳一次**，避免用户在英文站手动点回中文又被弹走。
+- 接口：`GET/POST /api/pref` 读写 `theme` 与 `region`（`region: ""` 表示清除）；
+  `GET /api/me` 回 `user.region` 和 `regions` 表；`GET /api/region` 是自检接口。
+
+#### 地区准入（当前关闭，页面保留）
+
+- 开关是 `worker.js` 顶部的 `REGION_GATE_ENABLED`，**现在为 `false`：全球都能访问**。
+- 改成 `true` 就恢复严格白名单：只有**中国大陆 → `/zh_cn/`**、**美国 → `/en_us/`** 放行；
+  其他地区（含识别不到地区的请求）一律返回 403「暂未在您所在地区开通服务」提示页
+  （`regionPageHtml`，按地区语言显示，内置 21 种语言，阿拉伯语自动 RTL，查不到的回退英文）。
   提示页只给联系邮箱（`summer@zrfeng.top`），**没有任何「继续访问」入口**。
-  自己出差/挂梯子要进来时，在地址后手动加 `?region=allow`，它会写一条**会话级**
+- 自己出差/挂梯子要进来时，在地址后手动加 `?region=allow`，它会写一条**会话级**
   Cookie `zrfeng-pass`（关掉浏览器即失效）；旧版本那个 180 天的
-  `zrfeng-region=allow` 已彻底失效，换名字后再也不会出现「点过一次就永久绕过」。
-  排查地区识别可以直接 `GET /api/region`，返回当前请求被识别成的国家、语言和是否放行。
+  `zrfeng-region=allow` 已彻底失效。
+- 注意：准入管的是「能不能进站」，语种管的是「进哪个站」，两件事已经拆开，互不影响。
 - **旧地址 301**：以前中文站直接挂在根目录，现在 `/`、`/notice/` 这类旧链接会被 Worker **301** 到对应语种目录
-  （中国大陆 → `/zh_cn/`，美国 → `/en_us/`）。只处理页面，不碰 `/api/*` 与静态资源。
+  （按上面的地区 / Cookie 顺序；都没选过就显示中英选择页）。只处理页面，不碰 `/api/*` 与静态资源。
 - **接口文案**：`/api/*` 按 `Referer`（当前页在哪个语种目录）→ `zrfeng-lang` Cookie → `?lang=` → `Accept-Language`
   判定语种，返回 JSON 里的 `message` / `error` / `detail` / `account.label` 会自动英化
   （词表见 `worker.js` 的 `EN_MESSAGES`，翻不出来的保留中文原文）。

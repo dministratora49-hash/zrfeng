@@ -381,6 +381,64 @@
     });
   }
 
+  /* ==================== 所在地区 → 语种站 ====================
+   * 账户在控制台选了「所在地区」后，登录状态下应该停在对应语种站：
+   * 选了美国却还站在 /zh_cn/ 上，就自动换到 /en_us/ 的同名页面（反之亦然）。
+   *
+   * 只跳一次：用 sessionStorage 记「这台设备已经为该地区跳过一次」，
+   * 免得用户在英文站上手动点回中文后被反复弹回去。
+   * 只对页面生效：/api、静态资源不碰（status.js 本来就只在页面里跑）。
+   */
+  var REGION_REDIRECT_KEY = 'zrfeng-region-redirect:';
+
+  function regionRedirectKey(user, region) {
+    return REGION_REDIRECT_KEY + String(user || '').toLowerCase() + ':' + String(region || '');
+  }
+
+  function regionAlreadyJumped(user, region) {
+    try { return sessionStorage.getItem(regionRedirectKey(user, region)) === '1'; } catch (e) { return false; }
+  }
+
+  function markRegionJumped(user, region) {
+    try { sessionStorage.setItem(regionRedirectKey(user, region), '1'); } catch (e) { }
+  }
+
+  /** 地区代码 → 目标语种目录（和服务端 SITE_REGIONS 保持一致） */
+  function siteLangOfRegion(region) {
+    var r = String(region || '').toUpperCase();
+    if (r === 'CN') return 'zh';
+    if (r === 'US') return 'en';
+    return null;
+  }
+
+  function maybeFollowRegion(data) {
+    if (!data || !data.loggedIn) return;
+    var user = String(data.username || '');
+    var region = data.prefRegion || null;
+    if (!user || !region) return;
+
+    var wantLang = siteLangOfRegion(region);
+    if (!wantLang) return;
+
+    var path = location.pathname;
+    var onEn = path === '/en_us' || path.indexOf('/en_us/') === 0;
+    var onZh = path === '/zh_cn' || path.indexOf('/zh_cn/') === 0;
+    // 只在两个语种目录之间互跳；根路径 / 选择页不碰（那边由服务端决定）
+    if (!onEn && !onZh) return;
+
+    var curLang = onEn ? 'en' : 'zh';
+    if (curLang === wantLang) {
+      // 已经在正确的语种站 → 清掉标记，下次换地区还能再跳
+      try { sessionStorage.removeItem(regionRedirectKey(user, region)); } catch (e) { }
+      return;
+    }
+    if (regionAlreadyJumped(user, region)) return;
+
+    markRegionJumped(user, region);
+    var rest = onEn ? path.slice('/en_us'.length) : path.slice('/zh_cn'.length);
+    if (!rest) rest = '/';
+    location.replace((wantLang === 'en' ? '/en_us' : '/zh_cn') + rest + location.search);
+  }
 
 
   function injectCss() {
@@ -964,6 +1022,8 @@
     // 记录本次状态；顺便判断要不要问「是否套用账户偏好」（每页只问一次）
     lastStatus = data;
     maybeAskUsePref(data);
+    // 账户选过「所在地区」→ 停到对应语种站（每台设备每个地区只跳一次）
+    maybeFollowRegion(data);
 
     // 与服务端重新对齐：只有真的 blocked 才弹窗
     if (acc.state === 'blocked') {

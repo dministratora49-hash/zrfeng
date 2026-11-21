@@ -389,6 +389,37 @@
     }
     if (sec) html += '<div class="card"><h2>账户安全</h2>' + sec + '</div>';
 
+    // 所在地区：决定登录后进中文站还是英文站。
+    // 地区表由服务端 /api/me 的 regions 下发，前端不硬编码，加地区只改 worker.js。
+    var REGIONS = (j && j.regions) || [
+      { id: 'CN', name: '中华人民共和国', lang: 'zh' },
+      { id: 'US', name: '美利坚合众国', lang: 'en' }
+    ];
+    var curRegion = u.region || null;
+    var rg = '<div class="card"><h2>所在地区</h2>' +
+      '<div class="meta" style="margin-bottom:10px">' +
+      '选择你所在的地区，登录后会直接进入对应的语言站点（中文站 / 英文站）。' +
+      '留空则按本机上次选的语种走；没选过会先看到语言选择页。</div>';
+    REGIONS.forEach(function (r) {
+      var on = r.id === curRegion;
+      rg += '<div class="row">' +
+        '<div class="info"><div class="name">' + esc(r.name) +
+        (on ? ' <span class="tag active">使用中</span>' : '') + '</div>' +
+        '<div class="meta">进入' + (r.lang === 'en' ? '英文站 /en_us/' : '中文站 /zh_cn/') + '</div></div>' +
+        '<button data-region-pick="' + r.id + '"' + (on ? ' disabled' : '') + '>' +
+        (on ? '当前' : '选择') + '</button>' +
+        '</div>';
+    });
+    // 已经选过地区时给一个「清除」，回到按本机语种 / 选择页的默认行为
+    if (curRegion) {
+      rg += '<div class="row">' +
+        '<div class="info"><div class="name">不指定地区</div>' +
+        '<div class="meta">清除后不再按地区跳站，改用本机上次选的语种</div></div>' +
+        '<button data-region-pick="" class="mute">清除</button></div>';
+    }
+    rg += '<div class="msg" id="regionMsg"></div></div>';
+    html += rg;
+
     // 外观：三套主题共存，旧主题一套没删，随时能选回来
     var THEME_LIST = [
       { id: 'android', name: '原生安卓', desc: 'Material You 浅色 · Roboto + 思源黑体 · 圆角卡片' },
@@ -432,6 +463,9 @@
     meEl.querySelectorAll('button[data-theme-pick]').forEach(function (x) {
       x.onclick = function () { pickTheme(x.dataset.themePick); };
     });
+    meEl.querySelectorAll('button[data-region-pick]').forEach(function (x) {
+      x.onclick = function () { pickRegion(x.dataset.regionPick || ''); };
+    });
     meEl.querySelectorAll('button[data-2fa]').forEach(function (x) {
       x.onclick = function () {
         var enable = x.getAttribute('data-2fa') === 'on';
@@ -439,6 +473,42 @@
         if (enable) toggle2fa(true);
         else confirmTurnOff2fa();
       };
+    });
+  }
+
+  /* ===================== 所在地区：决定登录后进哪个语种站 ===================== */
+  /* 和主题不同，地区保存不弹二次确认：选中即存账户，并立刻写本机语种 Cookie。
+   * 存完按地区跳一次站，让用户马上看到效果（已经在对应语种站里就不跳）。 */
+  function pickRegion(region) {
+    var msg = document.getElementById('regionMsg');
+    if (msg) { msg.className = 'msg'; msg.textContent = '正在保存…'; }
+    fetch('/api/pref', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ region: region || '' })
+    }).then(function (r) { return r.json(); }).then(function (j) {
+      var m = document.getElementById('regionMsg');
+      if (!j || !j.ok) {
+        if (m) { m.className = 'msg err'; m.textContent = '保存失败：' + ((j && (j.error || j.message)) || '未知原因'); }
+        return;
+      }
+      if (m) { m.className = 'msg ok'; m.textContent = '已保存。'; }
+      // 重新拉一次 /api/me，让「使用中」标记和地区列表同步刷新
+      refreshMe();
+      // 选了地区 → 跳到对应语种站；清除地区 → 留在原地
+      if (j.site) {
+        var here = location.pathname;
+        var onZh = here.indexOf('/zh_cn/') === 0;
+        var onEn = here.indexOf('/en_us/') === 0;
+        var wantZh = j.site === '/zh_cn/';
+        if ((wantZh && !onZh) || (!wantZh && !onEn)) {
+          if (m) { m.className = 'msg ok'; m.textContent = '已保存，正在跳转到' + (wantZh ? '中文站' : '英文站') + '…'; }
+          setTimeout(function () { location.href = j.site; }, 700);
+        }
+      }
+    }).catch(function () {
+      var m2 = document.getElementById('regionMsg');
+      if (m2) { m2.className = 'msg err'; m2.textContent = '保存失败（网络异常）。'; }
     });
   }
 
@@ -1635,6 +1705,15 @@
   }
 
   loadMe();
+  /** 只重拉 /api/me 并重渲染「我的账户」，不碰管理员区（改地区后用） */
+  function refreshMe() {
+    fetch('/api/me', { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (j && j.loggedIn) { ME = j; renderMe(j); }
+      })
+      .catch(function () { /* 忽略：页面上已有提示 */ });
+  }
 })();
 </script>
   <script src="/status.js" defer></script>

@@ -392,6 +392,14 @@
   var SITE = 'https://www.zrfeng.top';
   var cfg = { turnstile: false, turnstileSiteKey: '' };
 
+  /* Where to go after signing in / signing up / verifying: the server sends `site`
+   * based on the account's region (/zh_cn/ or /en_us/). If it is missing we stay in
+   * the language we are on instead of hard-coding the Chinese site. */
+  function goAfterAuth(data) {
+    var to = (data && data.site) || (location.pathname.indexOf('/en_us/') === 0 ? '/en_us/' : '/zh_cn/');
+    location.href = SITE + to;
+  }
+
   /* ---------- 工具 ---------- */
   function $(id) { return document.getElementById(id); }
   function show(el, text, type) {
@@ -533,7 +541,7 @@
 
     if (r.data.ok) {
       show(msg, 'Logged in, redirecting…', 'ok');
-      setTimeout(function () { location.href = SITE + '/en_us/'; }, 700);
+      setTimeout(function () { goAfterAuth(r.data); }, 700);
     } else if (r.data.needDeviceKey) {
       // 没有邮箱的账户：改用「管理员给的密钥」确认身份
       show(msg, r.data.message || 'We cannot verify your identity. Please enter the key the admin gave you.', 'err');
@@ -593,7 +601,7 @@
       var r = await api('/api/login/verify', { method: 'POST', body: { ticket: devTicket, code: code.trim() } });
       if (r.data.ok) {
         if (msg) show(msg, 'Verified, redirecting…', 'ok');
-        setTimeout(function () { location.href = SITE + '/en_us/'; }, 700);
+        setTimeout(function () { goAfterAuth(r.data); }, 700);
       } else {
         if (msg) show(msg, r.data.message || 'Verification failed', 'err');
         if (btn) btn.disabled = false;
@@ -647,7 +655,7 @@
       var r = await api('/api/login/verify', { method: 'POST', body: { ticket: devTicket, key: key } });
       if (r.data.ok) {
         if (msg) show(msg, 'Identity confirmed, redirecting…', 'ok');
-        setTimeout(function () { location.href = SITE + '/en_us/'; }, 700);
+        setTimeout(function () { goAfterAuth(r.data); }, 700);
       } else {
         if (msg) show(msg, r.data.message || 'You are not allowed to access this', 'err');
         if (btn) btn.disabled = false;
@@ -810,7 +818,7 @@
 
     if (r.data.ok) {
       show(msg, 'Signed up, redirecting…', 'ok');
-      setTimeout(function () { location.href = SITE + '/en_us/'; }, 700);
+      setTimeout(function () { goAfterAuth(r.data); }, 700);
     } else if (r.data.blocked) {
       // 注册时检测到 VPN / 代理：账号已建但立即封停
       if (window.zrfengProxyBlock) window.zrfengProxyBlock(r.data.message);
@@ -879,7 +887,7 @@
     try {
       var me = await api('/api/me');
       if (me.data && me.data.loggedIn) {
-        location.href = SITE + '/en_us/';
+        goAfterAuth(me.data);
       }
     } catch (e) { /* 忽略 */ }
   })();

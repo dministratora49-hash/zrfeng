@@ -1340,6 +1340,9 @@ async function handleLogin(env, request, ip) {
   });
   headers.append('Set-Cookie', cookie);
   headers.append('Set-Cookie', deviceCookie(deviceId));
+  // 登录后进哪个语种站：账户里选过「所在地区」就按地区走，没选过就留在当前语种
+  const site = await siteForUser(env, user, request);
+  if (site.lang) headers.append('Set-Cookie', langCookieHeader(site.lang));
   return new Response(
     JSON.stringify({
       ok: true,
@@ -1350,7 +1353,10 @@ async function handleLogin(env, request, ip) {
         isAdmin: isAdminRole(roleOf(user)),
         role: roleOf(user),
         isSuper: roleOf(user) === 'super',
+        region: site.region,
       },
+      // 登录页拿到它就直接跳过去：'/zh_cn/' 或 '/en_us/'
+      site: site.path,
       account: status,
     }),
     { status: 200, headers }
@@ -4479,6 +4485,9 @@ async function handleDeviceVerify(env, request) {
   });
   headers.append('Set-Cookie', cookie);
   headers.append('Set-Cookie', deviceCookie(rec.deviceId));
+  // 和 /api/login 一致：按账户地区决定登录后进哪个语种站
+  const site = await siteForUser(env, user, request);
+  if (site.lang) headers.append('Set-Cookie', langCookieHeader(site.lang));
   return new Response(
     JSON.stringify({
       ok: true,
@@ -4489,7 +4498,9 @@ async function handleDeviceVerify(env, request) {
         isAdmin: isAdminRole(roleOf(user)),
         role: roleOf(user),
         isSuper: roleOf(user) === 'super',
+        region: site.region,
       },
+      site: site.path,
       account: status,
     }),
     { status: 200, headers }
@@ -4499,11 +4510,34 @@ async function handleDeviceVerify(env, request) {
 /* ========================== 中英文分站 ========================== */
 
 /**
- * 语种偏好 Cookie。只有用户在页面上点了「中文 / English」才会写，
- * 用来盖过地区判断 —— 美国 IP 不想看英文时点一下中文，以后就不再被跳走。
+ * 语种偏好 Cookie。只有用户在页面上点了「中文 / English」、或在中英选择页
+ * 选了语种才会写。它不再和 IP 挂钩 —— 站点不再按 IP 猜语种。
  */
 const LANG_COOKIE = 'zrfeng-lang';
 const LANG_COOKIE_MAX_AGE = 60 * 60 * 24 * 180; // 半年
+
+/**
+ * 地区准入开关。
+ *   true  → 非中国大陆 / 美国 IP 返回「暂未开通」提示页（regionPageHtml）
+ *   false → 不拦截，全球都能访问；提示页代码保留，随时改回 true 就能启用
+ *
+ * 注意：这个开关只管「能不能进站」，不管「进中文站还是英文站」——
+ * 后者由账户里选的地区 / 本机选的语种决定，见 resolveSiteLang。
+ */
+const REGION_GATE_ENABLED = false;
+
+/** 控制台「所在地区」里可选的地区 → 语种。加新地区只改这一张表 */
+const SITE_REGIONS = [
+  { id: 'CN', name: '中华人民共和国', nameEn: "People's Republic of China", lang: 'zh' },
+  { id: 'US', name: '美利坚合众国', nameEn: 'United States of America', lang: 'en' },
+];
+
+/** 地区代码 → 语种；不认识的地区返回 null（当作「还没选」） */
+function langOfRegion(region) {
+  const r = String(region || '').toUpperCase();
+  const hit = SITE_REGIONS.filter((x) => x.id === r)[0];
+  return hit ? hit.lang : null;
+}
 
 /** 读单个 Cookie（不引第三方库，写死这里够用） */
 function readCookie(header, name) {
@@ -4542,8 +4576,61 @@ function redirectTo(location, cookieValue, status) {
 function pickLang(request) {
   const cookie = readCookie(request.headers.get('Cookie'), LANG_COOKIE);
   if (cookie === 'zh' || cookie === 'en') return cookie;
-  const country = (request.cf && request.cf.country) || '';
-  return country === 'US' ? 'en' : 'zh';
+  return null;
+}
+
+/**
+ * 这台机器该进中文站还是英文站。**完全不看 IP**。
+ *
+ *   1) 已登录且在控制台选过「所在地区」→ 用地区对应的语种（跨设备生效）
+ *   2) 本机选过语种（页面切换链接 / 中英选择页 / 控制台改地区时写下的 Cookie）
+ *   3) 都没有 → null，根路径渲染中英选择页，让访客自己点
+ *
+ * 返回 'zh' / 'en' / null。
+ */
+async function resolveSiteLang(request, env) {
+  if (env && env.USERS) {
+    try {
+      const s = await getSession(env, request);
+      if (s) {
+        const pref = await getPref(env, s.username);
+        const byRegion = pref ? langOfRegion(pref.region) : null;
+        if (byRegion) return byRegion;
+      }
+    } catch {
+      /* 读会话失败就当没登录，继续往下判断 */
+    }
+  }
+
+  const cookie = pickLang(request);
+  if (cookie) return cookie;
+  return null;
+}
+
+/** 写语种 Cookie 的 Set-Cookie 头（一条字符串，方便 append） */
+function langCookieHeader(lang) {
+  return LANG_COOKIE + '=' + lang + '; Path=/; Max-Age=' + LANG_COOKIE_MAX_AGE + '; SameSite=Lax';
+}
+
+/**
+ * 登录成功后该把这个人送去哪个站。
+ *   1) 账户在控制台选过「所在地区」→ 按地区
+ *   2) 没选过 → 留在登录页所在的语种（不把人从英文登录页扔去中文站）
+ */
+async function siteForUser(env, user, request) {
+  let region = null;
+  try {
+    const pref = await getPref(env, user && user.username);
+    region = pref && langOfRegion(pref.region) ? String(pref.region).toUpperCase() : null;
+  } catch {
+    region = null;
+  }
+  const lang = langOfRegion(region) || pickLang(request) || 'zh';
+  return {
+    region,
+    lang,
+    path: lang === 'en' ? '/en_us/' : '/zh_cn/',
+  };
 }
 
 /**
@@ -4839,11 +4926,113 @@ const NOTFOUND_TEXT = {
   },
 };
 
-/** 语种：站在哪个语种目录下就跟着走，根路径再按 Cookie / 地区判断 */
+/** 语种：站在哪个语种目录下就跟着走，根路径再按 Cookie / 账户地区判断 */
 function langForPath(request, path) {
   if (path === '/en_us' || path.startsWith('/en_us/')) return 'en';
   if (path === '/zh_cn' || path.startsWith('/zh_cn/')) return 'zh';
-  return pickLang(request);
+  return pickLang(request) || 'zh';
+}
+
+/* ---------------------- 中英选择页 ---------------------- */
+
+/**
+ * 没选过语种、也没登录（或账户没选地区）时，根路径给这张选择页。
+ *
+ * 设计上刻意和 404 页同源：同一套 <html data-theme> 提前落地脚本、
+ * 同一套 /theme.css + /android.css，所以控制台里选过 light / dark /
+ * 原生安卓的人看到的选择页也会跟着变。
+ *
+ * 两个按钮都走 ?lang=zh / ?lang=en，由 handleLangSwitch 写 Cookie 再跳，
+ * 所以「选一次，以后直接进对应语种」这条路径和页面底部的语言切换完全一致。
+ */
+function langPickerPageHtml(targetPath) {
+  // 旧地址（如 /notice/）也走选择页：选完要落回原来的路径，不能直接丢到首页
+  const rest = (() => {
+    const p = String(targetPath || '/');
+    if (p === '/' || p === '/index.html') return '/';
+    return p.startsWith('/') ? p : '/' + p;
+  })();
+  const zhHref = '/zh_cn' + rest + (rest.indexOf('?') >= 0 ? '&' : '?') + 'lang=zh';
+  const enHref = '/en_us' + rest + (rest.indexOf('?') >= 0 ? '&' : '?') + 'lang=en';
+  return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<script>/* 主题尽早落地（和站内其他页面同一套开关，默认原生安卓） */(function(){var t='android';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark'||s==='android')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
+<title>选择语言 · zrfeng.top</title>
+<link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="/android.css">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;
+    background:#050807;color:#e8f5ee;
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;line-height:1.7}
+  /* 兜底样式对应 dark；android / light 由两个主题文件接管 */
+  .pick{width:100%;max-width:420px;padding:34px 26px 28px;text-align:center;
+    background:rgba(10,18,14,.85);border:1px solid rgba(0,255,140,.35);border-radius:28px}
+  .pick .globe{font-size:38px;line-height:1;margin-bottom:14px;opacity:.9}
+  .pick h1{font-size:20px;font-weight:700;margin-bottom:6px}
+  .pick .sub{font-size:13px;color:#9fb8ab;margin-bottom:24px}
+  .pick .opts{display:flex;flex-direction:column;gap:10px}
+  .pick .opt{display:flex;align-items:center;justify-content:space-between;gap:12px;
+    min-height:56px;padding:0 18px;border-radius:16px;text-decoration:none;
+    border:1px solid rgba(0,255,140,.35);background:rgba(0,255,140,.06);
+    color:#e8f5ee;transition:background .15s,opacity .15s}
+  .pick .opt:active{opacity:.85}
+  .pick .opt .zh{font-size:15px;font-weight:600}
+  .pick .opt .en{font-size:12px;color:#9fb8ab}
+  .pick .opt .go{font-size:18px;color:#00ff8c;flex:none}
+  .pick .site{margin-top:22px;font-size:11px;letter-spacing:1.5px;color:#3d5a4b;
+    font-family:ui-monospace,Menlo,Consolas,monospace}
+  /* 浅色主题 */
+  html[data-theme="light"] .pick{background:#fff;border-color:rgba(90,180,224,.38)}
+  html[data-theme="light"] .pick .sub{color:#5a7a68}
+  html[data-theme="light"] .pick .opt{border-color:rgba(102,204,255,.45);background:rgba(102,204,255,.07);color:#12333f}
+  html[data-theme="light"] .pick .opt .en{color:#5a7a68}
+  html[data-theme="light"] .pick .opt .go{color:#66ccff}
+  html[data-theme="light"] .pick .site{color:#7d9a8b}
+  /* 原生安卓（Material You / MD3） */
+  html[data-theme="android"] .pick{background:var(--md-surface-1);border-color:var(--md-outline-var)}
+  html[data-theme="android"] .pick h1{color:var(--md-on-surface)}
+  html[data-theme="android"] .pick .sub{color:var(--md-on-surface-var)}
+  html[data-theme="android"] .pick .opt{border-color:var(--md-outline-var);background:var(--md-surface-2);color:var(--md-on-surface)}
+  html[data-theme="android"] .pick .opt .en{color:var(--md-on-surface-var)}
+  html[data-theme="android"] .pick .opt .go{color:var(--md-primary)}
+  html[data-theme="android"] .pick .site{color:var(--md-outline)}
+</style>
+</head>
+<body>
+  <div class="pick">
+    <div class="globe">🌏</div>
+    <h1>选择语言 · Choose your language</h1>
+    <div class="sub">选择后记住你的选择，下次直接进入对应站点。<br>We'll remember your choice.</div>
+    <div class="opts">
+      <a class="opt" href="${escHtml(zhHref)}" hreflang="zh-CN">
+        <span><span class="zh">中文</span><br><span class="en">简体中文 · Chinese</span></span>
+        <span class="go">→</span>
+      </a>
+      <a class="opt" href="${escHtml(enHref)}" hreflang="en">
+        <span><span class="zh">English</span><br><span class="en">English · 英语</span></span>
+        <span class="go">→</span>
+      </a>
+    </div>
+    <div class="site">zrfeng.top</div>
+  </div>
+</body>
+</html>`;
+}
+
+/** 中英选择页响应（不缓存，免得 CDN 把它发给已经选过语种的人） */
+function langPickerResponse(targetPath) {
+  return new Response(langPickerPageHtml(targetPath), {
+    status: 200,
+    headers: {
+      'content-type': 'text/html; charset=utf-8',
+      'cache-control': 'no-store',
+    },
+  });
 }
 
 /**
@@ -4997,6 +5186,10 @@ function handleRegionAllow(request, url) {
 
 /** 只有中国大陆和美国放行；其他地区返回提示页，除非用户点过「继续访问」 */
 function handleRegionGate(request, url) {
+  // 开关在文件上方的 REGION_GATE_ENABLED；关掉时直接放行，
+  // 提示页 regionPageHtml 与地区语言表原样保留，随时能重新启用。
+  if (!REGION_GATE_ENABLED) return null;
+
   const country = String((request.cf && request.cf.country) || '').toUpperCase();
 
   // 白名单：只有中国大陆和美国放行，识别不到地区的请求同样按「未开通」处理
@@ -5015,14 +5208,22 @@ function handleRegionGate(request, url) {
   });
 }
 
-function handleLegacyRedirect(request, url) {
+/**
+ * 旧地址（以前中文站直接挂在根目录）→ 301 到语种目录。
+ *
+ * 现在不看 IP：账户地区 / 本机语种都没选过时，不再硬塞一个语种，
+ * 而是原地渲染中英选择页（见 langPickerResponse）。
+ */
+async function handleLegacyRedirect(request, url, env) {
   const path = url.pathname;
   // 已经站在某个语种目录里 → 原样放行
   if (path === '/en_us' || path.startsWith('/en_us/')) return null;
   if (path === '/zh_cn' || path.startsWith('/zh_cn/')) return null;
 
-  // 旧地址（以前中文站直接挂在根目录）→ 301 到对应语种目录
-  const lang = pickLang(request);
+  const lang = await resolveSiteLang(request, env);
+  // 没选过语种 / 地区：根路径给选择页，其它旧地址先落到选择页再进来
+  if (!lang) return langPickerResponse(path);
+
   const dest = new URL(url.toString());
   const rest = path === '/' || path === '/index.html' ? '/' : path;
   dest.pathname = (lang === 'en' ? '/en_us' : '/zh_cn') + rest;
@@ -5494,7 +5695,14 @@ async function handleRequest(request, env) {
               canChangeEmail: !!(u && u.email && !banState(u, Date.now()).banned),
               // 二次验证开关（默认开）。关闭后新设备登录不再要求验证码
               twofa: twofaEnabled(await getPref(env, (u && u.username) || s.username)),
+              // 控制台「所在地区」：决定登录后进中文站还是英文站；没选过是 null
+              region: await (async () => {
+                const p = await getPref(env, (u && u.username) || s.username);
+                return p && langOfRegion(p.region) ? String(p.region).toUpperCase() : null;
+              })(),
             },
+            // 可选地区表（控制台渲染下拉用，前端不用硬编码）
+            regions: SITE_REGIONS.map((r) => ({ id: r.id, name: r.name, nameEn: r.nameEn, lang: r.lang })),
             account: accountStatus(u),
           });
         }
@@ -5522,13 +5730,20 @@ async function handleRequest(request, env) {
             username: u ? u.username : s ? s.username : null,
             isAdmin: !!(u && isAdminRole(roleOf(u))),
             account: acc,
-            // 账户偏好（亮/暗色）：换设备登录时前端据此询问是否套用。
-            // 只给已登录用户，且只回传主题名，不含任何其它信息。
+            // 账户偏好（亮/暗色 + 所在地区）：换设备登录时前端据此询问是否套用。
+            // 只给已登录用户，且只回传主题名 / 地区代码，不含任何其它信息。
             prefTheme: await (async () => {
               const un = u ? u.username : s ? s.username : null;
               if (!un) return null;
               const p = await getPref(env, un);
               return p && ['light','dark','android'].includes(p.theme) ? p.theme : null;
+            })(),
+            // 所在地区（CN / US / null）：登录后据此决定进哪个语种站
+            prefRegion: await (async () => {
+              const un = u ? u.username : s ? s.username : null;
+              if (!un) return null;
+              const p = await getPref(env, un);
+              return p && langOfRegion(p.region) ? String(p.region).toUpperCase() : null;
             })(),
             // 账户警告：只有登录用户才有；没看过的警告前端会弹一次
             warning: u ? await warningState(env, u.username) : null,
@@ -5656,16 +5871,20 @@ async function handleRequest(request, env) {
           return json({ ok: true, rules: { asns: next.asns, keywords: next.keywords, allowAsns: next.allowAsns } });
         }
 
-        // 账户偏好：读写当前登录用户的主题偏好
+        // 账户偏好：读写当前登录用户的主题偏好 / 所在地区
         if (path === '/api/pref' && method === 'GET') {
           const s = await getSession(env, request);
           if (!s) return json({ ok: false, error: '未登录' }, 401);
           const p = await getPref(env, s.username);
           return json({
             ok: true,
-            pref: p && ['light','dark','android'].includes(p.theme)
-              ? { theme: p.theme, at: p.at || null }
-              : null,
+            pref: {
+              theme: p && ['light','dark','android'].includes(p.theme) ? p.theme : null,
+              region: p && langOfRegion(p.region) ? String(p.region).toUpperCase() : null,
+              at: (p && p.at) || null,
+            },
+            // 可选地区表由服务端下发，前端不用再抄一份
+            regions: SITE_REGIONS.map((r) => ({ id: r.id, name: r.name, nameEn: r.nameEn, lang: r.lang })),
           });
         }
         if (path === '/api/pref' && method === 'POST') {
@@ -5673,14 +5892,70 @@ async function handleRequest(request, env) {
           if (!s) return json({ ok: false, error: '未登录' }, 401);
           let body = {};
           try { body = await request.json(); } catch (e) { body = {}; }
-          const theme = String((body && body.theme) || '');
-          if (theme !== 'light' && theme !== 'dark' && theme !== 'android') {
-            return json({ ok: false, error: 'theme 只能是 light、dark 或 android' }, 400);
+          const cur = (await getPref(env, s.username)) || {};
+          const patch = {};
+
+          // 主题（可选）：只认三套主题
+          if (body && body.theme !== undefined) {
+            const theme = String(body.theme || '');
+            if (theme !== 'light' && theme !== 'dark' && theme !== 'android') {
+              return json({ ok: false, error: 'theme 只能是 light、dark 或 android' }, 400);
+            }
+            patch.theme = theme;
           }
-          const cur = await getPref(env, s.username);
+
+          // 所在地区（可选）：只认 SITE_REGIONS 里的地区，决定进中文站还是英文站。
+          // 传空字符串 = 清除地区，回到「按本机语种 / 选择页」的默认行为。
+          let clearedRegion = false;
+          if (body && body.region !== undefined) {
+            const raw = String(body.region || '').trim();
+            if (!raw) {
+              patch.region = null;
+              clearedRegion = true;
+            } else {
+              const region = raw.toUpperCase();
+              if (!langOfRegion(region)) {
+                return json(
+                  { ok: false, error: 'region 只能是 ' + SITE_REGIONS.map((r) => r.id).join(' 或 ') + '，或留空以清除' },
+                  400
+                );
+              }
+              patch.region = region;
+            }
+          }
+
+          if (!Object.keys(patch).length) {
+            return json({ ok: false, error: '没有要保存的偏好' }, 400);
+          }
+
           // 和已存的一样就不写 KV：省写入次数，也避免无意义的更新时间
-          const p = cur && cur.theme === theme ? cur : await putPref(env, s.username, { theme });
-          return json({ ok: true, pref: { theme: p.theme, at: p.at || Date.now() } });
+          const same = Object.keys(patch).every((k) => cur[k] === patch[k]);
+          const p = same ? cur : await putPref(env, s.username, patch);
+
+          // 存地区时顺手写一条语种 Cookie：本机立刻生效，不必等下次按地区判断。
+          // 清除地区时不写，让本机继续用已有的语种 Cookie。
+          const headers = {};
+          if (patch.region) {
+            headers['Set-Cookie'] = langCookieHeader(langOfRegion(p.region));
+          }
+          // 只有这次真的动了地区，才回 site —— 改主题不该顺手把人跳走
+          const regionTouched = patch.region !== undefined;
+          const siteLang = regionTouched ? langOfRegion(p.region) : null;
+          return json(
+            {
+              ok: true,
+              pref: {
+                theme: ['light','dark','android'].includes(p.theme) ? p.theme : null,
+                region: langOfRegion(p.region) ? String(p.region).toUpperCase() : null,
+                at: p.at || Date.now(),
+              },
+              // 该地区对应的站点目录，前端据此决定要不要跳；没动地区就是 null
+              site: siteLang === 'en' ? '/en_us/' : siteLang === 'zh' ? '/zh_cn/' : null,
+              regionCleared: clearedRegion,
+            },
+            200,
+            headers
+          );
         }
         // 二次验证（2FA）开关：关掉后，新设备登录只验密码，不再发验证码 / 要密钥
         if (path === '/api/account/2fa' && method === 'POST') {
@@ -5773,17 +6048,32 @@ async function handleRequest(request, env) {
 
         // 通知板块：公开公告 + 我的通知/我的工单 + 用户回复工单
         // 地区自检：能看到当前请求被识别成哪个国家、会进哪个语种、有没有被拦
+        // 地区自检：现在不再按 IP 决定语种，这里报的是「账户地区 / 本机语种」的结果
         if (path === '/api/region' && method === 'GET') {
           const country = String((request.cf && request.cf.country) || '').toUpperCase();
           const bypassed = regionBypassed(request, country);
-          const allowed = country === 'CN' || country === 'US' || bypassed;
+          // 准入：开关关闭时谁都能进；开着时才按白名单判断
+          const allowed = !REGION_GATE_ENABLED || country === 'CN' || country === 'US' || bypassed;
+          // 语种：账户地区 → 本机 Cookie → null（会看到选择页）
+          const lang = await resolveSiteLang(request, env);
+          const s = await getSession(env, request);
+          const pref = s ? await getPref(env, s.username) : null;
           return json({
             ok: true,
             country: country || null,
-            lang: regionLang(country),
+            gateEnabled: REGION_GATE_ENABLED,
             allowed,
-            defaultSite: country === 'US' ? '/en_us/' : country === 'CN' ? '/zh_cn/' : null,
             bypassed,
+            // 这些是「进哪个语种站」的依据，和 IP 无关
+            accountRegion: pref && langOfRegion(pref.region) ? String(pref.region).toUpperCase() : null,
+            cookieLang: pickLang(request),
+            // 站点语种：zh / en；null 表示会看到中英选择页
+            lang: lang,
+            defaultSite: lang === 'en' ? '/en_us/' : lang === 'zh' ? '/zh_cn/' : null,
+            langPicker: !lang,
+            // 提示页（地区准入开着且被拦时）会用的语言，和站点语种是两件事
+            noticeLang: regionLang(country),
+            regions: SITE_REGIONS.map((r) => ({ id: r.id, name: r.name, nameEn: r.nameEn, lang: r.lang })),
           });
         }
         if (path === '/api/notices' && method === 'GET') {
@@ -5834,10 +6124,11 @@ async function handleRequest(request, env) {
         if (allow) return allow;
         const switched = handleLangSwitch(request, url);
         if (switched) return switched;
-        // 只对大陆 / 美国开放，其他地区先给「暂未开通」提示页
+        // 地区准入：开关在 REGION_GATE_ENABLED，当前关闭（提示页保留备用）
         const gated = handleRegionGate(request, url);
         if (gated) return gated;
-        const moved = handleLegacyRedirect(request, url);
+        // 旧地址 / 根路径：按账户地区 → 本机语种 → 中英选择页 的顺序决定去向
+        const moved = await handleLegacyRedirect(request, url, env);
         if (moved) return moved;
       }
     }

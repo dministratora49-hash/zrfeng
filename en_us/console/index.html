@@ -389,6 +389,36 @@
     }
     if (sec) html += '<div class="card"><h2>Account security</h2>' + sec + '</div>';
 
+    // Region: decides which language site you land on after signing in.
+    // The list comes from /api/me → regions, so adding a region only touches worker.js.
+    var REGIONS = (j && j.regions) || [
+      { id: 'CN', name: "People's Republic of China", nameEn: "People's Republic of China", lang: 'zh' },
+      { id: 'US', name: 'United States of America', nameEn: 'United States of America', lang: 'en' }
+    ];
+    var curRegion = u.region || null;
+    var rg = '<div class="card"><h2>Region</h2>' +
+      '<div class="meta" style="margin-bottom:10px">' +
+      'Pick the region you are in. After signing in you go straight to that language site (Chinese / English). ' +
+      'Leave it unset to follow the language you last picked on this device; with nothing picked you see the language picker first.</div>';
+    REGIONS.forEach(function (r) {
+      var on = r.id === curRegion;
+      rg += '<div class="row">' +
+        '<div class="info"><div class="name">' + esc(r.nameEn || r.name) +
+        (on ? ' <span class="tag active">In use</span>' : '') + '</div>' +
+        '<div class="meta">Goes to ' + (r.lang === 'en' ? 'the English site /en_us/' : 'the Chinese site /zh_cn/') + '</div></div>' +
+        '<button data-region-pick="' + r.id + '"' + (on ? ' disabled' : '') + '>' +
+        (on ? 'Current' : 'Choose') + '</button>' +
+        '</div>';
+    });
+    if (curRegion) {
+      rg += '<div class="row">' +
+        '<div class="info"><div class="name">No region</div>' +
+        '<div class="meta">Clears the region so the site follows the language picked on this device instead</div></div>' +
+        '<button data-region-pick="" class="mute">Clear</button></div>';
+    }
+    rg += '<div class="msg" id="regionMsg"></div></div>';
+    html += rg;
+
     // Appearance: all three themes are kept — the old ones are still selectable
     var THEME_LIST = [
       { id: 'android', name: 'Android (Material You)', desc: 'Material You light · Roboto + Noto Sans · rounded cards' },
@@ -431,6 +461,9 @@
     });
     meEl.querySelectorAll('button[data-theme-pick]').forEach(function (x) {
       x.onclick = function () { pickTheme(x.dataset.themePick); };
+    });
+    meEl.querySelectorAll('button[data-region-pick]').forEach(function (x) {
+      x.onclick = function () { pickRegion(x.dataset.regionPick || ''); };
     });
     meEl.querySelectorAll('button[data-2fa]').forEach(function (x) {
       x.onclick = function () {
@@ -519,6 +552,41 @@
       restore();
       var m3 = document.getElementById('meMsg');
       if (m3) { m3.className = 'msg err'; m3.textContent = 'Network error — the setting was not saved'; }
+    });
+  }
+
+  /* ===================== Region: which language site you land on ===================== */
+  /* Unlike the theme, saving a region asks for no confirmation: the choice is saved
+   * to the account right away and the language cookie is written immediately. Then
+   * we jump to that site so the effect is visible (no jump if already there). */
+  function pickRegion(region) {
+    var msg = document.getElementById('regionMsg');
+    if (msg) { msg.className = 'msg'; msg.textContent = 'Saving…'; }
+    fetch('/api/pref', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ region: region || '' })
+    }).then(function (r) { return r.json(); }).then(function (j) {
+      var m = document.getElementById('regionMsg');
+      if (!j || !j.ok) {
+        if (m) { m.className = 'msg err'; m.textContent = 'Could not save: ' + ((j && (j.error || j.message)) || 'unknown reason'); }
+        return;
+      }
+      if (m) { m.className = 'msg ok'; m.textContent = 'Saved.'; }
+      refreshMe();
+      if (j.site) {
+        var here = location.pathname;
+        var onZh = here.indexOf('/zh_cn/') === 0;
+        var onEn = here.indexOf('/en_us/') === 0;
+        var wantZh = j.site === '/zh_cn/';
+        if ((wantZh && !onZh) || (!wantZh && !onEn)) {
+          if (m) { m.className = 'msg ok'; m.textContent = 'Saved — taking you to the ' + (wantZh ? 'Chinese' : 'English') + ' site…'; }
+          setTimeout(function () { location.href = j.site; }, 700);
+        }
+      }
+    }).catch(function () {
+      var m2 = document.getElementById('regionMsg');
+      if (m2) { m2.className = 'msg err'; m2.textContent = 'Could not save (network error).'; }
     });
   }
 
@@ -1636,6 +1704,15 @@
   }
 
   loadMe();
+  /** Re-fetch /api/me and re-render just the account card (used after changing region) */
+  function refreshMe() {
+    fetch('/api/me', { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (j && j.loggedIn) { ME = j; renderMe(j); }
+      })
+      .catch(function () { /* ignore: the page already shows a message */ });
+  }
 })();
 </script>
   <script src="/en_us/status.js" defer></script>
