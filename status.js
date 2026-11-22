@@ -487,8 +487,9 @@
           text: '登录账户',
           cls: 'primary',
           onClick: function () {
-            // 带上目标语种，登录后落回同语种的页面
-            location.href = '/zh_cn/login/?lang=' + encodeURIComponent(want) + '&next=' +
+            // 登录页也跟着目标语种走，别把繁体用户丢进简体登录页
+            var loginBase = (SITE_LANG_SITE[want] || SITE_LANG_SITE.en).replace(/\/$/, '');
+            location.href = loginBase + '/login/?lang=' + encodeURIComponent(want) + '&next=' +
               encodeURIComponent(target + location.search);
           }
         },
@@ -533,6 +534,15 @@
     var curBase = SITE_LANG_SITE[cur];
     var rest = location.pathname.slice(curBase.length - 1);
     return base.replace(/\/$/, '') + (rest === '/' ? '/' : rest);
+  }
+
+  /** 把站内路径（如 '/contact/'）转成当前语种下的实际路径 */
+  function siteUrl(logicalPath) {
+    var cur = currentSiteLang();
+    var base = SITE_LANG_SITE[cur] || SITE_LANG_SITE.en;
+    var p = String(logicalPath || '/');
+    if (p.charAt(0) !== '/') p = '/' + p;
+    return base.replace(/\/$/, '') + (p === '/' ? '/' : p);
   }
 
   /* ==================== 地区 → 语种站（自动跟随） ====================
@@ -644,7 +654,7 @@
       '<h2>You are blocked</h2>' +
       '<p>账户试用期已到，请联系管理员以激活账户。</p>' +
       '<div class="bm-acts">' +
-      '<a href="/zh_cn/contact/">联系我们</a>' +
+      '<a href="' + siteUrl('/contact/') + '">联系我们</a>' +
       '<button type="button" id="dsh-block-close">关闭</button>' +
       '</div></div>';
     document.body.appendChild(mask);
@@ -683,7 +693,7 @@
       '<h2>' + escHtml(title) + '</h2>' +
       '<p>' + escHtml(body) + '</p>' +
       '<div class="bn-acts">' +
-      '<a href="/zh_cn/contact/">联系我们</a>' +
+      '<a href="' + siteUrl('/contact/') + '">联系我们</a>' +
       '<button type="button" id="dsh-ban-out">关闭</button>' +
       '</div></div>';
     document.body.appendChild(mask);
@@ -721,7 +731,7 @@
       '<p>该账户已被管理员封禁，请联系管理员。</p>' +
       meta +
       '<div class="bn-acts">' +
-      '<a href="/zh_cn/contact/">联系我们</a>' +
+      '<a href="' + siteUrl('/contact/') + '">联系我们</a>' +
       '<button type="button" id="dsh-ban-out">退出登录</button>' +
       '</div>' +
       '</div>';
@@ -730,7 +740,7 @@
     if (out) {
       out.onclick = function () {
         fetch('/api/logout', { method: 'POST' }).then(function () {
-          location.href = '/zh_cn/';
+          location.href = siteUrl('/');
         });
       };
     }
@@ -761,7 +771,7 @@
       '<p class="wn-note">确认后不再弹出；你可以在「通知板块 → 我的消息」里随时回顾。</p>' +
       '<div class="wn-acts">' +
       '<button type="button" id="dsh-warn-ok">我知道了</button>' +
-      '<a href="/zh_cn/notice/">去通知板块</a>' +
+      '<a href="' + siteUrl('/notice/') + '">去通知板块</a>' +
       '</div>' +
       '</div>';
     document.body.appendChild(mask);
@@ -855,7 +865,7 @@
     if (btn) {
       btn.onclick = function () {
         if (isAdmin) {
-          location.href = '/zh_cn/console/';
+          location.href = siteUrl('/console/');
           return;
         }
         var n = document.getElementById('dsh-mt-note');
@@ -971,13 +981,18 @@
   ];
 
   /**
-   * 去掉语种目录前缀：/zh_cn/notice/ 和 /en_us/notice/ 都按 /notice/ 处理。
-   * 站点拆成两个语种目录后，维护范围判断不能再看完整路径，否则两边对不上。
+   * 去掉语种目录前缀：/zh_cn/notice/、/zh_tw/notice/、/en_us/notice/
+   * 都按 /notice/ 处理。站点拆成多个语种目录后，维护范围判断不能再看完整路径，
+   * 否则三边对不上（早先漏了 zh_tw，导致繁体站的维护标记失效）。
    */
   function langlessPath(path) {
     var p = String(path || '/');
-    if (p === '/zh_cn' || p === '/en_us') return '/';
-    if (p.indexOf('/zh_cn/') === 0 || p.indexOf('/en_us/') === 0) return p.slice(6) || '/';
+    var prefixes = ['/zh_tw', '/zh_cn', '/en_us'];
+    for (var i = 0; i < prefixes.length; i++) {
+      var pre = prefixes[i];
+      if (p === pre) return '/';
+      if (p.indexOf(pre + '/') === 0) return p.slice(pre.length) || '/';
+    }
     return p;
   }
 
@@ -1100,7 +1115,7 @@
     if (acc.state === 'guest') {
       var a = document.createElement('a');
       a.className = 'sb-text';
-      a.href = '/zh_cn/login/';
+      a.href = siteUrl('/login/');
       a.textContent = acc.label || '登录以享受服务';
       left.appendChild(a);
     } else if (acc.state === 'trial' && typeof acc.remainingMs === 'number') {
@@ -1210,7 +1225,7 @@
     if (data && data.loggedIn && (acc.activated || data.isAdmin)) {
       var c = document.createElement('a');
       c.className = 'sb-btn';
-      c.href = '/zh_cn/console/';
+      c.href = siteUrl('/console/');
       c.textContent = '控制台';
       right.appendChild(c);
     }
