@@ -171,6 +171,8 @@ const NOTICE_BODY_MAX = 2000;
 const NOTICE_TITLE_MIN = 2;
 const NOTICE_BODY_MIN = 2;
 const NOTICE_DAILY_MAX = 100;
+/* 公告编号格式：15 位时间戳 + '-' + 6 位（十六进制随机串，或维护结束用的 end000） */
+const NOTICE_ID_RE = /^\d{15}-[0-9a-z]{6}$/;
 
 /** 个人通知的键前缀：notif:u:<账户>:… 或 notif:d:<设备 id>:… */
 const NOTIF_PREFIX = 'notif:';
@@ -2984,7 +2986,11 @@ async function handleAdminNoticeDelete(env, request) {
   }
 
   const id = String(body.id || '').trim();
-  if (!/^\d{15}-[0-9a-f]{6}$/.test(id)) {
+  // 公告编号有两类来源，别用「纯十六进制」去卡：
+  //   1) postNotice 自动生成：15 位时间戳 + '-' + 6 位十六进制随机串；
+  //   2) 维护结束公告写死为 '<15位时间戳>-end000'（见 autoEndMaintenance）。
+  // 早先只认 [0-9a-f]{6}，带「维护」标签的公告因为含 n 而被判成「编号不正确」。
+  if (!NOTICE_ID_RE.test(id)) {
     return json({ ok: false, message: '公告编号不正确' }, 400);
   }
   // 先确认真的存在：不存在就别报「已删除」，否则前端会以为成功、

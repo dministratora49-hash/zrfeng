@@ -366,16 +366,13 @@
           alert((j && (j.message || j.error)) || '刪除失敗');
           return;
         }
-        // 從 DOM 裡摘掉這一條；列表空了就顯示佔位
-        if (row && row.parentNode) row.parentNode.removeChild(row);
-        var box = el('pubList');
-        if (box && !box.querySelector('.nt')) {
-          box.innerHTML = '<div class="empty">還沒有公告</div>';
+        // 删完必须重新拉当前页，不能只摘掉这一个 DOM 节点。
+        // 否则本页会少一条、后面的条目也不会前移，翻下一页时第一条就被跳过了。
+        if (typeof loadNotices === 'function') {
+          loadNotices(pgOffset);
+        } else if (row && row.parentNode) {
+          row.parentNode.removeChild(row);
         }
-        // 總數變了，重新拉一頁讓分頁資訊跟著更新
-        if (typeof pgTotal === 'number' && pgTotal > 0) pgTotal--;
-        if (typeof renderPager === 'function') renderPager();
-        if (pgTotal <= 0 && typeof loadNotices === 'function') loadNotices(0);
       })
       .catch(function () {
         if (btn) { btn.disabled = false; btn.textContent = '刪除'; }

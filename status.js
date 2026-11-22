@@ -432,9 +432,10 @@
    *   不存 → 只改本机 Cookie，跳过去；账户偏好保持原样
    * 不管选哪个，都会跳 —— 语言切换本身是立即生效的。
    */
-  function askSaveLangPref(want, target) {
+  function askSaveLangPref(want, target, data) {
     var name = SITE_LANG_NAME[want] || want;
-    var logged = lastStatus && lastStatus.loggedIn ? String(lastStatus.username || '') : '';
+    // data 由调用方传入当前这次 /api/status 的结果，不能用 lastStatus
+    var logged = data && data.loggedIn ? String(data.username || '') : '';
     showMcToast({
       icon: '🌐',
       title: '账户偏好设置',
@@ -451,13 +452,43 @@
               body: JSON.stringify({ lang: want })
             }).catch(function () { /* 存失败也照常跳，本机 Cookie 已经改了 */ })
               .then(function () {
-                if (logged) writePrefAck(logged, ackValue((lastStatus || {}).prefTheme, want));
+                if (logged) writePrefAck(logged, ackValue((data || {}).prefTheme, want));
                 location.href = target + location.search;
               });
           }
         },
         {
           text: '只改本机',
+          cls: 'mute',
+          onClick: function () { location.href = target + location.search; }
+        }
+      ]
+    });
+  }
+
+  /**
+   * 未登录时切换语言：语言立刻生效（本机 Cookie 已写），
+   * 但「账户偏好设置」得有账户才能存，所以弹一句提示并给登录入口。
+   */
+  function askLangNoAccount(want, target) {
+    var name = SITE_LANG_NAME[want] || want;
+    showMcToast({
+      icon: '🌐',
+      title: '当前未登录账户',
+      desc: '已切换到「' + name + '」，这次只在这台设备生效。登录后可以把它保存为账户偏好，换设备也会跟着走。',
+      autoHideMs: 18000,
+      actions: [
+        {
+          text: '登录账户',
+          cls: 'primary',
+          onClick: function () {
+            // 带上目标语种，登录后落回同语种的页面
+            location.href = '/zh_cn/login/?lang=' + encodeURIComponent(want) + '&next=' +
+              encodeURIComponent(target + location.search);
+          }
+        },
+        {
+          text: '继续浏览',
           cls: 'mute',
           onClick: function () { location.href = target + location.search; }
         }
@@ -497,6 +528,76 @@
     var curBase = SITE_LANG_SITE[cur];
     var rest = location.pathname.slice(curBase.length - 1);
     return base.replace(/\/$/, '') + (rest === '/' ? '/' : rest);
+  }
+
+  /* ==================== 地区 → 语种站（自动跟随） ====================
+   * 账户在控制台选了「所在地区 / 国籍」后，登录状态下应该停在对应语种站：
+   * 选了美国却还站在 /zh_cn/ 上，就自动换到 /en_us/ 的同名页面（反之亦然）。
+   *
+   * 三条约束：
+   *   1) 只跳一次 —— sessionStorage 记住「这台设备已经为该地区跳过一次」，
+   *      免得用户手动切回来又被弹走；
+   *   2) 用户显式选过语言就不跳 —— 手动切换语言表达的是当下意图，
+   *      比地区推断更准，不能拿地区把它覆盖掉；
+   *   3) 只在语种目录之间互跳，根路径 / 静态资源不碰。
+   */
+  var REGION_REDIRECT_KEY = 'zrfeng-region-redirect:';
+  var LANG_PICKED_KEY = 'zrfeng-lang-picked';   // 用户手动切过语言的标记
+
+  function regionRedirectKey(user, region) {
+    return REGION_REDIRECT_KEY + String(user || '').toLowerCase() + ':' + String(region || '');
+  }
+
+  function regionAlreadyJumped(user, region) {
+    try { return sessionStorage.getItem(regionRedirectKey(user, region)) === '1'; } catch (e) { return false; }
+  }
+
+  function markRegionJumped(user, region) {
+    try { sessionStorage.setItem(regionRedirectKey(user, region), '1'); } catch (e) { }
+  }
+
+  /** 用户是不是手动切过语言（切过就别再按地区自动跳） */
+  function langPickedByUser() {
+    try { return localStorage.getItem(LANG_PICKED_KEY) === '1'; } catch (e) { return false; }
+  }
+
+  function markLangPicked() {
+    try { localStorage.setItem(LANG_PICKED_KEY, '1'); } catch (e) { }
+  }
+
+  /** 地区代码 → 目标语种（和服务端 SITE_REGIONS 保持一致） */
+  function siteLangOfRegion(region) {
+    var r = String(region || '').toUpperCase();
+    if (r === 'CN') return 'zh';
+    if (r === 'HK' || r === 'MO' || r === 'TW') return 'zh_hant';
+    if (r === 'US' || r === 'OTHER') return 'en';
+    return null;
+  }
+
+  function maybeFollowRegion(data) {
+    if (!data || !data.loggedIn) return;
+    var user = String(data.username || '');
+    var region = data.prefRegion || null;
+    if (!user || !region) return;
+
+    // 用户手动切过语言 → 尊重他的选择，不按地区覆盖
+    if (langPickedByUser()) return;
+
+    var wantLang = siteLangOfRegion(region);
+    if (!wantLang) return;
+
+    var curLang = currentSiteLang();
+    if (!curLang) return;   // 不在任何语种目录里，不插手
+
+    if (curLang === wantLang) {
+      // 已经在正确的语种站 → 清标记，下次换地区还能再跳
+      try { sessionStorage.removeItem(regionRedirectKey(user, region)); } catch (e) { }
+      return;
+    }
+    if (regionAlreadyJumped(user, region)) return;
+
+    markRegionJumped(user, region);
+    location.replace(pathInLang(wantLang) + location.search);
   }
 
 
@@ -1071,15 +1172,24 @@
       sel.onchange = function () {
         var want = sel.value;
         if (want === currentSiteLang()) return;
-        // 记住本机选择；随后整页跳到目标语种站
-        try { document.cookie = 'zrfeng-lang=' + want + '; Path=/; Max-Age=15552000; SameSite=Lax'; } catch (e) { }
+        // 本机选择先落地：不管后面弹不弹窗、跳不跳，刷新后语言都得留住。
+        // 同时打上「用户手动选过」标记 —— 否则按地区自动跟随会把它覆盖回去。
+        try {
+          // 和 worker 写的 langCookieHeader 保持一致；https 下补 Secure
+          var secure = location.protocol === 'https:' ? '; Secure' : '';
+          document.cookie = 'zrfeng-lang=' + want + '; Path=/; Max-Age=15552000; SameSite=Lax' + secure;
+        } catch (e) { }
+        markLangPicked();
         var target = pathInLang(want);
-        // 已登录：先去问要不要存成账户偏好，由弹窗决定是否跳转
-        if (lastStatus && lastStatus.loggedIn) {
-          askSaveLangPref(want, target);
+        // ⚠️ 这里必须用闭包里的 data，不能用 lastStatus ——
+        // 状态栏构建时 lastStatus 还没赋值（它在函数末尾才写），
+        // 早先判断 lastStatus.loggedIn 永远是 false，所以从不弹偏好设置。
+        if (data && data.loggedIn) {
+          askSaveLangPref(want, target, data);
           return;
         }
-        location.href = target + location.search;
+        // 未登录：也弹一次，告诉他账户偏好设置需要登录，顺便给个登录入口
+        askLangNoAccount(want, target);
       };
       wrap.appendChild(sel);
       right.appendChild(wrap);

@@ -367,14 +367,14 @@
           return;
         }
         if (row && row.parentNode) row.parentNode.removeChild(row);
-        var box = el('pubList');
-        if (box && !box.querySelector('.nt')) {
-          box.innerHTML = '<div class="empty">No notices yet</div>';
+        // Reload the current page after deleting — do not just drop this one node.
+        // Otherwise the page ends up one short and later rows never shift up,
+        // so the first notice of the next page gets skipped.
+        if (typeof loadNotices === 'function') {
+          loadNotices(pgOffset);
+        } else if (row && row.parentNode) {
+          row.parentNode.removeChild(row);
         }
-        // The total changed — refresh the pager so the page count stays right
-        if (typeof pgTotal === 'number' && pgTotal > 0) pgTotal--;
-        if (typeof renderPager === 'function') renderPager();
-        if (pgTotal <= 0 && typeof loadNotices === 'function') loadNotices(0);
       })
       .catch(function () {
         if (btn) { btn.disabled = false; btn.textContent = 'Delete'; }

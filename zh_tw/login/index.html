@@ -395,7 +395,21 @@
   /* 登入 / 註冊 / 驗證成功後跳到哪：服務端按賬戶「所在地區」下發 site
    * （/zh_tw/ 或 /en_us/）；沒下發就留在當前語種，不硬編碼成中文站。 */
   function goAfterAuth(data) {
-    var to = (data && data.site) || (location.pathname.indexOf('/en_us/') === 0 ? '/en_us/' : '/zh_tw/');
+    // 优先用服务端按账户语言 / 地区算出的站点；
+    // 其次看登录页带过来的 ?next= （从状态栏「登录账户」点过来的场景）；
+    // 都没有就留在当前语种。
+    var q = new URLSearchParams(location.search);
+    var next = q.get('next') || '';
+    var to = '';
+    if (next && next.charAt(0) === '/' && next.charAt(1) !== '/') {
+      to = next;                       // 只接受站内绝对路径，挡掉 //evil.com
+    } else if (data && data.site) {
+      to = data.site;
+    } else {
+      to = location.pathname.indexOf('/zh_tw/') === 0 ? '/zh_tw/'
+        : location.pathname.indexOf('/en_us/') === 0 ? '/en_us/'
+        : '/zh_tw/';
+    }
     location.href = SITE + to;
   }
 
