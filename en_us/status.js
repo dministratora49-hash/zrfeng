@@ -66,7 +66,7 @@
     'font-variant-numeric:tabular-nums;color:#ffcc00;font-weight:600;}' +
     /* 窄屏时换用短前缀，保证倒计时不被挤掉 */
     '#' + BAR_ID + ' .sb-pre-s{display:none;}' +
-    /* Two-factor authentication off: exclamation mark + risk notice (replaces "Account active") */
+    /* 二次验证已关闭：感叹号 + 风险提示（替换掉「账户正常」，琥珀色区分于绿色圆点） */
     '#' + BAR_ID + ' .sb-ex{display:inline-flex;align-items:center;justify-content:center;' +
     'width:15px;height:15px;margin-right:5px;border-radius:50%;flex:none;' +
     'background:#ffcc00;color:#3a2a00;font-size:11px;font-weight:700;line-height:1;}' +
@@ -76,6 +76,20 @@
     'border:1px solid rgba(0,255,140,.45);color:#00ff8c;text-decoration:none;' +
     'font-size:12px;line-height:1.3;white-space:nowrap;background:rgba(0,255,140,.07);}' +
     '#' + BAR_ID + ' .sb-btn:active{background:rgba(0,255,140,.2);}' +
+    /* 右上角语言选择：一个下拉，三档（简 / 繁 / EN）。
+       和地区解耦 —— 换语言只换界面语种，不动账户里的地区。 */
+    '#' + BAR_ID + ' .sb-lang{display:inline-flex;align-items:center;gap:4px;}' +
+    '#' + BAR_ID + ' .sb-lang select{' +
+    'appearance:none;-webkit-appearance:none;cursor:pointer;' +
+    'padding:4px 20px 4px 9px;border-radius:7px;font-family:inherit;font-size:12px;line-height:1.3;' +
+    'border:1px solid rgba(0,255,140,.45);background:rgba(0,255,140,.07);color:#00ff8c;' +
+    'background-image:linear-gradient(45deg,transparent 50%,#00ff8c 50%),' +
+    'linear-gradient(135deg,#00ff8c 50%,transparent 50%);' +
+    'background-position:calc(100% - 11px) 50%,calc(100% - 7px) 50%;' +
+    'background-size:4px 4px,4px 4px;background-repeat:no-repeat;}' +
+    '#' + BAR_ID + ' .sb-lang select:focus{outline:none;}' +
+    '#' + BAR_ID + ' .sb-lang select option{background:#0a120e;color:#e8f5ee;}' +
+    '@media (max-width:420px){#' + BAR_ID + ' .sb-lang select{padding:3px 18px 3px 7px;font-size:11px;}}' +
     '@media (max-width:420px){' +
     '#' + BAR_ID + '{padding:0 8px;gap:6px;}' +
     '#' + BAR_ID + ' .sb-pre{display:none;}' +
@@ -200,23 +214,23 @@
     'color:#ffbe3c;}' +
     '#' + WARN_ID + ' .wn-acts a:active,#' + WARN_ID + ' .wn-acts button:active{opacity:.7;}';
 
-  /* ==================== Theme (dark / light / Android) ====================
-   * This file only writes data-theme on <html>; the colours live in CSS:
-   *   /theme.css    applies only to data-theme="light"
-   *   /android.css  applies only to data-theme="android" (Material You)
-   * Dark is each page's own stylesheet — neither file applies.
+  /* ==================== 主题（暗色 / 亮色 / 原生安卓） ====================
+   * 这里只负责在 <html> 上写 data-theme，具体配色全在 CSS 里：
+   *   /theme.css    只对 data-theme="light" 生效（亮色）
+   *   /android.css  只对 data-theme="android" 生效（Material You）
+   * 深色就是各页面自带的那套，两个 CSS 都不生效。
    *
-   * All three themes are kept: pick any of them again in Console → Appearance.
-   * New visitors get Android, since the site runs on Android anyway.
+   * 三套主题一套没删：控制台「外观」里可以随时选回来。
+   * 新访客默认给「原生安卓」—— 站点本来就跑在安卓上。
    */
   var THEME_KEY = 'zrfeng-theme';
   var THEMES = { dark: 'Dark', light: 'Light', android: 'Android' };
   var THEME_DEFAULT = 'android';
   var TOAST_ID = 'dsh-slide-toast';
   var PREF_ACK_PREFIX = 'zrfeng-pref-ack:';
-  /** Latest /api/status result (whether signed in, what the account preference is) */
+  /** 最近一次 /api/status 的结果（判断是否登录、账户偏好是什么） */
   var lastStatus = null;
-  /** Ask at most once per page load whether to apply the account preference */
+  /** 每次页面加载只主动问一次「要不要套用账户偏好」 */
   var prefPrompted = false;
   var mcTimer = null;
 
@@ -231,7 +245,7 @@
     try {
       var t = localStorage.getItem(THEME_KEY);
       if (isTheme(t)) return t;
-    } catch (e) { /* localStorage may be unavailable in private mode */ }
+    } catch (e) { /* 隐私模式下 localStorage 可能不可用 */ }
     return currentTheme();
   }
 
@@ -251,7 +265,7 @@
     }
   }
 
-  /** Icons / labels follow the target theme (the button says what you get next) */
+  /** 图标 / 文案跟着目标主题走（按钮上写的是「点下去会变成什么」） */
   var THEME_META = {
     dark: { ico: '☾', label: 'Dark' },
     light: { ico: '☀', label: 'Light' },
@@ -341,33 +355,59 @@
   function themeName(t) { return (THEMES[t] || THEMES.dark); }
 
 
-  /** 登录后：账户里有偏好、且和这台设备不一致 → 滑出来问一次是否套用 */
+  /* 账户偏好 = 主题 + 语言，两件事合起来算一份「偏好」。
+   * 只要有一项和设备当前不一致，就滑出来问一次；两项都一致就不问。 */
   function maybeAskUsePref(data) {
     if (prefPrompted) return;
     var user = data && data.loggedIn ? String(data.username || '') : '';
     if (!user) return;
-    var saved = data.prefTheme;
-    if (!isTheme(saved)) return;
-    var cur = currentTheme();
-    if (saved === cur) { writePrefAck(user, saved); return; }
-    if (readPrefAck(user) === saved) return;   // 这台设备已经对这个值做过选择
+
+    var savedTheme = data.prefTheme;
+    var savedLang = data.prefLang || null;
+    var hasTheme = isTheme(savedTheme);
+    var hasLang = !!(savedLang && SITE_LANG_SITE[savedLang]);
+    if (!hasTheme && !hasLang) return;
+
+    var curTheme = currentTheme();
+    var curLang = currentSiteLang();
+    var themeDiff = hasTheme && savedTheme !== curTheme;
+    var langDiff = hasLang && savedLang !== curLang;
+    if (!themeDiff && !langDiff) {
+      writePrefAck(user, ackValue(savedTheme, savedLang));
+      return;
+    }
+    var key = ackValue(savedTheme, savedLang);
+    if (readPrefAck(user) === key) return;
+
     prefPrompted = true;
+    var parts = [];
+    if (themeDiff) parts.push('"' + themeName(savedTheme) + '" mode');
+    if (langDiff) parts.push('"' + (SITE_LANG_NAME[savedLang] || savedLang) + '" language');
+    var curParts = [];
+    if (themeDiff) curParts.push('"' + themeName(curTheme) + '" mode');
+    if (langDiff) curParts.push('"' + (SITE_LANG_NAME[curLang] || 'current') + '" language');
+
     showMcToast({
       icon: '⚙',
       title: 'Account preference',
-      desc: 'Your account has “' + themeName(saved) + '” saved, and this device is currently in “' + themeName(cur) + '”. Use the account preference?',
+      desc: 'Your account has ' + parts.join(' and ') + ' saved, and this device is currently in ' + curParts.join(' and ') + '. Use the account preference?',
       autoHideMs: 15000,
       actions: [
         {
           text: 'Use account preference',
           cls: 'primary',
           onClick: function () {
-            applyTheme(saved, true);
-            writePrefAck(user, saved);
+            writePrefAck(user, key);
+            if (themeDiff) applyTheme(savedTheme, true);
+            if (langDiff) {
+              // 语言要换站，跳走之后就不用再弹「已套用」了
+              location.replace(pathInLang(savedLang) + location.search);
+              return;
+            }
             showMcToast({
-              icon: themeMeta(saved).ico,
+              icon: themeMeta(savedTheme).ico,
               title: 'Account preference applied',
-              desc: 'You are now in “' + themeName(saved) + '” mode.',
+              desc: 'You are now in "' + themeName(savedTheme) + '" mode.',
               autoHideMs: 2800
             });
           }
@@ -375,21 +415,149 @@
         {
           text: 'Keep this device',
           cls: 'mute',
-          onClick: function () { writePrefAck(user, saved); }
+          onClick: function () { writePrefAck(user, key); }
         }
       ]
     });
   }
 
-  /* ==================== Region → language site ====================
-   * Once an account picks a region in the console, a signed-in visitor should stay
-   * on the matching language site: chosen the US but sitting on /zh_cn/ → move to
-   * the same page under /en_us/ (and the other way round).
+  /** 把主题 + 语言压成一个字符串做「这台设备已确认过」的标记 */
+  function ackValue(theme, lang) {
+    return String(theme || '') + '|' + String(lang || '');
+  }
+
+  /**
+   * 用户手动切换语言后（已登录）：问要不要把这个语言存成账户默认。
+   *   存 → 写账户偏好，然后跳过去（以后任何设备登录都按这个语言）
+   *   不存 → 只改本机 Cookie，跳过去；账户偏好保持原样
+   * 不管选哪个，都会跳 —— 语言切换本身是立即生效的。
+   */
+  function askSaveLangPref(want, target, data) {
+    var name = SITE_LANG_NAME[want] || want;
+    // data 由调用方传入当前这次 /api/status 的结果，不能用 lastStatus
+    var logged = data && data.loggedIn ? String(data.username || '') : '';
+    showMcToast({
+      icon: '🌐',
+      title: 'Account preference',
+      desc: 'Save "' + name + '" as your account default language? If saved, signing in on another device uses it too; otherwise it only applies to this device.',
+      autoHideMs: 18000,
+      actions: [
+        {
+          text: 'Save to account',
+          cls: 'primary',
+          onClick: function () {
+            fetch('/api/pref', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ lang: want })
+            }).catch(function () { /* 存失败也照常跳，本机 Cookie 已经改了 */ })
+              .then(function () {
+                if (logged) writePrefAck(logged, ackValue((data || {}).prefTheme, want));
+                location.href = target + location.search;
+              });
+          }
+        },
+        {
+          text: 'This device only',
+          cls: 'mute',
+          onClick: function () {
+            // 记下「这台设备对这个语言做过选择」，
+            // 免得下次切到同一个语言又问一遍。
+            if (logged) writePrefAck(logged, ackValue((data || {}).prefTheme, want));
+            location.href = target + location.search;
+          }
+        }
+      ]
+    });
+  }
+
+  /**
+   * 未登录时切换语言：语言立刻生效（本机 Cookie 已写），
+   * 但「账户偏好设置」得有账户才能存，所以弹一句提示并给登录入口。
+   */
+  function askLangNoAccount(want, target) {
+    var name = SITE_LANG_NAME[want] || want;
+    showMcToast({
+      icon: '🌐',
+      title: 'Not signed in',
+      desc: 'Switched to "' + name + '" for this device only. Sign in to save it as an account preference so other devices follow along.',
+      autoHideMs: 18000,
+      actions: [
+        {
+          text: 'Sign in',
+          cls: 'primary',
+          onClick: function () {
+            // 登录页也跟着目标语种走，别把繁体用户丢进简体登录页
+            var loginBase = (SITE_LANG_SITE[want] || SITE_LANG_SITE.en).replace(/\/$/, '');
+            location.href = loginBase + '/login/?lang=' + encodeURIComponent(want) + '&next=' +
+              encodeURIComponent(target + location.search);
+          }
+        },
+        {
+          text: 'Keep browsing',
+          cls: 'mute',
+          onClick: function () { location.href = target + location.search; }
+        }
+      ]
+    });
+  }
+
+  /* ==================== 界面语言（与地区解耦） ====================
+   * 三档：简 / 繁 / EN。右上角下拉切换。
    *
-   * Only once per device: sessionStorage remembers that we already jumped for this
-   * region, so a visitor who manually switches back to Chinese is not bounced away.
+   * 关键约定：
+   *   1) 换语言**不动账户里的地区** —— 语言是「你现在想看哪种文字」，
+   *      地区是「你在哪」，两件事分开；
+   *   2) 换完弹一次「账户偏好设置」，问要不要把这个语言存成账户默认，
+   *      以后在任何设备登录都按它来（这一步和主题共用同一套弹窗）；
+   *   3) 未登录也能换，只是不弹偏好设置（没有账户可存）。
+   */
+  var SITE_LANG_SITE = { zh: '/zh_cn/', zh_hant: '/zh_tw/', en: '/en_us/' };
+  var SITE_LANG_NAME = { zh: 'Simplified Chinese', zh_hant: 'Traditional Chinese', en: 'English' };
+  var SITE_PREFIXES = [['/zh_tw', 'zh_hant'], ['/zh_cn', 'zh'], ['/en_us', 'en']];
+
+  /** 当前页在哪个语种站；不在任何语种目录就返回 null */
+  function currentSiteLang() {
+    var p = location.pathname;
+    for (var i = 0; i < SITE_PREFIXES.length; i++) {
+      var pre = SITE_PREFIXES[i][0];
+      if (p === pre || p.indexOf(pre + '/') === 0) return SITE_PREFIXES[i][1];
+    }
+    return null;
+  }
+
+  /** 当前页面路径 → 目标语种的同名页面 */
+  function pathInLang(lang) {
+    var cur = currentSiteLang();
+    var base = SITE_LANG_SITE[lang] || SITE_LANG_SITE.en;
+    if (!cur) return base;
+    var curBase = SITE_LANG_SITE[cur];
+    var rest = location.pathname.slice(curBase.length - 1);
+    return base.replace(/\/$/, '') + (rest === '/' ? '/' : rest);
+  }
+
+  /** 把站内路径（如 '/contact/'）转成当前语种下的实际路径 */
+  function siteUrl(logicalPath) {
+    var cur = currentSiteLang();
+    var base = SITE_LANG_SITE[cur] || SITE_LANG_SITE.en;
+    var p = String(logicalPath || '/');
+    if (p.charAt(0) !== '/') p = '/' + p;
+    return base.replace(/\/$/, '') + (p === '/' ? '/' : p);
+  }
+
+  /* ==================== 地区 → 语种站（自动跟随） ====================
+   * 账户在控制台选了「所在地区 / 国籍」后，登录状态下应该停在对应语种站：
+   * 选了美国却还站在 /zh_cn/ 上，就自动换到 /en_us/ 的同名页面（反之亦然）。
+   *
+   * 三条约束：
+   *   1) 只跳一次 —— sessionStorage 记住「这台设备已经为该地区跳过一次」，
+   *      免得用户手动切回来又被弹走；
+   *   2) 用户显式选过语言就不跳 —— 手动切换语言表达的是当下意图，
+   *      比地区推断更准，不能拿地区把它覆盖掉；
+   *   3) 只在语种目录之间互跳，根路径 / 静态资源不碰。
    */
   var REGION_REDIRECT_KEY = 'zrfeng-region-redirect:';
+  var LANG_PICKED_KEY = 'zrfeng-lang-picked';   // 用户手动切过语言的标记
 
   function regionRedirectKey(user, region) {
     return REGION_REDIRECT_KEY + String(user || '').toLowerCase() + ':' + String(region || '');
@@ -403,11 +571,21 @@
     try { sessionStorage.setItem(regionRedirectKey(user, region), '1'); } catch (e) { }
   }
 
-  /** Region code → target language directory (kept in sync with SITE_REGIONS in worker.js) */
+  /** 用户是不是手动切过语言（切过就别再按地区自动跳） */
+  function langPickedByUser() {
+    try { return localStorage.getItem(LANG_PICKED_KEY) === '1'; } catch (e) { return false; }
+  }
+
+  function markLangPicked() {
+    try { localStorage.setItem(LANG_PICKED_KEY, '1'); } catch (e) { }
+  }
+
+  /** 地区代码 → 目标语种（和服务端 SITE_REGIONS 保持一致） */
   function siteLangOfRegion(region) {
     var r = String(region || '').toUpperCase();
     if (r === 'CN') return 'zh';
-    if (r === 'US') return 'en';
+    if (r === 'HK' || r === 'MO' || r === 'TW') return 'zh_hant';
+    if (r === 'US' || r === 'OTHER') return 'en';
     return null;
   }
 
@@ -417,27 +595,24 @@
     var region = data.prefRegion || null;
     if (!user || !region) return;
 
+    // 用户手动切过语言 → 尊重他的选择，不按地区覆盖
+    if (langPickedByUser()) return;
+
     var wantLang = siteLangOfRegion(region);
     if (!wantLang) return;
 
-    var path = location.pathname;
-    var onEn = path === '/en_us' || path.indexOf('/en_us/') === 0;
-    var onZh = path === '/zh_cn' || path.indexOf('/zh_cn/') === 0;
-    // Only swap between the two language directories; the root / picker is server-side
-    if (!onEn && !onZh) return;
+    var curLang = currentSiteLang();
+    if (!curLang) return;   // 不在任何语种目录里，不插手
 
-    var curLang = onEn ? 'en' : 'zh';
     if (curLang === wantLang) {
-      // Already on the right site → clear the flag so a region change can jump again
+      // 已经在正确的语种站 → 清标记，下次换地区还能再跳
       try { sessionStorage.removeItem(regionRedirectKey(user, region)); } catch (e) { }
       return;
     }
     if (regionAlreadyJumped(user, region)) return;
 
     markRegionJumped(user, region);
-    var rest = onEn ? path.slice('/en_us'.length) : path.slice('/zh_cn'.length);
-    if (!rest) rest = '/';
-    location.replace((wantLang === 'en' ? '/en_us' : '/zh_cn') + rest + location.search);
+    location.replace(pathInLang(wantLang) + location.search);
   }
 
 
@@ -467,7 +642,7 @@
     var m = Math.floor((ms % 3600000) / 60000);
     var s = Math.floor((ms % 60000) / 1000);
     var p2 = function (n) { return n < 10 ? '0' + n : '' + n; };
-    return d + ' days ' + p2(h) + ':' + p2(m) + ':' + p2(s);
+    return d + 'd ' + p2(h) + ':' + p2(m) + ':' + p2(s);
   }
 
   function showBlocked() {
@@ -477,9 +652,9 @@
     mask.innerHTML =
       '<div class="bm-card">' +
       '<h2>You are blocked</h2>' +
-      '<p>Trial period over. Please contact the admin to activate your account.</p>' +
+      '<p>Your trial has ended. Contact an admin to activate the account.</p>' +
       '<div class="bm-acts">' +
-      '<a href="/en_us/contact/">Contact us</a>' +
+      '<a href="' + siteUrl('/contact/') + '">Contact us</a>' +
       '<button type="button" id="dsh-block-close">Close</button>' +
       '</div></div>';
     document.body.appendChild(mask);
@@ -504,13 +679,13 @@
   }
 
   /** VPN / 代理被封：文案与普通封禁不同，第一行英文标题、第二行中文说明 */
-  var PROXY_MSG = 'You are blocked!\nVPN or proxy detected. Your account has been suspended. Please turn off your VPN or proxy now and contact support.';
+  var PROXY_MSG = 'You are blocked!\nA VPN or proxy was detected and your account has been suspended. Please turn off the VPN/proxy now and contact support.';
 
   function showProxyBlock(raw) {
     if (document.getElementById(BAN_ID)) return;
     var lines = String(raw || PROXY_MSG).split('\n').filter(function (x) { return x.trim(); });
     var title = lines.length > 1 ? lines.shift() : 'You are blocked!';
-    var body = lines.join(' ') || 'VPN or proxy detected. Your account has been suspended. Please turn off your VPN or proxy now and contact support.';
+    var body = lines.join(' ') || 'A VPN or proxy was detected and your account has been suspended. Please turn off the VPN/proxy now and contact support.';
     var mask = document.createElement('div');
     mask.id = BAN_ID;
     mask.innerHTML =
@@ -518,7 +693,7 @@
       '<h2>' + escHtml(title) + '</h2>' +
       '<p>' + escHtml(body) + '</p>' +
       '<div class="bn-acts">' +
-      '<a href="/en_us/contact/">Contact us</a>' +
+      '<a href="' + siteUrl('/contact/') + '">Contact us</a>' +
       '<button type="button" id="dsh-ban-out">Close</button>' +
       '</div></div>';
     document.body.appendChild(mask);
@@ -536,15 +711,15 @@
     var meta = '';
     if (acc && (acc.banFrom || acc.banUntil)) {
       // 完整的起止时间：开始 →（结束 或 永久）
-      meta += '<p class="bn-meta">Ban period: ' + (acc.banFrom ? fmtClock(acc.banFrom) : '—') +
-        ' → ' + (acc.banUntil ? fmtClock(acc.banUntil) : 'Permanent') + '</p>';
+      meta += '<p class="bn-meta">Ban window: ' + (acc.banFrom ? fmtClock(acc.banFrom) : '—') +
+        ' → ' + (acc.banUntil ? fmtClock(acc.banUntil) : 'permanent') + '</p>';
     }
     if (acc && acc.banPermanent) {
       // 永久封禁：和「试用期仅剩-1天」一样，用 -1天 表示永不到期
-      meta += '<p class="bn-meta">Ban time remaining <b>-1 days</b> (permanent ban, will not be lifted automatically)</p>';
+      meta += '<p class="bn-meta">Ban time left <b>-1 day</b> (permanent, never lifts automatically)</p>';
     } else if (acc && acc.banUntil) {
-      meta += '<p class="bn-meta">Ban time remaining <span id="dsh-ban-left">' +
-        fmtLeft(Math.max(0, Number(acc.banRemainingMs) || 0)) + '</span> (lifted automatically at expiry)</p>';
+      meta += '<p class="bn-meta">Ban time left <span id="dsh-ban-left">' +
+        fmtLeft(Math.max(0, Number(acc.banRemainingMs) || 0)) + '</span> (lifts automatically)</p>';
     } else if (acc && acc.bannedAt) {
       meta += '<p class="bn-meta">Banned at: ' + fmtClock(acc.bannedAt) + '</p>';
     }
@@ -552,12 +727,12 @@
     mask.id = BAN_ID;
     mask.innerHTML =
       '<div class="bn-card">' +
-      '<h2>Account restricted</h2>' +
+      '<h2>Account issue</h2>' +
       '<p>This account has been banned by an admin. Please contact an admin.</p>' +
       meta +
       '<div class="bn-acts">' +
-      '<a href="/en_us/contact/">Contact us</a>' +
-      '<button type="button" id="dsh-ban-out">Log out</button>' +
+      '<a href="' + siteUrl('/contact/') + '">Contact us</a>' +
+      '<button type="button" id="dsh-ban-out">Sign out</button>' +
       '</div>' +
       '</div>';
     document.body.appendChild(mask);
@@ -565,7 +740,7 @@
     if (out) {
       out.onclick = function () {
         fetch('/api/logout', { method: 'POST' }).then(function () {
-          location.href = '/en_us/';
+          location.href = siteUrl('/');
         });
       };
     }
@@ -590,13 +765,13 @@
     mask.innerHTML =
       '<div class="wn-card">' +
       '<div class="wn-badge">Account warning</div>' +
-      '<h2>You received a warning from an admin</h2>' +
+      '<h2>You received a warning</h2>' +
       '<div class="wn-text" id="dsh-warn-text"></div>' +
       (w.by ? '<p class="wn-by">From admin: ' + escHtml(w.by) + '</p>' : '') +
-      '<p class="wn-note">It will not appear again after you acknowledge it; you can review it anytime under “Notices → My messages”.</p>' +
+      '<p class="wn-note">This will not pop up again after you confirm; you can review it anytime in Notices → My messages.</p>' +
       '<div class="wn-acts">' +
-      '<button type="button" id="dsh-warn-ok">I understand</button>' +
-      '<a href="/en_us/notice/">Go to Notices</a>' +
+      '<button type="button" id="dsh-warn-ok">Got it</button>' +
+      '<a href="' + siteUrl('/notice/') + '">Go to notices</a>' +
       '</div>' +
       '</div>';
     document.body.appendChild(mask);
@@ -670,13 +845,13 @@
     mask.id = MAINT_ID;
     mask.innerHTML =
       '<div class="mt-card">' +
-      '<p class="mt-quote">A bosom friend afar brings a distant land near</p>' +
-      '<h2>Site is under maintenance</h2>' +
-      '<p class="mt-pct">Completed <b id="dsh-mt-pct">' + maintPercent(st) + '%</b></p>' +
+      '<p class="mt-quote">A bosom friend afar brings a distant land near.</p>' +
+      '<h2>Under maintenance</h2>' +
+      '<p class="mt-pct">Progress <b id="dsh-mt-pct">' + maintPercent(st) + '%</b></p>' +
       '<div class="mt-acts"><button type="button" id="dsh-mt-admin">Admin close</button></div>' +
-      '<div class="mt-note" id="dsh-mt-note">Admins can go to the Console to close maintenance</div>' +
+      '<div class="mt-note" id="dsh-mt-note">Admins can turn maintenance off in the console</div>' +
       (st && st.keySet
-        ? '<details class="mt-staff"><summary>Staff preview access</summary>' +
+        ? '<details class="mt-staff"><summary>Staff preview entry</summary>' +
           '<input id="dsh-mt-key" type="password" placeholder="Maintenance access key" autocomplete="off">' +
           '<button type="button" id="dsh-mt-enter">Enter preview</button>' +
           '<div class="mt-staff-msg" id="dsh-mt-smsg"></div></details>'
@@ -690,7 +865,7 @@
     if (btn) {
       btn.onclick = function () {
         if (isAdmin) {
-          location.href = '/en_us/console/';
+          location.href = siteUrl('/console/');
           return;
         }
         var n = document.getElementById('dsh-mt-note');
@@ -708,7 +883,7 @@
       var sMsg = document.getElementById('dsh-mt-smsg');
       var go = function () {
         var v = kEl ? kEl.value.trim() : '';
-        if (!v) { if (sMsg) { sMsg.textContent = 'Please enter the access key'; sMsg.style.color = '#ff7b7b'; } return; }
+        if (!v) { if (sMsg) { sMsg.textContent = 'Enter the access key'; sMsg.style.color = '#ff7b7b'; } return; }
         enter.disabled = true;
         fetch('/api/maintenance/unlock', {
           method: 'POST',
@@ -722,7 +897,7 @@
               enter.disabled = false;
               return;
             }
-            if (sMsg) { sMsg.textContent = 'Preview mode on, reloading…'; sMsg.style.color = '#00ff8c'; }
+            if (sMsg) { sMsg.textContent = 'Preview mode on, refreshing…'; sMsg.style.color = '#00ff8c'; }
             setTimeout(function () { location.reload(); }, 500);
           })
           .catch(function () {
@@ -806,13 +981,18 @@
   ];
 
   /**
-   * 去掉语种目录前缀：/zh_cn/notice/ 和 /en_us/notice/ 都按 /notice/ 处理。
-   * 站点拆成两个语种目录后，维护范围判断不能再看完整路径，否则两边对不上。
+   * 去掉语种目录前缀：/zh_cn/notice/、/zh_tw/notice/、/en_us/notice/
+   * 都按 /notice/ 处理。站点拆成多个语种目录后，维护范围判断不能再看完整路径，
+   * 否则三边对不上（早先漏了 zh_tw，导致繁体站的维护标记失效）。
    */
   function langlessPath(path) {
     var p = String(path || '/');
-    if (p === '/zh_cn' || p === '/en_us') return '/';
-    if (p.indexOf('/zh_cn/') === 0 || p.indexOf('/en_us/') === 0) return p.slice(6) || '/';
+    var prefixes = ['/zh_tw', '/zh_cn', '/en_us'];
+    for (var i = 0; i < prefixes.length; i++) {
+      var pre = prefixes[i];
+      if (p === pre) return '/';
+      if (p.indexOf(pre + '/') === 0) return p.slice(pre.length) || '/';
+    }
     return p;
   }
 
@@ -909,7 +1089,7 @@
       return;
     }
 
-    var acc = (data && data.account) || { state: 'guest', dot: 'red', label: 'Log in to use this site', activated: false };
+    var acc = (data && data.account) || { state: 'guest', dot: 'red', label: 'Sign in to continue', activated: false };
     stopCountdown();
 
     var old = document.getElementById(BAR_ID);
@@ -920,8 +1100,8 @@
 
     var left = document.createElement('div');
     left.className = 'sb-l';
-    // When two-factor authentication is off, drop the green dot — a dot means
-    // "account active", which contradicts the risk notice next to it.
+    // 二次验证已关闭时不再显示绿点 —— 绿点代表「账户正常」，
+    // 风险提示和绿点放在一起会自相矛盾，直接去掉圆点。
     if (!acc.twofaOff) {
       var dot = document.createElement('span');
       dot.className = 'sb-dot ' + (acc.dot || 'red');
@@ -935,14 +1115,14 @@
     if (acc.state === 'guest') {
       var a = document.createElement('a');
       a.className = 'sb-text';
-      a.href = '/en_us/login/';
-      a.textContent = acc.label || 'Log in to use this site';
+      a.href = siteUrl('/login/');
+      a.textContent = acc.label || 'Sign in to continue';
       left.appendChild(a);
     } else if (acc.state === 'trial' && typeof acc.remainingMs === 'number') {
       // 实时倒计时：宽屏「未激活，试用期仅剩 」/ 窄屏「未激活 」
       preEl = document.createElement('span');
       preEl.className = 'sb-pre';
-      preEl.textContent = 'Inactive, trial ends in ';
+      preEl.textContent = 'Inactive, trial left ';
       preShortEl = document.createElement('span');
       preShortEl.className = 'sb-pre-s';
       preShortEl.textContent = 'Inactive ';
@@ -958,14 +1138,14 @@
       //   永久   → 「账户异常，剩余封禁时间 -1天」（和「试用期仅剩-1天」一个写法）
       preEl = document.createElement('span');
       preEl.className = 'sb-pre';
-      preEl.textContent = 'Account restricted, ban time remaining ';
+      preEl.textContent = 'Account restricted, ban left ';
       preShortEl = document.createElement('span');
       preShortEl.className = 'sb-pre-s';
-      preShortEl.textContent = 'Account restricted ';
+      preShortEl.textContent = 'Restricted ';
       cdEl = document.createElement('span');
       cdEl.className = 'sb-cd';
       cdEl.textContent = acc.banPermanent
-        ? '-1 days'
+        ? '-1 day'
         : fmtLeft(Math.max(0, Number(acc.banRemainingMs) || 0));
       left.appendChild(preEl);
       left.appendChild(preShortEl);
@@ -974,16 +1154,15 @@
       var t = document.createElement('span');
       t.className = 'sb-text';
       if (acc.twofaOff) {
-        // Two-factor authentication is off: replace "Account active" entirely
-        // with an exclamation mark plus the risk notice.
-        // The server decides (account.twofaOff); this only displays it.
+        // 二次验证已关闭：把「账户正常」整段换掉，改成感叹号 + 风险提示。
+        // 服务端判定（account.twofaOff），前端只负责显示。
         t.className = 'sb-text sb-risk-text';
         var ex = document.createElement('span');
         ex.className = 'sb-ex';
         ex.textContent = '!';
-        ex.title = 'This account is at risk of being hijacked';
+        ex.title = 'This account may be compromised';
         t.appendChild(ex);
-        t.appendChild(document.createTextNode(acc.riskLabelEn || 'This account is at risk of being hijacked'));
+        t.appendChild(document.createTextNode(acc.riskLabel || 'This account may be compromised'));
       } else {
         t.textContent = acc.label || '';
       }
@@ -993,12 +1172,60 @@
 
     var right = document.createElement('div');
     right.className = 'sb-r';
+
+    /* 右上角语言选择器：三档，和地区无关，未登录也能用。
+       放在控制台 / 登出前面，保证任何状态下都在最右侧固定位置。 */
+    (function addLangSwitch() {
+      var cur = currentSiteLang() || 'en';
+      var wrap = document.createElement('span');
+      wrap.className = 'sb-lang';
+      var sel = document.createElement('select');
+      sel.setAttribute('aria-label', 'Language');
+      sel.title = 'Interface language (does not change account region)';
+      [['zh', '简体'], ['zh_hant', '繁體'], ['en', 'EN']].forEach(function (p) {
+        var o = document.createElement('option');
+        o.value = p[0];
+        o.textContent = p[1];
+        if (p[0] === cur) o.selected = true;
+        sel.appendChild(o);
+      });
+      sel.onchange = function () {
+        var want = sel.value;
+        if (want === currentSiteLang()) return;
+        // 本机选择先落地：不管后面弹不弹窗、跳不跳，刷新后语言都得留住。
+        // 同时打上「用户手动选过」标记 —— 否则按地区自动跟随会把它覆盖回去。
+        try {
+          // 和 worker 写的 langCookieHeader 保持一致；https 下补 Secure
+          var secure = location.protocol === 'https:' ? '; Secure' : '';
+          document.cookie = 'zrfeng-lang=' + want + '; Path=/; Max-Age=15552000; SameSite=Lax' + secure;
+        } catch (e) { }
+        markLangPicked();
+        var target = pathInLang(want);
+        // ⚠️ 这里必须用闭包里的 data，不能用 lastStatus ——
+        // 状态栏构建时 lastStatus 还没赋值（它在函数末尾才写），
+        // 早先判断 lastStatus.loggedIn 永远是 false，所以从不弹偏好设置。
+        if (data && data.loggedIn) {
+          // 账户里已经是这个语言了 → 没什么可问的，直接跳。
+          // （之前无条件弹窗，导致「切走再切回来」也会被问一遍，很烦。）
+          if (data.prefLang === want) {
+            location.href = target + location.search;
+            return;
+          }
+          askSaveLangPref(want, target, data);
+          return;
+        }
+        // 未登录：也弹一次，告诉他账户偏好设置需要登录，顺便给个登录入口
+        askLangNoAccount(want, target);
+      };
+      wrap.appendChild(sel);
+      right.appendChild(wrap);
+    })();
     // 右上角控制台：已激活（完成邮箱验证）的用户可见。
     // 管理员额外可见 —— 否则没人能去激活被拦截的账户。
     if (data && data.loggedIn && (acc.activated || data.isAdmin)) {
       var c = document.createElement('a');
       c.className = 'sb-btn';
-      c.href = '/en_us/console/';
+      c.href = siteUrl('/console/');
       c.textContent = 'Console';
       right.appendChild(c);
     }
@@ -1008,7 +1235,7 @@
       var out = document.createElement('a');
       out.className = 'sb-btn';
       out.href = '#';
-      out.textContent = 'Log out';
+      out.textContent = 'Sign out';
       out.onclick = function (e) {
         e.preventDefault();
         fetch('/api/logout', { method: 'POST' }).then(function () {
@@ -1023,7 +1250,7 @@
     // 记录本次状态；顺便判断要不要问「是否套用账户偏好」（每页只问一次）
     lastStatus = data;
     maybeAskUsePref(data);
-    // Account has a region → stay on that language site (once per device per region)
+    // 账户选过「所在地区」→ 停到对应语种站（每台设备每个地区只跳一次）
     maybeFollowRegion(data);
 
     // 与服务端重新对齐：只有真的 blocked 才弹窗
@@ -1065,12 +1292,12 @@
           cdEl.textContent = '0 days 00:00:00';
           if (isBanBar) {
             // 到点自动解封：先关掉弹窗，再与服务端确认
-            if (preEl) preEl.textContent = 'Account restricted, ban lift time reached ';
+            if (preEl) preEl.textContent = 'Account restricted, ban time reached ';
             if (preShortEl) preShortEl.textContent = 'Unbanned ';
             hideBanned();
           } else {
-            if (preEl) preEl.textContent = 'Inactive, trial period over';
-            if (preShortEl) preShortEl.textContent = 'Trial over';
+            if (preEl) preEl.textContent = 'Inactive, trial ended';
+            if (preShortEl) preShortEl.textContent = 'Expired';
             showBlocked();
           }
           // 与服务端确认一次（客户端时钟可能偏差），3 秒后同步
@@ -1097,7 +1324,7 @@
       .then(render)
       .catch(function () {
         // 网络异常时退回未登录样式，不阻塞页面
-        render({ loggedIn: false, account: { state: 'guest', dot: 'red', label: 'Log in to use this site' } });
+        render({ loggedIn: false, account: { state: 'guest', dot: 'red', label: 'Sign in to continue' } });
       });
   }
 
