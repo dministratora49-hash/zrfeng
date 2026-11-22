@@ -460,7 +460,12 @@
         {
           text: '只改本机',
           cls: 'mute',
-          onClick: function () { location.href = target + location.search; }
+          onClick: function () {
+            // 记下「这台设备对这个语言做过选择」，
+            // 免得下次切到同一个语言又问一遍。
+            if (logged) writePrefAck(logged, ackValue((data || {}).prefTheme, want));
+            location.href = target + location.search;
+          }
         }
       ]
     });
@@ -1185,6 +1190,12 @@
         // 状态栏构建时 lastStatus 还没赋值（它在函数末尾才写），
         // 早先判断 lastStatus.loggedIn 永远是 false，所以从不弹偏好设置。
         if (data && data.loggedIn) {
+          // 账户里已经是这个语言了 → 没什么可问的，直接跳。
+          // （之前无条件弹窗，导致「切走再切回来」也会被问一遍，很烦。）
+          if (data.prefLang === want) {
+            location.href = target + location.search;
+            return;
+          }
           askSaveLangPref(want, target, data);
           return;
         }
