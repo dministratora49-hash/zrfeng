@@ -2170,8 +2170,11 @@ async function handleChatList(env, request) {
   const who = await chatRequireLogin(env, request);
   if (who.error) return who.error;
 
+  // listChat 按从新到旧返回；先倒成时间正序，再取最近的 CHAT_PAGE_MAX 条，
+  // 前端 forEach 正序追加就能得到「旧在上、新在下」的正常聊天顺序。
+  // 用 slice().reverse() 而不是 reverse()：不改动 listChat 的返回数组，读起来更安全。
   const all = await listChat(env, CHAT_MAX_KEEP);
-  const ordered = all.slice(-CHAT_PAGE_MAX);
+  const ordered = all.slice().reverse().slice(-CHAT_PAGE_MAX);
 
   const stats = await chatStub(env).stats();
 
