@@ -107,6 +107,43 @@
   .maint .m-stat { font-size: 12px; color: #b9a888; margin-bottom: 14px; line-height: 1.8; }
   .maint .m-stat b { color: #ffb020; }
   .m-field { margin-bottom: 12px; }
+  /* Region dropdown: themed per palette, independent of .pick (Android-only) */
+  .pick { margin: 4px 0 2px; }
+  .pick label { display: block; font-size: 12px; color: #7fa893; margin-bottom: 6px; }
+  .pick select {
+    width: 100%; padding: 11px 12px; border-radius: 10px;
+    border: 1px solid rgba(0,255,140,0.35); background: rgba(0,0,0,0.45);
+    color: #e8f5ee; font-size: 14px; font-family: inherit;
+    appearance: none; -webkit-appearance: none;
+    background-image: linear-gradient(45deg, transparent 50%, #00ff8c 50%),
+                      linear-gradient(135deg, #00ff8c 50%, transparent 50%);
+    background-position: calc(100% - 18px) 50%, calc(100% - 13px) 50%;
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+  }
+  .pick select:focus { outline: none; border-color: rgba(0,255,140,0.8); }
+  .pick select option { background: #0a120e; color: #e8f5ee; }
+  .pick select optgroup { background: #0a120e; color: #7fa893; font-style: normal; }
+  html[data-theme="light"] .pick label { color: #6b7f73; }
+  html[data-theme="light"] .pick select {
+    background-color: #fff; color: #1a2b22;
+    border-color: rgba(0,150,90,0.35);
+    background-image: linear-gradient(45deg, transparent 50%, #0a7a4a 50%),
+                      linear-gradient(135deg, #0a7a4a 50%, transparent 50%);
+  }
+  html[data-theme="light"] .pick select option,
+  html[data-theme="light"] .pick select optgroup { background: #fff; color: #1a2b22; }
+  html[data-theme="android"] .pick select {
+    background-color: var(--md-surface); color: var(--md-on-surface);
+    border-color: var(--md-outline);
+    background-image: linear-gradient(45deg, transparent 50%, var(--md-on-surface-var) 50%),
+                      linear-gradient(135deg, var(--md-on-surface-var) 50%, transparent 50%);
+  }
+  html[data-theme="android"] .pick label { color: var(--md-on-surface-var); }
+  html[data-theme="android"] .pick select option,
+  html[data-theme="android"] .pick select optgroup {
+    background: var(--md-surface); color: var(--md-on-surface);
+  }
   .m-field label { display: block; font-size: 12px; color: #a89b7c; margin-bottom: 5px; }
   .m-field input {
     width: 100%; padding: 10px 12px; border-radius: 9px;
@@ -391,32 +428,37 @@
 
     // Region: decides which language site you land on after signing in.
     // The list comes from /api/me → regions, so adding a region only touches worker.js.
+    // A dropdown rather than one row per country: dozens of regions stay compact.
     var REGIONS = (j && j.regions) || [
       { id: 'CN', name: "People's Republic of China", nameEn: "People's Republic of China", lang: 'zh' },
       { id: 'US', name: 'United States of America', nameEn: 'United States of America', lang: 'en' }
     ];
     var curRegion = u.region || null;
+    // Grouped by language, fixed order: Chinese site first, then English
+    var REGION_GROUPS = [
+      { lang: 'zh', label: 'Goes to the Chinese site /zh_cn/' },
+      { lang: 'en', label: 'Goes to the English site /en_us/' }
+    ];
     var rg = '<div class="card"><h2>Region</h2>' +
       '<div class="meta" style="margin-bottom:10px">' +
-      'Pick the region you are in. After signing in you go straight to that language site (Chinese / English). ' +
-      'Leave it unset to follow the language you last picked on this device; with nothing picked you see the language picker first.</div>';
-    REGIONS.forEach(function (r) {
-      var on = r.id === curRegion;
-      rg += '<div class="row">' +
-        '<div class="info"><div class="name">' + esc(r.nameEn || r.name) +
-        (on ? ' <span class="tag active">In use</span>' : '') + '</div>' +
-        '<div class="meta">Goes to ' + (r.lang === 'en' ? 'the English site /en_us/' : 'the Chinese site /zh_cn/') + '</div></div>' +
-        '<button data-region-pick="' + r.id + '"' + (on ? ' disabled' : '') + '>' +
-        (on ? 'Current' : 'Choose') + '</button>' +
-        '</div>';
+      'Pick the region you are in. After signing in you go straight to that language site. ' +
+      'Choose “Not set” to follow the language picked on this device instead; with nothing picked you see the language picker first.</div>' +
+      '<div class="pick"><label for="regionSel">Region</label>' +
+      '<select id="regionSel">' +
+      '<option value="">Not set (follow this device)</option>';
+    REGION_GROUPS.forEach(function (g) {
+      var hit = REGIONS.filter(function (r) { return (r.lang || 'zh') === g.lang; });
+      if (!hit.length) return;
+      rg += '<optgroup label="' + esc(g.label) + '">';
+      hit.forEach(function (r) {
+        rg += '<option value="' + esc(r.id) + '"' +
+          (r.id === curRegion ? ' selected' : '') + '>' +
+          esc(r.nameEn || r.name) + ' (' + esc(r.id) + ')</option>';
+      });
+      rg += '</optgroup>';
     });
-    if (curRegion) {
-      rg += '<div class="row">' +
-        '<div class="info"><div class="name">No region</div>' +
-        '<div class="meta">Clears the region so the site follows the language picked on this device instead</div></div>' +
-        '<button data-region-pick="" class="mute">Clear</button></div>';
-    }
-    rg += '<div class="msg" id="regionMsg"></div></div>';
+    rg += '</select></div>' +
+      '<div class="msg" id="regionMsg"></div></div>';
     html += rg;
 
     // Appearance: all three themes are kept — the old ones are still selectable
@@ -462,9 +504,9 @@
     meEl.querySelectorAll('button[data-theme-pick]').forEach(function (x) {
       x.onclick = function () { pickTheme(x.dataset.themePick); };
     });
-    meEl.querySelectorAll('button[data-region-pick]').forEach(function (x) {
-      x.onclick = function () { pickRegion(x.dataset.regionPick || ''); };
-    });
+    // Region is a dropdown: saving on change, no confirmation
+    var rsel = document.getElementById('regionSel');
+    if (rsel) rsel.onchange = function () { pickRegion(rsel.value); };
     meEl.querySelectorAll('button[data-2fa]').forEach(function (x) {
       x.onclick = function () {
         var enable = x.getAttribute('data-2fa') === 'on';
@@ -570,9 +612,12 @@
       var m = document.getElementById('regionMsg');
       if (!j || !j.ok) {
         if (m) { m.className = 'msg err'; m.textContent = 'Could not save: ' + ((j && (j.error || j.message)) || 'unknown reason'); }
+        // Failed: put the dropdown back to the stored value instead of lying
+        var sel = document.getElementById('regionSel');
+        if (sel) sel.value = (ME && ME.user && ME.user.region) || '';
         return;
       }
-      if (m) { m.className = 'msg ok'; m.textContent = 'Saved.'; }
+      if (m) { m.className = 'msg ok'; m.textContent = j.regionCleared ? 'Cleared — following this device now.' : 'Saved.'; }
       refreshMe();
       if (j.site) {
         var here = location.pathname;

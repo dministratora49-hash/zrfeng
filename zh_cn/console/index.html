@@ -108,6 +108,43 @@
   .maint .m-stat b { color: #ffb020; }
   .m-field { margin-bottom: 12px; }
   .m-field label { display: block; font-size: 12px; color: #a89b7c; margin-bottom: 5px; }
+  /* 所在地区下拉框：三套主题各自配色，不依赖 .pick（那只在 android 主题里有定义） */
+  .pick { margin: 4px 0 2px; }
+  .pick label { display: block; font-size: 12px; color: #7fa893; margin-bottom: 6px; }
+  .pick select {
+    width: 100%; padding: 11px 12px; border-radius: 10px;
+    border: 1px solid rgba(0,255,140,0.35); background: rgba(0,0,0,0.45);
+    color: #e8f5ee; font-size: 14px; font-family: inherit;
+    appearance: none; -webkit-appearance: none;
+    background-image: linear-gradient(45deg, transparent 50%, #00ff8c 50%),
+                      linear-gradient(135deg, #00ff8c 50%, transparent 50%);
+    background-position: calc(100% - 18px) 50%, calc(100% - 13px) 50%;
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+  }
+  .pick select:focus { outline: none; border-color: rgba(0,255,140,0.8); }
+  .pick select option { background: #0a120e; color: #e8f5ee; }
+  .pick select optgroup { background: #0a120e; color: #7fa893; font-style: normal; }
+  html[data-theme="light"] .pick label { color: #6b7f73; }
+  html[data-theme="light"] .pick select {
+    background-color: #fff; color: #1a2b22;
+    border-color: rgba(0,150,90,0.35);
+    background-image: linear-gradient(45deg, transparent 50%, #0a7a4a 50%),
+                      linear-gradient(135deg, #0a7a4a 50%, transparent 50%);
+  }
+  html[data-theme="light"] .pick select option,
+  html[data-theme="light"] .pick select optgroup { background: #fff; color: #1a2b22; }
+  html[data-theme="android"] .pick select {
+    background-color: var(--md-surface); color: var(--md-on-surface);
+    border-color: var(--md-outline);
+    background-image: linear-gradient(45deg, transparent 50%, var(--md-on-surface-var) 50%),
+                      linear-gradient(135deg, var(--md-on-surface-var) 50%, transparent 50%);
+  }
+  html[data-theme="android"] .pick label { color: var(--md-on-surface-var); }
+  html[data-theme="android"] .pick select option,
+  html[data-theme="android"] .pick select optgroup {
+    background: var(--md-surface); color: var(--md-on-surface);
+  }
   .m-field input {
     width: 100%; padding: 10px 12px; border-radius: 9px;
     border: 1px solid rgba(255,170,0,0.35); background: rgba(0,0,0,0.45);
@@ -391,33 +428,37 @@
 
     // 所在地区：决定登录后进中文站还是英文站。
     // 地区表由服务端 /api/me 的 regions 下发，前端不硬编码，加地区只改 worker.js。
+    // 用下拉而不是一行一个国家：以后加到几十个国家也不会把卡片撑长。
     var REGIONS = (j && j.regions) || [
       { id: 'CN', name: '中华人民共和国', lang: 'zh' },
       { id: 'US', name: '美利坚合众国', lang: 'en' }
     ];
     var curRegion = u.region || null;
+    // 按语种分组，顺序固定：中文站在前，英文站在后
+    var REGION_GROUPS = [
+      { lang: 'zh', label: '进入中文站 /zh_cn/' },
+      { lang: 'en', label: '进入英文站 /en_us/' }
+    ];
     var rg = '<div class="card"><h2>所在地区</h2>' +
       '<div class="meta" style="margin-bottom:10px">' +
-      '选择你所在的地区，登录后会直接进入对应的语言站点（中文站 / 英文站）。' +
-      '留空则按本机上次选的语种走；没选过会先看到语言选择页。</div>';
-    REGIONS.forEach(function (r) {
-      var on = r.id === curRegion;
-      rg += '<div class="row">' +
-        '<div class="info"><div class="name">' + esc(r.name) +
-        (on ? ' <span class="tag active">使用中</span>' : '') + '</div>' +
-        '<div class="meta">进入' + (r.lang === 'en' ? '英文站 /en_us/' : '中文站 /zh_cn/') + '</div></div>' +
-        '<button data-region-pick="' + r.id + '"' + (on ? ' disabled' : '') + '>' +
-        (on ? '当前' : '选择') + '</button>' +
-        '</div>';
+      '选择你所在的地区，登录后会直接进入对应的语言站点。' +
+      '选「不指定」则按本机上次选的语种走；都没选过会先看到语言选择页。</div>' +
+      '<div class="pick"><label for="regionSel">地区</label>' +
+      '<select id="regionSel">' +
+      '<option value="">不指定（按本机语种）</option>';
+    REGION_GROUPS.forEach(function (g) {
+      var hit = REGIONS.filter(function (r) { return (r.lang || 'zh') === g.lang; });
+      if (!hit.length) return;
+      rg += '<optgroup label="' + esc(g.label) + '">';
+      hit.forEach(function (r) {
+        rg += '<option value="' + esc(r.id) + '"' +
+          (r.id === curRegion ? ' selected' : '') + '>' +
+          esc(r.name) + '（' + esc(r.id) + '）</option>';
+      });
+      rg += '</optgroup>';
     });
-    // 已经选过地区时给一个「清除」，回到按本机语种 / 选择页的默认行为
-    if (curRegion) {
-      rg += '<div class="row">' +
-        '<div class="info"><div class="name">不指定地区</div>' +
-        '<div class="meta">清除后不再按地区跳站，改用本机上次选的语种</div></div>' +
-        '<button data-region-pick="" class="mute">清除</button></div>';
-    }
-    rg += '<div class="msg" id="regionMsg"></div></div>';
+    rg += '</select></div>' +
+      '<div class="msg" id="regionMsg"></div></div>';
     html += rg;
 
     // 外观：三套主题共存，旧主题一套没删，随时能选回来
@@ -463,9 +504,9 @@
     meEl.querySelectorAll('button[data-theme-pick]').forEach(function (x) {
       x.onclick = function () { pickTheme(x.dataset.themePick); };
     });
-    meEl.querySelectorAll('button[data-region-pick]').forEach(function (x) {
-      x.onclick = function () { pickRegion(x.dataset.regionPick || ''); };
-    });
+    // 地区是下拉框：选完即存，不弹二次确认
+    var rsel = document.getElementById('regionSel');
+    if (rsel) rsel.onchange = function () { pickRegion(rsel.value); };
     meEl.querySelectorAll('button[data-2fa]').forEach(function (x) {
       x.onclick = function () {
         var enable = x.getAttribute('data-2fa') === 'on';
@@ -490,10 +531,13 @@
       var m = document.getElementById('regionMsg');
       if (!j || !j.ok) {
         if (m) { m.className = 'msg err'; m.textContent = '保存失败：' + ((j && (j.error || j.message)) || '未知原因'); }
+        // 存失败就把下拉框拨回原来的值，别让界面骗人
+        var sel = document.getElementById('regionSel');
+        if (sel) sel.value = (ME && ME.user && ME.user.region) || '';
         return;
       }
-      if (m) { m.className = 'msg ok'; m.textContent = '已保存。'; }
-      // 重新拉一次 /api/me，让「使用中」标记和地区列表同步刷新
+      if (m) { m.className = 'msg ok'; m.textContent = j.regionCleared ? '已清除，按本机语种走。' : '已保存。'; }
+      // 重新拉一次 /api/me，让下拉框的选中态和地区列表同步刷新
       refreshMe();
       // 选了地区 → 跳到对应语种站；清除地区 → 留在原地
       if (j.site) {

@@ -4527,6 +4527,16 @@ const LANG_COOKIE_MAX_AGE = 60 * 60 * 24 * 180; // 半年
 const REGION_GATE_ENABLED = false;
 
 /** 控制台「所在地区」里可选的地区 → 语种。加新地区只改这一张表 */
+/* 站点语种地区表 —— 加地区只改这里。
+ *
+ * id     ISO 3166-1 alpha-2 国家码，存进账户偏好和前端下拉框的 value
+ * name   中文名（中文控制台、中文选择页用）
+ * nameEn 英文名（英文控制台用）
+ * lang   选了这个地区进哪个语种站：'zh' → /zh_cn/，'en' → /en_us/
+ *
+ * 前端不硬编码这张表：控制台「所在地区」下拉框由 /api/me 的 regions 渲染，
+ * 并按 lang 自动分组。所以以后加国家 = 在这里加一行，不用动任何 HTML。
+ */
 const SITE_REGIONS = [
   { id: 'CN', name: '中华人民共和国', nameEn: "People's Republic of China", lang: 'zh' },
   { id: 'US', name: '美利坚合众国', nameEn: 'United States of America', lang: 'en' },
