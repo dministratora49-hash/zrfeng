@@ -123,7 +123,6 @@
   }
   .pick select:focus { outline: none; border-color: rgba(0,255,140,0.8); }
   .pick select option { background: #0a120e; color: #e8f5ee; }
-  .pick select optgroup { background: #0a120e; color: #7fa893; font-style: normal; }
   html[data-theme="light"] .pick label { color: #6b7f73; }
   html[data-theme="light"] .pick select {
     background-color: #fff; color: #1a2b22;
@@ -131,8 +130,7 @@
     background-image: linear-gradient(45deg, transparent 50%, #0a7a4a 50%),
                       linear-gradient(135deg, #0a7a4a 50%, transparent 50%);
   }
-  html[data-theme="light"] .pick select option,
-  html[data-theme="light"] .pick select optgroup { background: #fff; color: #1a2b22; }
+  html[data-theme="light"] .pick select option { background: #fff; color: #1a2b22; }
   html[data-theme="android"] .pick select {
     background-color: var(--md-surface); color: var(--md-on-surface);
     border-color: var(--md-outline);
@@ -140,8 +138,7 @@
                       linear-gradient(135deg, var(--md-on-surface-var) 50%, transparent 50%);
   }
   html[data-theme="android"] .pick label { color: var(--md-on-surface-var); }
-  html[data-theme="android"] .pick select option,
-  html[data-theme="android"] .pick select optgroup {
+  html[data-theme="android"] .pick select option {
     background: var(--md-surface); color: var(--md-on-surface);
   }
   .m-field label { display: block; font-size: 12px; color: #a89b7c; margin-bottom: 5px; }
@@ -429,16 +426,13 @@
     // Region: decides which language site you land on after signing in.
     // The list comes from /api/me → regions, so adding a region only touches worker.js.
     // A dropdown rather than one row per country: dozens of regions stay compact.
+    // No "goes to which site" label — the region name says enough, the extra line
+    // only exposed implementation detail.
     var REGIONS = (j && j.regions) || [
       { id: 'CN', name: "People's Republic of China", nameEn: "People's Republic of China", lang: 'zh' },
       { id: 'US', name: 'United States of America', nameEn: 'United States of America', lang: 'en' }
     ];
     var curRegion = u.region || null;
-    // Grouped by language, fixed order: Chinese site first, then English
-    var REGION_GROUPS = [
-      { lang: 'zh', label: 'Goes to the Chinese site /zh_cn/' },
-      { lang: 'en', label: 'Goes to the English site /en_us/' }
-    ];
     var rg = '<div class="card"><h2>Region</h2>' +
       '<div class="meta" style="margin-bottom:10px">' +
       'Pick the region you are in. After signing in you go straight to that language site. ' +
@@ -446,16 +440,10 @@
       '<div class="pick"><label for="regionSel">Region</label>' +
       '<select id="regionSel">' +
       '<option value="">Not set (follow this device)</option>';
-    REGION_GROUPS.forEach(function (g) {
-      var hit = REGIONS.filter(function (r) { return (r.lang || 'zh') === g.lang; });
-      if (!hit.length) return;
-      rg += '<optgroup label="' + esc(g.label) + '">';
-      hit.forEach(function (r) {
-        rg += '<option value="' + esc(r.id) + '"' +
-          (r.id === curRegion ? ' selected' : '') + '>' +
-          esc(r.nameEn || r.name) + ' (' + esc(r.id) + ')</option>';
-      });
-      rg += '</optgroup>';
+    REGIONS.forEach(function (r) {
+      rg += '<option value="' + esc(r.id) + '"' +
+        (r.id === curRegion ? ' selected' : '') + '>' +
+        esc(r.nameEn || r.name) + ' (' + esc(r.id) + ')</option>';
     });
     rg += '</select></div>' +
       '<div class="msg" id="regionMsg"></div></div>';

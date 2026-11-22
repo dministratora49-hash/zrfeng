@@ -124,7 +124,6 @@
   }
   .pick select:focus { outline: none; border-color: rgba(0,255,140,0.8); }
   .pick select option { background: #0a120e; color: #e8f5ee; }
-  .pick select optgroup { background: #0a120e; color: #7fa893; font-style: normal; }
   html[data-theme="light"] .pick label { color: #6b7f73; }
   html[data-theme="light"] .pick select {
     background-color: #fff; color: #1a2b22;
@@ -132,8 +131,7 @@
     background-image: linear-gradient(45deg, transparent 50%, #0a7a4a 50%),
                       linear-gradient(135deg, #0a7a4a 50%, transparent 50%);
   }
-  html[data-theme="light"] .pick select option,
-  html[data-theme="light"] .pick select optgroup { background: #fff; color: #1a2b22; }
+  html[data-theme="light"] .pick select option { background: #fff; color: #1a2b22; }
   html[data-theme="android"] .pick select {
     background-color: var(--md-surface); color: var(--md-on-surface);
     border-color: var(--md-outline);
@@ -141,8 +139,7 @@
                       linear-gradient(135deg, var(--md-on-surface-var) 50%, transparent 50%);
   }
   html[data-theme="android"] .pick label { color: var(--md-on-surface-var); }
-  html[data-theme="android"] .pick select option,
-  html[data-theme="android"] .pick select optgroup {
+  html[data-theme="android"] .pick select option {
     background: var(--md-surface); color: var(--md-on-surface);
   }
   .m-field input {
@@ -429,16 +426,12 @@
     // 所在地区：决定登录后进中文站还是英文站。
     // 地区表由服务端 /api/me 的 regions 下发，前端不硬编码，加地区只改 worker.js。
     // 用下拉而不是一行一个国家：以后加到几十个国家也不会把卡片撑长。
+    // 不显示「进入哪个站」—— 地区名本身就够说明，加那句反而在提示技术细节。
     var REGIONS = (j && j.regions) || [
       { id: 'CN', name: '中华人民共和国', lang: 'zh' },
       { id: 'US', name: '美利坚合众国', lang: 'en' }
     ];
     var curRegion = u.region || null;
-    // 按语种分组，顺序固定：中文站在前，英文站在后
-    var REGION_GROUPS = [
-      { lang: 'zh', label: '进入中文站 /zh_cn/' },
-      { lang: 'en', label: '进入英文站 /en_us/' }
-    ];
     var rg = '<div class="card"><h2>所在地区</h2>' +
       '<div class="meta" style="margin-bottom:10px">' +
       '选择你所在的地区，登录后会直接进入对应的语言站点。' +
@@ -446,16 +439,10 @@
       '<div class="pick"><label for="regionSel">地区</label>' +
       '<select id="regionSel">' +
       '<option value="">不指定（按本机语种）</option>';
-    REGION_GROUPS.forEach(function (g) {
-      var hit = REGIONS.filter(function (r) { return (r.lang || 'zh') === g.lang; });
-      if (!hit.length) return;
-      rg += '<optgroup label="' + esc(g.label) + '">';
-      hit.forEach(function (r) {
-        rg += '<option value="' + esc(r.id) + '"' +
-          (r.id === curRegion ? ' selected' : '') + '>' +
-          esc(r.name) + '（' + esc(r.id) + '）</option>';
-      });
-      rg += '</optgroup>';
+    REGIONS.forEach(function (r) {
+      rg += '<option value="' + esc(r.id) + '"' +
+        (r.id === curRegion ? ' selected' : '') + '>' +
+        esc(r.name) + '（' + esc(r.id) + '）</option>';
     });
     rg += '</select></div>' +
       '<div class="msg" id="regionMsg"></div></div>';
