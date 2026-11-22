@@ -1025,6 +1025,83 @@ async function getSession(env, request) {
   return s;
 }
 
+/* ========================== GitHub 可达性探测 ==========================
+ * 赞助页的 Star 卡片靠它显示 Online / Offline。
+ *
+ * 放服务端做的原因：浏览器探测不了 github.com —— 跨域会被 CORS 挡掉，
+ * no-cors 又拿不到状态码，没法区分「真通了」和「返回 500」。
+ *
+ * 三个细节：
+ *   1) 60 秒 Cache API 缓存 —— 多人刷新不会把 github.com 打爆，
+ *      也避免 GitHub 偶尔抖一下页面就跟着闪；
+ *   2) 3 秒超时 —— 挂住不返回时立刻判 offline，不拖住页面；
+ *   3) 只看 status < 500 —— 200 / 3xx / 4xx 都说明网络通了，只有 5xx 才算不通。
+ */
+const GITHUB_PROBE_URL = 'https://github.com/';
+const GITHUB_PROBE_TIMEOUT = 3000;
+const GITHUB_CACHE_TTL = 60;   // 秒
+
+async function handleGithubStatus() {
+  const cache = typeof caches !== 'undefined' && caches.default ? caches.default : null;
+  const cacheKey = new Request('https://cache.internal/github-status', { method: 'GET' });
+
+  // 命中缓存直接回（缓存里已经是判定好的结果）
+  if (cache) {
+    try {
+      const hit = await cache.match(cacheKey);
+      if (hit) {
+        const body = await hit.json();
+        return json({ ...body, cached: true });
+      }
+    } catch {
+      /* 缓存坏了就当没命中，继续真探测 */
+    }
+  }
+
+  let online = false;
+  let status = 0;
+  let error = null;
+  const started = Date.now();
+
+  try {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), GITHUB_PROBE_TIMEOUT);
+    const res = await fetch(GITHUB_PROBE_URL, {
+      method: 'HEAD',            // HEAD 不下载正文，省流量
+      signal: ctl.signal,
+      redirect: 'manual',        // 自己判断 3xx，别被重定向牵着跑
+      headers: { 'user-agent': 'zrfeng-top-status-probe' },
+    });
+    clearTimeout(timer);
+    status = res.status;
+    online = status < 500;       // 2xx / 3xx / 4xx 都说明网络通
+  } catch (e) {
+    error = String((e && e.message) || e).slice(0, 120);
+    online = false;
+  }
+
+  const body = { online, status, ms: Date.now() - started, checkedAt: Date.now(), error };
+
+  // 写缓存（失败不影响返回）
+  if (cache) {
+    try {
+      await cache.put(
+        cacheKey,
+        new Response(JSON.stringify(body), {
+          headers: {
+            'content-type': 'application/json; charset=utf-8',
+            'cache-control': 'public, max-age=' + GITHUB_CACHE_TTL,
+          },
+        })
+      );
+    } catch {
+      /* 缓存写失败忽略 */
+    }
+  }
+
+  return json({ ok: true, ...body, cached: false });
+}
+
 /* ========================== 邮件发送 ========================== */
 
 async function sendMail(env, to, subject, html) {
@@ -5661,6 +5738,19 @@ async function handleRequest(request, env) {
         report.warnings = report.novelFile.uploaded ? [] : ['站内下载文件尚未上传'];
 
         return json(report);
+      }
+
+      /* GitHub 是否可达：赞助页那张 Star 卡片用它显示 Online / Offline。
+       *
+       * 为什么放服务端：浏览器没法直接探测 github.com —— 跨域请求会被 CORS 拦掉，
+       * 就算 no-cors 也拿不到状态码，只能"请求发出去了"当作成功，区分不了 200 / 500。
+       * Worker 这边有出网能力，探测结果还顺便能带 HTTP 状态码。
+       *
+       * 缓存 60 秒（Cache API）：赞助页被刷、多人同时打开时不会把 github.com 打爆，
+       * 也不会因为 GitHub 偶尔抖动就来回闪烁。探测本身 3 秒超时，失败就判 offline。
+       */
+      if (path === '/api/github/status' && method === 'GET') {
+        return await handleGithubStatus();
       }
 
       // SESSION_SECRET 必须存在，否则签名不安全

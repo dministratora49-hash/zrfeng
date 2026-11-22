@@ -157,6 +157,23 @@
     animation: blink 1.4s infinite;
   }
 
+  /* Checking: grey and steady, so it cannot be mistaken for a real Online */
+  .online.checking {
+    color: rgba(160, 190, 175, 0.65);
+    text-shadow: none;
+    animation: none;
+  }
+  .online.checking::before { animation: none; opacity: .5; }
+
+  /* Offline: red and steady — a blinking red is noisy for a stable state */
+  .online.off {
+    color: #ff5c5c;
+    text-shadow: 0 0 10px rgba(255, 92, 92, 0.5);
+  }
+  .online.off::before { animation: none; }
+
+  .github-card.off { border-color: rgba(255, 92, 92, 0.35); }
+
   /* 返回按钮 */
   .back-btn {
     margin-top: 46px;
@@ -188,14 +205,41 @@
 
   <!-- The WeChat Pay / Alipay cards were taken down; the payment pages themselves
        still exist, so restoring them only means adding the cards back. -->
-  <a class="github-card" href="https://github.com/dministratora49-hash/zrfeng/tree/main" target="_blank" rel="noopener">
+  <a class="github-card" id="githubCard" href="https://github.com/dministratora49-hash/zrfeng/tree/main" target="_blank" rel="noopener">
     <div class="star">⭐</div>
     <div class="text">Star my repository</div>
     <div class="name">GitHub</div>
-    <div class="online">Online</div>
+    <!-- Starts as "Checking": the probe decides Online / Offline, so we never
+         show a fake Online first. -->
+    <div class="online checking" id="githubState">Checking</div>
   </a>
 
   <a class="back-btn" href="/en_us/guide/">Back</a>
+
+  <script>
+  /* GitHub reachability: the Worker probes once (browsers cannot cross-origin
+     probe github.com), this only paints the result. */
+  (function () {
+    var stateEl = document.getElementById('githubState');
+    var cardEl = document.getElementById('githubCard');
+    if (!stateEl) return;
+
+    function show(online) {
+      stateEl.className = 'online' + (online ? '' : ' off');
+      stateEl.textContent = online ? 'Online' : 'Offline';
+      if (cardEl) cardEl.className = 'github-card' + (online ? '' : ' off');
+    }
+
+    fetch('/api/github/status', { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        // No answer counts as offline: this card exists to be clicked through to
+        // GitHub, and a dead "Online" is worse than an honest "Offline".
+        show(!!(j && j.ok && j.online));
+      })
+      .catch(function () { show(false); });
+  })();
+  </script>
 
   <script src="/en_us/status.js" defer></script>
   <p style="text-align:center;font-size:12px;margin:16px 0"><a href="/zh_cn/sponsorship/?lang=zh" style="color:#7fa893;text-decoration:none">中文</a></p>

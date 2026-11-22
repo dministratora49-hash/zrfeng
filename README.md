@@ -573,6 +573,21 @@ Socket.IO + SQLite 跑不起来，所以改写成 **Durable Objects + Workers �
 
 或者访问 zrfeng.top 点个赞也是支持 🍃
 
+### 赞助页的 GitHub 在线检测
+
+赞助页那张 Star 卡片上的 **Online / Offline** 是真实探测出来的，不是写死的：
+
+- 页面打开时请求 `GET /api/github/status`，由 Worker 去 `HEAD https://github.com/`；
+- **为什么不在浏览器里探**：跨域请求会被 CORS 挡掉，`no-cors` 又拿不到状态码，
+  分辨不出「真的通了」和「返回 500」，只能在服务端探；
+- 判定规则：`status < 500` 就算在线（200 / 3xx / 4xx 都说明网络通），5xx 或超时算离线；
+- 3 秒超时 + 60 秒 Cache API 缓存，既不会拖住页面，也不会因为多人刷新把 GitHub 打爆；
+- 三种状态：检测中（灰）→ Online（绿，呼吸灯）→ Offline（红，常亮不闪）；
+- 接口异常拿不到结果时按 **Offline** 处理 —— 这张卡是给人点进 GitHub 的，
+  显示 Online 却点不动比诚实显示 Offline 更糟。
+
+微信支付 / 支付宝两个入口已下架（子页面保留），恢复时把卡片加回 `sponsorship/index.html` 即可。
+
 ---
 
 ## 📜 开源协议

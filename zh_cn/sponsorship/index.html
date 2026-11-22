@@ -157,6 +157,23 @@
     animation: blink 1.4s infinite;
   }
 
+  /* 探测中：灰色，不闪，避免和真的在线混淆 */
+  .online.checking {
+    color: rgba(160, 190, 175, 0.65);
+    text-shadow: none;
+    animation: none;
+  }
+  .online.checking::before { animation: none; opacity: .5; }
+
+  /* 离线：红色，不闪（一直闪太吵，离线是稳定状态） */
+  .online.off {
+    color: #ff5c5c;
+    text-shadow: 0 0 10px rgba(255, 92, 92, 0.5);
+  }
+  .online.off::before { animation: none; }
+
+  .github-card.off { border-color: rgba(255, 92, 92, 0.35); }
+
   /* 返回按钮 */
   .back-btn {
     margin-top: 46px;
@@ -187,14 +204,39 @@
   <div class="sub">感谢您的支持！</div>
 
   <!-- 微信支付 / 支付宝两张卡片已下架；支付页面本身还在，以后要恢复把卡片加回来即可 -->
-  <a class="github-card" href="https://github.com/dministratora49-hash/zrfeng/tree/main" target="_blank" rel="noopener">
+  <a class="github-card" id="githubCard" href="https://github.com/dministratora49-hash/zrfeng/tree/main" target="_blank" rel="noopener">
     <div class="star">⭐</div>
     <div class="text">为我的仓库点一个 Star</div>
     <div class="name">GitHub</div>
-    <div class="online">Online</div>
+    <!-- 初始是「检测中」：脚本探测完再换成 Online / Offline，避免先骗人一个 Online -->
+    <div class="online checking" id="githubState">检测中</div>
   </a>
 
   <a class="back-btn" href="/zh_cn/guide">返回</a>
+
+  <script>
+  /* GitHub 在线检测：服务端探一次（浏览器跨域探不了），这里只负责把结果显示出来。 */
+  (function () {
+    var stateEl = document.getElementById('githubState');
+    var cardEl = document.getElementById('githubCard');
+    if (!stateEl) return;
+
+    function show(online) {
+      stateEl.className = 'online' + (online ? '' : ' off');
+      stateEl.textContent = online ? 'Online' : 'Offline';
+      if (cardEl) cardEl.className = 'github-card' + (online ? '' : ' off');
+    }
+
+    fetch('/api/github/status', { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        // 拿不到结果就按离线处理：这张卡是给人点进 GitHub 的，
+        // 显示 Online 却点不动比显示 Offline 更糟。
+        show(!!(j && j.ok && j.online));
+      })
+      .catch(function () { show(false); });
+  })();
+  </script>
 
   <script src="/status.js" defer></script>
 <p style="text-align:center;font-size:12px;margin:16px 0"><a href="/en_us/sponsorship/?lang=en" style="color:#7fa893;text-decoration:none">English</a></p>
