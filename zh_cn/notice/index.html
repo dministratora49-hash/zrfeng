@@ -87,6 +87,34 @@
   }
   .tag.maint { border-color: rgba(255, 176, 32, 0.45); color: #ffb020; background: rgba(255, 176, 32, 0.1); }
 
+  /* 公告右上角的「删除」：只对管理员显示，小号不抢眼但看得出来是危险操作 */
+  .nt-del {
+    margin-left: auto;
+    padding: 3px 10px;
+    font-size: 11px;
+    font-family: inherit;
+    border-radius: 20px;
+    cursor: pointer;
+    color: #ff6b6b;
+    background: rgba(255, 77, 77, 0.1);
+    border: 1px solid rgba(255, 77, 77, 0.4);
+    transition: background .18s, border-color .18s;
+  }
+  .nt-del:hover:not(:disabled) {
+    background: rgba(255, 77, 77, 0.2);
+    border-color: rgba(255, 77, 77, 0.7);
+  }
+  .nt-del:disabled { opacity: .5; cursor: default; }
+  /* 浅色主题下红色要压深一点，否则在白底上发飘 */
+  html[data-theme="light"] .nt-del { color: #c62828; border-color: rgba(198, 40, 40, .4); background: rgba(255, 80, 80, .1); }
+  html[data-theme="light"] .nt-del:hover:not(:disabled) { background: rgba(255, 80, 80, .18); }
+  /* 安卓主题用 Material 的 error 色 */
+  html[data-theme="android"] .nt-del {
+    color: var(--md-error, #ffb4ab);
+    border-color: color-mix(in srgb, var(--md-error, #ffb4ab) 45%, transparent);
+    background: color-mix(in srgb, var(--md-error, #ffb4ab) 12%, transparent);
+  }
+
   /* ---------- 我的消息 ---------- */
   .who { font-size: 12px; color: #7fa893; margin-bottom: 12px; line-height: 1.9; }
   .who b { color: #00ff8c; font-weight: 700; }
@@ -276,8 +304,16 @@
   }
   function el(id) { return document.getElementById(id); }
 
+  /* 当前账户是不是管理员。renderNotices 要给每条公告挂「删除」按钮，
+   * 但它拿不到 /api/my/notifications 的返回值，所以用这个模块级标记。 */
+  var IS_ADMIN = false;
+  /* 最近一次渲染的公告列表：身份从「游客」变成「管理员」时用它重渲染，
+   * 让删除按钮当场出现，不用等用户翻页或刷新。 */
+  var lastNoticeList = null;
+
   /* ---------------- 站点公告 ---------------- */
   function renderNotices(list) {
+    lastNoticeList = list || [];
     var box = el('pubList');
     if (!box) return;
     if (!list || !list.length) {
@@ -288,15 +324,63 @@
     for (var i = 0; i < list.length; i++) {
       var n = list[i];
       var tag = n.kind === 'maint' ? '<span class="tag maint">维护</span>' : '<span class="tag">公告</span>';
+      // 删除按钮只给管理员；id 走 data- 属性，避免拼进 onclick 造成注入
+      var del = IS_ADMIN
+        ? '<button class="nt-del" type="button" data-del="' + esc(n.id) + '" ' +
+          'title="删除这条公告">删除</button>'
+        : '';
       h += '<div class="nt">' +
         '<div class="nt-head">' + tag +
         '<span class="nt-title">' + esc(n.title) + '</span>' +
         '<span class="nt-time">' + esc(fmt(n.at)) + '</span>' +
+        del +
         '</div>' +
         '<div class="nt-body">' + esc(n.body) + '</div>' +
         '</div>';
     }
     box.innerHTML = h;
+
+    // 绑定删除：点一次确认，确认后调接口并就地移除，不整页刷新
+    var btns = box.querySelectorAll('button[data-del]');
+    for (var k = 0; k < btns.length; k++) {
+      btns[k].onclick = function () { deleteNotice(this, this.getAttribute('data-del')); };
+    }
+  }
+
+  /** 删除单条公告：确认 → 调接口 → 从列表里拿掉（失败则还原按钮） */
+  function deleteNotice(btn, id) {
+    if (!id) return;
+    if (!confirm('确定要删除这条公告吗？删除后无法恢复。')) return;
+    var row = btn ? btn.parentNode.parentNode : null;
+    if (btn) { btn.disabled = true; btn.textContent = '删除中…'; }
+    fetch('/api/admin/notices/delete', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: id }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j || !j.ok) {
+          if (btn) { btn.disabled = false; btn.textContent = '删除'; }
+          alert((j && (j.message || j.error)) || '删除失败');
+          return;
+        }
+        // 从 DOM 里摘掉这一条；列表空了就显示占位
+        if (row && row.parentNode) row.parentNode.removeChild(row);
+        var box = el('pubList');
+        if (box && !box.querySelector('.nt')) {
+          box.innerHTML = '<div class="empty">还没有公告</div>';
+        }
+        // 总数变了，重新拉一页让分页信息跟着更新
+        if (typeof pgTotal === 'number' && pgTotal > 0) pgTotal--;
+        if (typeof renderPager === 'function') renderPager();
+        if (pgTotal <= 0 && typeof loadNotices === 'function') loadNotices(0);
+      })
+      .catch(function () {
+        if (btn) { btn.disabled = false; btn.textContent = '删除'; }
+        alert('网络错误，请重试');
+      });
   }
 
   /* ---------------- 公告分页 ---------------- */
@@ -552,6 +636,14 @@
 
     var ac = el('adminCard');
     if (ac) ac.style.display = me.isAdmin ? 'block' : 'none';
+
+    // 记下是不是管理员，供公告列表决定要不要显示「删除」按钮；
+    // 身份变了（登录 / 登出）就重渲染一次，让按钮跟着出现或消失
+    var wasAdmin = IS_ADMIN;
+    IS_ADMIN = !!me.isAdmin;
+    if (wasAdmin !== IS_ADMIN && typeof lastNoticeList !== 'undefined' && lastNoticeList) {
+      renderNotices(lastNoticeList);
+    }
 
     renderTickets((j && j.tickets) || []);
   }

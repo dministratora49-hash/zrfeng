@@ -2987,8 +2987,14 @@ async function handleAdminNoticeDelete(env, request) {
   if (!/^\d{15}-[0-9a-f]{6}$/.test(id)) {
     return json({ ok: false, message: '公告编号不正确' }, 400);
   }
+  // 先确认真的存在：不存在就别报「已删除」，否则前端会以为成功、
+  // 把界面上那条摘掉，但实际什么都没删（比如两个管理员同时操作）。
+  const existing = await env.USERS.get(NOTICE_PREFIX + id, 'json');
+  if (!existing) {
+    return json({ ok: false, message: '该公告不存在，可能已被删除' }, 404);
+  }
   await env.USERS.delete(NOTICE_PREFIX + id);
-  return json({ ok: true, message: '已删除该公告', deleted: 1 });
+  return json({ ok: true, message: '已删除该公告', deleted: 1, id });
 }
 
 /* ========================== 账户警告 ========================== */

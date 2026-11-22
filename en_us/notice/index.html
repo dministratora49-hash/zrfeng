@@ -87,6 +87,33 @@
   }
   .tag.maint { border-color: rgba(255, 176, 32, 0.45); color: #ffb020; background: rgba(255, 176, 32, 0.1); }
 
+  /* Per-notice Delete in the top-right corner: admin only, small but clearly
+     marked as a destructive action. */
+  .nt-del {
+    margin-left: auto;
+    padding: 3px 10px;
+    font-size: 11px;
+    font-family: inherit;
+    border-radius: 20px;
+    cursor: pointer;
+    color: #ff6b6b;
+    background: rgba(255, 77, 77, 0.1);
+    border: 1px solid rgba(255, 77, 77, 0.4);
+    transition: background .18s, border-color .18s;
+  }
+  .nt-del:hover:not(:disabled) {
+    background: rgba(255, 77, 77, 0.2);
+    border-color: rgba(255, 77, 77, 0.7);
+  }
+  .nt-del:disabled { opacity: .5; cursor: default; }
+  html[data-theme="light"] .nt-del { color: #c62828; border-color: rgba(198, 40, 40, .4); background: rgba(255, 80, 80, .1); }
+  html[data-theme="light"] .nt-del:hover:not(:disabled) { background: rgba(255, 80, 80, .18); }
+  html[data-theme="android"] .nt-del {
+    color: var(--md-error, #ffb4ab);
+    border-color: color-mix(in srgb, var(--md-error, #ffb4ab) 45%, transparent);
+    background: color-mix(in srgb, var(--md-error, #ffb4ab) 12%, transparent);
+  }
+
   /* ---------- 我的消息 ---------- */
   .who { font-size: 12px; color: #7fa893; margin-bottom: 12px; line-height: 1.9; }
   .who b { color: #00ff8c; font-weight: 700; }
@@ -276,8 +303,16 @@
   }
   function el(id) { return document.getElementById(id); }
 
+  /* Is the current account an admin? renderNotices needs it to attach the
+   * per-notice Delete button, but it cannot see the /api/my/notifications body. */
+  var IS_ADMIN = false;
+  /* Most recently rendered list: when the identity changes from guest to admin we
+   * re-render with it so the Delete buttons appear at once. */
+  var lastNoticeList = null;
+
   /* ---------------- 站点公告 ---------------- */
   function renderNotices(list) {
+    lastNoticeList = list || [];
     var box = el('pubList');
     if (!box) return;
     if (!list || !list.length) {
@@ -288,15 +323,63 @@
     for (var i = 0; i < list.length; i++) {
       var n = list[i];
       var tag = n.kind === 'maint' ? '<span class="tag maint">Maintenance</span>' : '<span class="tag">Announcement</span>';
+      // Delete is admin-only; the id travels in a data- attribute so it is never
+      // concatenated into an inline handler (injection risk).
+      var del = IS_ADMIN
+        ? '<button class="nt-del" type="button" data-del="' + esc(n.id) + '" ' +
+          'title="Delete this notice">Delete</button>'
+        : '';
       h += '<div class="nt">' +
         '<div class="nt-head">' + tag +
         '<span class="nt-title">' + esc(n.title) + '</span>' +
         '<span class="nt-time">' + esc(fmt(n.at)) + '</span>' +
+        del +
         '</div>' +
         '<div class="nt-body">' + esc(n.body) + '</div>' +
         '</div>';
     }
     box.innerHTML = h;
+
+    // Bind delete: confirm once, then call the API and remove the row in place.
+    var btns = box.querySelectorAll('button[data-del]');
+    for (var k = 0; k < btns.length; k++) {
+      btns[k].onclick = function () { deleteNotice(this, this.getAttribute('data-del')); };
+    }
+  }
+
+  /** Delete one notice: confirm -> API -> drop the row (restore the button on failure) */
+  function deleteNotice(btn, id) {
+    if (!id) return;
+    if (!confirm('Delete this notice? This cannot be undone.')) return;
+    var row = btn ? btn.parentNode.parentNode : null;
+    if (btn) { btn.disabled = true; btn.textContent = 'Deleting…'; }
+    fetch('/api/admin/notices/delete', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: id }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j || !j.ok) {
+          if (btn) { btn.disabled = false; btn.textContent = 'Delete'; }
+          alert((j && (j.message || j.error)) || 'Could not delete');
+          return;
+        }
+        if (row && row.parentNode) row.parentNode.removeChild(row);
+        var box = el('pubList');
+        if (box && !box.querySelector('.nt')) {
+          box.innerHTML = '<div class="empty">No notices yet</div>';
+        }
+        // The total changed — refresh the pager so the page count stays right
+        if (typeof pgTotal === 'number' && pgTotal > 0) pgTotal--;
+        if (typeof renderPager === 'function') renderPager();
+        if (pgTotal <= 0 && typeof loadNotices === 'function') loadNotices(0);
+      })
+      .catch(function () {
+        if (btn) { btn.disabled = false; btn.textContent = 'Delete'; }
+        alert('Network error, please try again');
+      });
   }
 
   /* ---------------- 公告分页 ---------------- */
@@ -552,6 +635,14 @@
 
     var ac = el('adminCard');
     if (ac) ac.style.display = me.isAdmin ? 'block' : 'none';
+
+    // Remember the admin flag so the notice list knows whether to show Delete;
+    // re-render when it changes so the buttons appear or disappear right away.
+    var wasAdmin = IS_ADMIN;
+    IS_ADMIN = !!me.isAdmin;
+    if (wasAdmin !== IS_ADMIN && lastNoticeList) {
+      renderNotices(lastNoticeList);
+    }
 
     renderTickets((j && j.tickets) || []);
   }
