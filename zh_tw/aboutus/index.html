@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>/* 儘早落地主題（預設原生安卓；只認控制台「外觀」裡存下的值，避免閃色） */(function(){var t='android';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark'||s==='android')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
+  <title>關於專案組 · zrfeng.top</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family:"Microsoft YaHei","PingFang SC",sans-serif;
+      background:linear-gradient(135deg,#0a101c 0%,#0d2818 100%);
+      min-height:100vh; display:flex; align-items:center;
+      justify-content:center; padding:20px; color:#e8f0f0;
+    }
+    .card {
+      background:rgba(10,16,28,.92);
+      border:1px solid rgba(0,255,170,.15);
+      border-radius:16px; max-width:600px; width:100%;
+      padding:32px 28px; box-shadow:0 0 40px rgba(0,255,170,.06);
+    }
+    header { text-align:center; margin-bottom:24px; }
+    header h1 { color:#00ffaa; font-size:24px; margin-bottom:8px; }
+    header p { color:#8899aa; font-size:13px; }
+    p { line-height:1.9; font-size:15px; color:#cdd8d8; margin-bottom:14px; }
+    .hl { color:#00ffaa; font-weight:600; }
+    .logo { width:128px; height:128px; object-fit:cover; border-radius:22px; margin:0 auto 16px; display:block;
+            border:1px solid rgba(0,255,170,.2); box-shadow:0 0 24px rgba(0,255,170,.10); }
+    .team { color:#fff; font-size:20px; margin:0 0 10px; }
+    .intro { color:#cdd8d8; }
+    .team-sub { color:#8899aa; font-size:14px; margin:22px 0 10px; }
+    .founder { width:88px; height:88px; object-fit:cover; border-radius:18px; margin:0 0 14px; display:block;
+               border:1px solid rgba(0,255,170,.18); }
+    .back { text-align:center; margin-top:28px; }
+    .back a {
+      display:inline-block; padding:10px 36px;
+      border:1px solid rgba(0,255,170,.3); border-radius:24px;
+      color:#00ffaa; text-decoration:none; font-size:14px;
+      transition:all .2s;
+    }
+    .back a:hover { background:rgba(0,255,170,.08); }
+    footer { text-align:center; color:#5a6a7a; font-size:12px;
+             margin-top:20px; }
+  </style>
+<link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="/android.css">
+</head>
+<body>
+  <div class="card">
+    <header>
+      <h1>關於專案組</h1>
+      <p>About the Team</p>
+      <img class="logo" src="/aboutus/logo.jpg" alt="寧靜立方">
+      <h2 class="team">寧靜立方工作室</h2>
+      <p class="intro">寧靜立方工作室開發本網站，工作室已於 <span class="hl">2026年10月22日 18:15</span> 成立。</p>
+      <h2 class="team-sub">關於工作室成立者</h2>
+    </header>
+
+    <img class="founder" src="/aboutus/founder.jpg" alt="工作室成立者">
+    <p>我的網名是 <span class="hl">Summer</span>，是一位 <span class="hl">13歲</span> 的開發者，來自江蘇。</p>
+
+    <p>平時的時間大多被作業和補習班佔著，但剩下的每一分鐘，我喜歡寫程式碼、研究航空、聽洛天依——以及，折騰這個網站。</p>
+
+    <p>你正在看的這個站，所有頁面都是我用 <span class="hl">一臺手機</span> 完成的：寫程式碼、配DNS、部署上線，全程沒有碰過電腦。</p>
+
+    <p>如果它對你有一點點用處或啟發，那這件小事就值得了。</p>
+
+    <p class="intro" style="text-align:center;margin-top:20px">
+      這個站也少不了別人的幫忙 —— <a href="/zh_tw/credits/" style="color:#00ffaa;text-decoration:none">看看鳴謝名單 →</a>
+    </p>
+
+    <div class="back">
+      <a href="/zh_tw/guide/">← 返回導航頁</a>
+    </div>
+
+    <footer>© 2026 zrfeng.top · 自然風，正在吹 🍃</footer>
+  </div>
+  <script src="/status.js" defer></script>
+</body>
+</html>

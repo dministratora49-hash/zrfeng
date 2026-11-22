@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>/* 儘早落地主題（預設原生安卓；只認控制台「外觀」裡存下的值，避免閃色） */(function(){var t='android';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark'||s==='android')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
+<title>導航頁</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    min-height: 100vh;
+    background: #050807;
+    background-image:
+      radial-gradient(circle at 20% 20%, rgba(0, 255, 140, 0.06) 0%, transparent 50%),
+      radial-gradient(circle at 80% 80%, rgba(0, 255, 140, 0.05) 0%, transparent 50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    padding: 80px 24px 24px;
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    color: #e8f5ee;
+  }
+
+  /* 網格背景 */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,255,140,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,255,140,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+  }
+
+  .top { position: relative; text-align: center; }
+
+  h1 {
+    font-size: 36px;
+    margin-bottom: 20px;
+    background: linear-gradient(90deg, #ffffff, #00ff8c);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  p.sub {
+    color: #7fa893;
+    font-size: 14px;
+    letter-spacing: 1px;
+    margin-bottom: 40px;
+  }
+
+  .boxes {
+    display: flex;
+    gap: 24px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .box {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    width: 140px;
+    height: 140px;
+    border: 1px solid rgba(0, 255, 140, 0.35);
+    border-radius: 16px;
+    background: rgba(10, 18, 14, 0.85);
+    text-decoration: none;
+    color: #e8f5ee;
+    box-shadow: 0 0 16px rgba(0, 255, 140, 0.1);
+    transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+  }
+  .box:hover {
+    transform: translateY(-3px);
+    border-color: #00ff8c;
+    box-shadow: 0 0 28px rgba(0, 255, 140, 0.4);
+  }
+  .box .label { font-size: 16px; letter-spacing: 1px; }
+
+  .status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #00ff8c;
+  }
+  .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: #00ff8c;
+    box-shadow: 0 0 8px #00ff8c;
+    animation: blink 1.5s infinite;
+  }
+  @keyframes blink { 50% { opacity: 0.3; } }
+
+  /* 該頁面正在維護（或被關閉）時：狀態變 Offline，燈變紅並停止閃爍 */
+  .box[data-down="1"] .status { color: #ff6b6b; }
+  .box[data-down="1"] .dot {
+    background: #ff6b6b;
+    box-shadow: 0 0 8px #ff6b6b;
+    animation: none;
+  }
+
+  .bottom {
+    position: relative;
+    text-align: center;
+    font-size: 12px;
+    color: #4a6a58;
+    line-height: 2;
+    letter-spacing: 1px;
+  }
+</style>
+<link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="/android.css">
+</head>
+<body>
+  <div class="top">
+    <h1>這裡是導航頁</h1>
+    <p class="sub">歡迎訪問，從這裡開始你的旅程</p>
+
+    <div class="boxes">
+      <a class="box" href="/zh_tw/" data-page="home" data-default="Online">
+        <span class="label">主站</span>
+        <span class="status"><span class="dot"></span>Online</span>
+      </a>
+
+      <a class="box" href="/zh_tw/aboutus" data-page="aboutus" data-default="Online">
+        <span class="label">關於專案組</span>
+        <span class="status"><span class="dot"></span>Online</span>
+      </a>
+
+      <a class="box" href="/zh_tw/credits" data-page="credits" data-default="Online">
+        <span class="label">鳴謝名單</span>
+        <span class="status"><span class="dot"></span>Online</span>
+      </a>
+
+      <a class="box" href="/zh_tw/time" data-page="time" data-default="Online">
+        <span class="label">北京時間</span>
+        <span class="status"><span class="dot"></span>Online</span>
+      </a>
+
+      <a class="box" href="/zh_tw/sponsorship" data-page="sponsorship" data-default="Online">
+        <span class="label">贊助</span>
+        <span class="status"><span class="dot"></span>Online</span>
+      </a>
+
+      <a class="box" href="/zh_tw/file" data-page="file" data-default="Online">
+        <span class="label">資源庫</span>
+        <span class="status"><span class="dot"></span>Online</span>
+      </a>
+
+      <a class="box" href="/zh_tw/notice" data-page="notice" data-default="Online">
+        <span class="label">通知板塊</span>
+        <span class="status"><span class="dot"></span>Online</span>
+      </a>
+
+      <!-- 聊天室在中文站已下架：入口保留，點進去由服務端返回「地域限制」提示頁 -->
+      <a class="box" href="/zh_tw/chat" data-page="chat" data-default="Online">
+        <span class="label">聊天室</span>
+        <span class="status"><span class="dot"></span>Online</span>
+      </a>
+
+      <!-- 「聯絡我們」故意不放 data-page：它永遠保持可用，絕不會變成 Offline -->
+      <a class="box" href="/zh_tw/contact">
+        <span class="label">聯絡我們</span>
+        <span class="status"><span class="dot"></span>Online</span>
+      </a>
+
+      <a class="box" href="/zh_tw/login" data-page="login" data-default="Online">
+        <span class="label">登入 / 註冊</span>
+        <span class="status"><span class="dot"></span>Online</span>
+      </a>
+
+      <a class="box" href="/zh_tw/console" data-page="console" data-default="需登入">
+        <span class="label">控制台</span>
+        <span class="status"><span class="dot"></span>需登入</span>
+      </a>
+    </div>
+  </div>
+
+  <div class="bottom">
+    <div>zrfeng.top</div>
+    <div>© 2026 zrfeng.top — All Rights Reserved</div>
+  </div>
+  <script src="/status.js" defer></script>
+<script>
+// 導航頁卡片按拼音首字母排序（中文站）
+(function(){
+  var boxes = document.querySelectorAll('.boxes .box');
+  if (!boxes.length) return;
+  var labels = [];
+  for (var i = 0; i < boxes.length; i++) {
+    var l = boxes[i].querySelector('.label');
+    labels.push(l ? l.textContent.trim() : '');
+  }
+  // Intl.Collator 對中文會按拼音排序（大多數瀏覽器/執行時都支援）
+  var collator = new Intl.Collator('zh-Hans-CN', { sensitivity: 'base', numeric: true });
+  var sorted = boxes.slice().sort(function(a, b) {
+    var la = (a.querySelector('.label') || {}).textContent || '';
+    var lb = (b.querySelector('.label') || {}).textContent || '';
+    return collator.compare(la, lb);
+  });
+  var parent = boxes[0].parentNode;
+  for (var j = 0; j < sorted.length; j++) parent.appendChild(sorted[j]);
+})();
+</script>
+</body>
+</html>

@@ -423,27 +423,30 @@
     }
     if (sec) html += '<div class="card"><h2>Account security</h2>' + sec + '</div>';
 
-    // Region: decides which language site you land on after signing in.
-    // The list comes from /api/me → regions, so adding a region only touches worker.js.
-    // A dropdown rather than one row per country: dozens of regions stay compact.
-    // No "goes to which site" label — the region name says enough, the extra line
-    // only exposed implementation detail.
+    // Region / nationality: decides which language site you land on after signing in
+    // (Simplified Chinese / Traditional Chinese / English). The list comes from
+    // /api/me → regions, so adding a region only touches worker.js.
+    // A dropdown rather than one row per region: dozens of regions stay compact.
     var REGIONS = (j && j.regions) || [
-      { id: 'CN', name: "People's Republic of China", nameEn: "People's Republic of China", lang: 'zh' },
-      { id: 'US', name: 'United States of America', nameEn: 'United States of America', lang: 'en' }
+      { id: 'CN', name: 'Mainland China', nameEn: 'Mainland China', lang: 'zh' },
+      { id: 'HK', name: 'Hong Kong SAR, China', nameEn: 'Hong Kong SAR, China', lang: 'zh_hant' },
+      { id: 'MO', name: 'Macao SAR, China', nameEn: 'Macao SAR, China', lang: 'zh_hant' },
+      { id: 'TW', name: 'Taiwan, China', nameEn: 'Taiwan, China', lang: 'zh_hant' },
+      { id: 'US', name: 'United States', nameEn: 'United States', lang: 'en' },
+      { id: 'OTHER', name: 'Other country / region', nameEn: 'Other country / region', lang: 'en' }
     ];
     var curRegion = u.region || null;
-    var rg = '<div class="card"><h2>Region</h2>' +
+    var rg = '<div class="card"><h2>Region or nationality</h2>' +
       '<div class="meta" style="margin-bottom:10px">' +
-      'Pick the region you are in. After signing in you go straight to that language site. ' +
-      'Choose “Not set” to follow the language picked on this device instead; with nothing picked you see the language picker first.</div>' +
+      'Pick the region you are in or your nationality. After signing in you go straight to that language site. ' +
+      'Choose “Not set” to follow the language picked on this device instead.</div>' +
       '<div class="pick"><label for="regionSel">Region</label>' +
       '<select id="regionSel">' +
       '<option value="">Not set (follow this device)</option>';
     REGIONS.forEach(function (r) {
       rg += '<option value="' + esc(r.id) + '"' +
         (r.id === curRegion ? ' selected' : '') + '>' +
-        esc(r.nameEn || r.name) + ' (' + esc(r.id) + ')</option>';
+        esc(r.nameEn || r.name) + '</option>';
     });
     rg += '</select></div>' +
       '<div class="msg" id="regionMsg"></div></div>';
@@ -1749,6 +1752,5 @@
 })();
 </script>
   <script src="/en_us/status.js" defer></script>
-  <p style="text-align:center;font-size:12px;margin:16px 0"><a href="/zh_cn/console/?lang=zh" style="color:#7fa893;text-decoration:none">中文</a></p>
 </body>
 </html>

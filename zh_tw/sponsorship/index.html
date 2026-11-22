@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>/* 儘早落地主題（預設原生安卓；只認控制台「外觀」裡存下的值，避免閃色） */(function(){var t='android';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark'||s==='android')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
+<title>贊助頁</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    min-height: 100vh;
+    background:
+      radial-gradient(ellipse at 20% 80%, rgba(0, 255, 140, 0.06), transparent 50%),
+      radial-gradient(ellipse at 80% 20%, rgba(0, 255, 140, 0.04), transparent 50%),
+      #050a07;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding-top: 15vh;
+    font-family: "Microsoft YaHei", sans-serif;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  /* 網格背景 */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0, 255, 140, 0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 255, 140, 0.035) 1px, transparent 1px);
+    background-size: 44px 44px;
+    pointer-events: none;
+  }
+
+  h1 {
+    color: #00ff88;
+    font-size: 26px;
+    text-shadow: 0 0 18px rgba(0, 255, 136, 0.7), 0 0 40px rgba(0, 255, 136, 0.35);
+    margin-bottom: 14px;
+    letter-spacing: 2px;
+  }
+
+  .sub {
+    color: rgba(200, 255, 220, 0.55);
+    font-size: 13px;
+    margin-bottom: 40px;
+  }
+
+  .cards {
+    display: flex;
+    gap: 18px;
+  }
+
+  .card {
+    width: 140px;
+    padding: 22px 14px;
+    text-align: center;
+    background: rgba(0, 20, 10, 0.55);
+    border: 1px solid rgba(0, 255, 140, 0.35);
+    border-radius: 12px;
+    box-shadow: 0 0 18px rgba(0, 255, 136, 0.12), inset 0 0 12px rgba(0, 255, 136, 0.05);
+    cursor: pointer;
+    text-decoration: none;
+    display: block;
+    transition: box-shadow 0.25s, border-color 0.25s, transform 0.25s;
+  }
+
+  .card:hover {
+    border-color: rgba(0, 255, 140, 0.8);
+    box-shadow: 0 0 26px rgba(0, 255, 136, 0.3), inset 0 0 12px rgba(0, 255, 136, 0.08);
+    transform: translateY(-2px);
+  }
+
+  .card .name {
+    color: #d7ffe9;
+    font-size: 15px;
+    margin-bottom: 10px;
+  }
+
+  .card .cn {
+    color: rgba(200, 255, 220, 0.6);
+    font-size: 12px;
+    margin-bottom: 12px;
+  }
+
+  .status {
+    font-size: 11px;
+    color: #ff5555;
+    text-shadow: 0 0 10px rgba(255, 60, 60, 0.6);
+  }
+
+  .status::before {
+    content: "●";
+    margin-right: 5px;
+    animation: blink 1.4s infinite;
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.25; }
+  }
+
+  /* GitHub 卡片 */
+  .github-card {
+    margin-top: 46px;
+    width: 200px;
+    padding: 20px 14px;
+    text-align: center;
+    background: rgba(0, 20, 10, 0.55);
+    border: 1px solid rgba(0, 255, 140, 0.35);
+    border-radius: 12px;
+    box-shadow: 0 0 18px rgba(0, 255, 136, 0.12), inset 0 0 12px rgba(0, 255, 136, 0.05);
+    cursor: pointer;
+    text-decoration: none;
+    display: block;
+    transition: box-shadow 0.25s, border-color 0.25s, transform 0.25s;
+  }
+
+  .github-card:hover {
+    border-color: rgba(0, 255, 140, 0.8);
+    box-shadow: 0 0 26px rgba(0, 255, 136, 0.3), inset 0 0 12px rgba(0, 255, 136, 0.08);
+    transform: translateY(-2px);
+  }
+
+  .github-card .star {
+    font-size: 22px;
+    margin-bottom: 8px;
+    filter: drop-shadow(0 0 10px rgba(0, 255, 136, 0.6));
+  }
+
+  .github-card .text {
+    color: #d7ffe9;
+    font-size: 14px;
+    margin-bottom: 8px;
+  }
+
+  .github-card .name {
+    color: rgba(200, 255, 220, 0.6);
+    font-size: 13px;
+    margin-bottom: 10px;
+  }
+
+  /* 綠色線上狀態 */
+  .online {
+    font-size: 11px;
+    color: #00ff88;
+    text-shadow: 0 0 10px rgba(0, 255, 136, 0.6);
+  }
+
+  .online::before {
+    content: "●";
+    margin-right: 5px;
+    animation: blink 1.4s infinite;
+  }
+
+  /* 探測中：灰色，不閃，避免和真的線上混淆 */
+  .online.checking {
+    color: rgba(160, 190, 175, 0.65);
+    text-shadow: none;
+    animation: none;
+  }
+  .online.checking::before { animation: none; opacity: .5; }
+
+  /* 離線：紅色，不閃（一直閃太吵，離線是穩定狀態） */
+  .online.off {
+    color: #ff5c5c;
+    text-shadow: 0 0 10px rgba(255, 92, 92, 0.5);
+  }
+  .online.off::before { animation: none; }
+
+  .github-card.off { border-color: rgba(255, 92, 92, 0.35); }
+
+  /* 返回按鈕 */
+  .back-btn {
+    margin-top: 46px;
+    padding: 10px 36px;
+    font-size: 14px;
+    color: #00ff88;
+    background: rgba(0, 255, 140, 0.06);
+    border: 1px solid rgba(0, 255, 140, 0.5);
+    border-radius: 8px;
+    text-decoration: none;
+    text-shadow: 0 0 8px rgba(0, 255, 136, 0.5);
+    box-shadow: 0 0 14px rgba(0, 255, 136, 0.12);
+    transition: box-shadow 0.25s, border-color 0.25s, background 0.25s;
+  }
+
+  .back-btn:hover {
+    background: rgba(0, 255, 140, 0.14);
+    border-color: rgba(0, 255, 140, 0.9);
+    box-shadow: 0 0 22px rgba(0, 255, 136, 0.35);
+  }
+</style>
+<link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="/android.css">
+</head>
+<body>
+
+  <h1>贊助</h1>
+  <div class="sub">感謝您的支援！</div>
+
+  <!-- 微信支付 / 支付寶兩張卡片已下架；支付頁面本身還在，以後要恢復把卡片加回來即可 -->
+  <a class="github-card" id="githubCard" href="https://github.com/dministratora49-hash/zrfeng/tree/main" target="_blank" rel="noopener">
+    <div class="star">⭐</div>
+    <div class="text">為我的倉庫點一個 Star</div>
+    <div class="name">GitHub</div>
+    <!-- 初始是「檢測中」：指令碼探測完再換成 Online / Offline，避免先騙人一個 Online -->
+    <div class="online checking" id="githubState">檢測中</div>
+  </a>
+
+  <a class="back-btn" href="/zh_tw/guide">返回</a>
+
+  <script>
+  /* GitHub 線上檢測：服務端探一次（瀏覽器跨域探不了），這裡只負責把結果顯示出來。 */
+  (function () {
+    var stateEl = document.getElementById('githubState');
+    var cardEl = document.getElementById('githubCard');
+    if (!stateEl) return;
+
+    function show(online) {
+      stateEl.className = 'online' + (online ? '' : ' off');
+      stateEl.textContent = online ? 'Online' : 'Offline';
+      if (cardEl) cardEl.className = 'github-card' + (online ? '' : ' off');
+    }
+
+    fetch('/api/github/status', { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        // 拿不到結果就按離線處理：這張卡是給人點進 GitHub 的，
+        // 顯示 Online 卻點不動比顯示 Offline 更糟。
+        show(!!(j && j.ok && j.online));
+      })
+      .catch(function () { show(false); });
+  })();
+  </script>
+
+  <script src="/status.js" defer></script>
+</body>
+</html>

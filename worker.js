@@ -4634,15 +4634,54 @@ const ZH_CHAT_ENABLED = false;
  * 并按 lang 自动分组。所以以后加国家 = 在这里加一行，不用动任何 HTML。
  */
 const SITE_REGIONS = [
-  { id: 'CN', name: '中华人民共和国', nameEn: "People's Republic of China", lang: 'zh' },
-  { id: 'US', name: '美利坚合众国', nameEn: 'United States of America', lang: 'en' },
+  { id: 'CN', name: '中国大陆', nameEn: 'Mainland China', lang: 'zh' },
+  { id: 'HK', name: '中国香港', nameEn: 'Hong Kong SAR, China', lang: 'zh_hant' },
+  { id: 'MO', name: '中国澳门', nameEn: 'Macao SAR, China', lang: 'zh_hant' },
+  { id: 'TW', name: '中国台湾', nameEn: 'Taiwan, China', lang: 'zh_hant' },
+  { id: 'US', name: '美国', nameEn: 'United States', lang: 'en' },
+  // 其他国家 / 地区统一走英文站，不逐个列出来
+  { id: 'OTHER', name: '其他国籍 / 地区', nameEn: 'Other country / region', lang: 'en' },
 ];
 
-/** 地区代码 → 语种；不认识的地区返回 null（当作「还没选」） */
+/** 站点语种标识：zh（简体）/ zh_hant（繁体）/ en（英文） */
+const SITE_LANGS = ['zh', 'zh_hant', 'en'];
+
+/** 语种 → 站点目录 */
+const LANG_SITE = {
+  zh: '/zh_cn/',
+  zh_hant: '/zh_tw/',
+  en: '/en_us/',
+};
+
+/** 站点目录前缀 → 语种 */
+const SITE_PREFIX_LANG = [
+  ['/zh_tw', 'zh_hant'],
+  ['/zh_cn', 'zh'],
+  ['/en_us', 'en'],
+];
+
+/** 简介：地区代码 → 语种；不认识的地区返回 null（当作「还没选」） */
 function langOfRegion(region) {
   const r = String(region || '').toUpperCase();
   const hit = SITE_REGIONS.filter((x) => x.id === r)[0];
   return hit ? hit.lang : null;
+}
+
+/** 按路径前缀判断在哪个语种站；不在任何语种目录里返回 null */
+function langOfPath(path) {
+  for (const [prefix, lang] of SITE_PREFIX_LANG) {
+    if (path === prefix || path.indexOf(prefix + '/') === 0) return lang;
+  }
+  return null;
+}
+
+/** 某个语种的页面路径 → 换成另一个语种的同路径（找不到就回该语种首页） */
+function swapSitePath(path, toLang) {
+  const from = langOfPath(path);
+  const base = LANG_SITE[toLang] || LANG_SITE.en;
+  if (!from) return base;
+  const rest = path.slice(LANG_SITE[from].length - 1); // 保留开头的 /
+  return base.replace(/\/$/, '') + (rest === '/' ? '/' : rest);
 }
 
 /** 读单个 Cookie（不引第三方库，写死这里够用） */
@@ -4678,10 +4717,10 @@ function redirectTo(location, cookieValue, status) {
   return new Response(null, { status: status || 302, headers });
 }
 
-/** 这台机器该看哪个语种：用户选过的优先，其次看地区（默认中文） */
+/** Cookie 里记的语种（zh / zh_hant / en）；没选过返回 null */
 function pickLang(request) {
   const cookie = readCookie(request.headers.get('Cookie'), LANG_COOKIE);
-  if (cookie === 'zh' || cookie === 'en') return cookie;
+  if (SITE_LANGS.indexOf(cookie) >= 0) return cookie;
   return null;
 }
 
@@ -4700,6 +4739,9 @@ async function resolveSiteLang(request, env) {
       const s = await getSession(env, request);
       if (s) {
         const pref = await getPref(env, s.username);
+        // 账户语言优先于地区：用户手动切过语言，说明那是他当下想看的文字
+        const byLang = pref && SITE_LANGS.indexOf(pref.lang) >= 0 ? pref.lang : null;
+        if (byLang) return byLang;
         const byRegion = pref ? langOfRegion(pref.region) : null;
         if (byRegion) return byRegion;
       }
@@ -4719,23 +4761,27 @@ function langCookieHeader(lang) {
 }
 
 /**
- * 登录成功后该把这个人送去哪个站。
- *   1) 账户在控制台选过「所在地区」→ 按地区
- *   2) 没选过 → 留在登录页所在的语种（不把人从英文登录页扔去中文站）
+ * 登录成功后该把这个人送去哪个站。优先级：
+ *   1) 账户保存的界面语言（用户在右上角切过并选了「保存到账户」）—— 最直接表达意图
+ *   2) 账户选的「所在地区 / 国籍」—— 没单独存过语言时按地区推断
+ *   3) 本机语种 Cookie —— 这台设备上次选的
+ *   4) 都没有 → 英文（全球通用语言）
  */
 async function siteForUser(env, user, request) {
   let region = null;
+  let prefLang = null;
   try {
     const pref = await getPref(env, user && user.username);
+    if (pref && SITE_LANGS.indexOf(pref.lang) >= 0) prefLang = pref.lang;
     region = pref && langOfRegion(pref.region) ? String(pref.region).toUpperCase() : null;
   } catch {
     region = null;
   }
-  const lang = langOfRegion(region) || pickLang(request) || 'zh';
+  const lang = prefLang || langOfRegion(region) || pickLang(request) || 'en';
   return {
     region,
     lang,
-    path: lang === 'en' ? '/en_us/' : '/zh_cn/',
+    path: LANG_SITE[lang] || LANG_SITE.en,
   };
 }
 
@@ -4745,17 +4791,16 @@ async function siteForUser(env, user, request) {
  */
 function handleLangSwitch(request, url) {
   const want = (url.searchParams.get('lang') || '').toLowerCase();
-  if (want !== 'zh' && want !== 'en') return null;
+  if (SITE_LANGS.indexOf(want) < 0) return null;
   const clean = new URL(url.toString());
   clean.searchParams.delete('lang');
 
-  // 页面上两个切换链接本来就写好了目标目录；这里再兜一层，
+  // 页面上切换链接本来就写好了目标目录；这里再兜一层，
   // 手输 /zh_cn/notice/?lang=en 时也能直接落到 /en_us/notice/。
   const p = clean.pathname;
-  const inZh = p === '/zh_cn' || p.indexOf('/zh_cn/') === 0;
-  const inEn = p === '/en_us' || p.indexOf('/en_us/') === 0;
-  if (want === 'en' && inZh) clean.pathname = '/en_us' + (p.slice(6) || '/');
-  if (want === 'zh' && inEn) clean.pathname = '/zh_cn' + (p.slice(6) || '/');
+  if (langOfPath(p) && langOfPath(p) !== want) {
+    clean.pathname = swapSitePath(p, want);
+  }
 
   return redirectTo(clean.toString(), want);
 }
@@ -5041,105 +5086,7 @@ function langForPath(request, path) {
 
 /* ---------------------- 中英选择页 ---------------------- */
 
-/**
- * 没选过语种、也没登录（或账户没选地区）时，根路径给这张选择页。
- *
- * 设计上刻意和 404 页同源：同一套 <html data-theme> 提前落地脚本、
- * 同一套 /theme.css + /android.css，所以控制台里选过 light / dark /
- * 原生安卓的人看到的选择页也会跟着变。
- *
- * 两个按钮都走 ?lang=zh / ?lang=en，由 handleLangSwitch 写 Cookie 再跳，
- * 所以「选一次，以后直接进对应语种」这条路径和页面底部的语言切换完全一致。
- */
-function langPickerPageHtml(targetPath) {
-  // 旧地址（如 /notice/）也走选择页：选完要落回原来的路径，不能直接丢到首页
-  const rest = (() => {
-    const p = String(targetPath || '/');
-    if (p === '/' || p === '/index.html') return '/';
-    return p.startsWith('/') ? p : '/' + p;
-  })();
-  const zhHref = '/zh_cn' + rest + (rest.indexOf('?') >= 0 ? '&' : '?') + 'lang=zh';
-  const enHref = '/en_us' + rest + (rest.indexOf('?') >= 0 ? '&' : '?') + 'lang=en';
-  return `<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="robots" content="noindex">
-<script>/* 主题尽早落地（和站内其他页面同一套开关，默认原生安卓） */(function(){var t='android';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark'||s==='android')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
-<title>选择语言 · zrfeng.top</title>
-<link rel="stylesheet" href="/theme.css">
-<link rel="stylesheet" href="/android.css">
-<style>
-  *{margin:0;padding:0;box-sizing:border-box}
-  body{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;
-    background:#050807;color:#e8f5ee;
-    font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;line-height:1.7}
-  /* 兜底样式对应 dark；android / light 由两个主题文件接管 */
-  .pick{width:100%;max-width:420px;padding:34px 26px 28px;text-align:center;
-    background:rgba(10,18,14,.85);border:1px solid rgba(0,255,140,.35);border-radius:28px}
-  .pick .globe{font-size:38px;line-height:1;margin-bottom:14px;opacity:.9}
-  .pick h1{font-size:20px;font-weight:700;margin-bottom:6px}
-  .pick .sub{font-size:13px;color:#9fb8ab;margin-bottom:24px}
-  .pick .opts{display:flex;flex-direction:column;gap:10px}
-  .pick .opt{display:flex;align-items:center;justify-content:space-between;gap:12px;
-    min-height:56px;padding:0 18px;border-radius:16px;text-decoration:none;
-    border:1px solid rgba(0,255,140,.35);background:rgba(0,255,140,.06);
-    color:#e8f5ee;transition:background .15s,opacity .15s}
-  .pick .opt:active{opacity:.85}
-  .pick .opt .zh{font-size:15px;font-weight:600}
-  .pick .opt .en{font-size:12px;color:#9fb8ab}
-  .pick .opt .go{font-size:18px;color:#00ff8c;flex:none}
-  .pick .site{margin-top:22px;font-size:11px;letter-spacing:1.5px;color:#3d5a4b;
-    font-family:ui-monospace,Menlo,Consolas,monospace}
-  /* 浅色主题 */
-  html[data-theme="light"] .pick{background:#fff;border-color:rgba(90,180,224,.38)}
-  html[data-theme="light"] .pick .sub{color:#5a7a68}
-  html[data-theme="light"] .pick .opt{border-color:rgba(102,204,255,.45);background:rgba(102,204,255,.07);color:#12333f}
-  html[data-theme="light"] .pick .opt .en{color:#5a7a68}
-  html[data-theme="light"] .pick .opt .go{color:#66ccff}
-  html[data-theme="light"] .pick .site{color:#7d9a8b}
-  /* 原生安卓（Material You / MD3） */
-  html[data-theme="android"] .pick{background:var(--md-surface-1);border-color:var(--md-outline-var)}
-  html[data-theme="android"] .pick h1{color:var(--md-on-surface)}
-  html[data-theme="android"] .pick .sub{color:var(--md-on-surface-var)}
-  html[data-theme="android"] .pick .opt{border-color:var(--md-outline-var);background:var(--md-surface-2);color:var(--md-on-surface)}
-  html[data-theme="android"] .pick .opt .en{color:var(--md-on-surface-var)}
-  html[data-theme="android"] .pick .opt .go{color:var(--md-primary)}
-  html[data-theme="android"] .pick .site{color:var(--md-outline)}
-</style>
-</head>
-<body>
-  <div class="pick">
-    <div class="globe">🌏</div>
-    <h1>选择语言 · Choose your language</h1>
-    <div class="sub">选择后记住你的选择，下次直接进入对应站点。<br>We'll remember your choice.</div>
-    <div class="opts">
-      <a class="opt" href="${escHtml(zhHref)}" hreflang="zh-CN">
-        <span><span class="zh">中文</span><br><span class="en">简体中文 · Chinese</span></span>
-        <span class="go">→</span>
-      </a>
-      <a class="opt" href="${escHtml(enHref)}" hreflang="en">
-        <span><span class="zh">English</span><br><span class="en">English · 英语</span></span>
-        <span class="go">→</span>
-      </a>
-    </div>
-    <div class="site">zrfeng.top</div>
-  </div>
-</body>
-</html>`;
-}
 
-/** 中英选择页响应（不缓存，免得 CDN 把它发给已经选过语种的人） */
-function langPickerResponse(targetPath) {
-  return new Response(langPickerPageHtml(targetPath), {
-    status: 200,
-    headers: {
-      'content-type': 'text/html; charset=utf-8',
-      'cache-control': 'no-store',
-    },
-  });
-}
 
 /**
  * 404 界面：站点自己的页面，不是浏览器那张「未找到」。
@@ -5400,22 +5347,21 @@ function handleRegionGate(request, url) {
 /**
  * 旧地址（以前中文站直接挂在根目录）→ 301 到语种目录。
  *
- * 现在不看 IP：账户地区 / 本机语种都没选过时，不再硬塞一个语种，
- * 而是原地渲染中英选择页（见 langPickerResponse）。
+ * 不看 IP。账户地区 / 本机语种都没选过时默认进英文站 ——
+ * 以前会先给一张中英选择页，现在直接落地，少一层拦截。
  */
 async function handleLegacyRedirect(request, url, env) {
   const path = url.pathname;
   // 已经站在某个语种目录里 → 原样放行
-  if (path === '/en_us' || path.startsWith('/en_us/')) return null;
-  if (path === '/zh_cn' || path.startsWith('/zh_cn/')) return null;
+  if (langOfPath(path)) return null;
 
   const lang = await resolveSiteLang(request, env);
-  // 没选过语种 / 地区：根路径给选择页，其它旧地址先落到选择页再进来
-  if (!lang) return langPickerResponse(path);
-
+  // 没登录、本机也没选过语种 → 默认英文（全球通用语言）。
+  // 以前这里会返回中英选择页，现在直接落到英文站，不再拦一层。
   const dest = new URL(url.toString());
   const rest = path === '/' || path === '/index.html' ? '/' : path;
-  dest.pathname = (lang === 'en' ? '/en_us' : '/zh_cn') + rest;
+  const base = (LANG_SITE[lang] || LANG_SITE.en).replace(/\/$/, '');
+  dest.pathname = lang ? base + rest : LANG_SITE.en.replace(/\/$/, '') + rest;
   return redirectTo(dest.toString(), null, 301);
 }
 
@@ -5431,7 +5377,7 @@ async function handleLegacyRedirect(request, url, env) {
 function resolveLang(request) {
   const url = new URL(request.url);
   const q = (url.searchParams.get('lang') || '').toLowerCase();
-  if (q === 'zh' || q === 'en') return q;
+  if (SITE_LANGS.indexOf(q) >= 0) return q;
 
   // 页面自己发的 /api 请求：Referer 落在哪个语种目录就以哪边为准。
   // 这一步必须排在 Cookie 和浏览器语言前面 —— 中文用户在英文站上浏览时，
@@ -5440,20 +5386,22 @@ function resolveLang(request) {
   if (ref) {
     try {
       const r = new URL(ref);
-      if (r.pathname === '/en_us' || r.pathname.indexOf('/en_us/') === 0) return 'en';
-      if (r.pathname === '/zh_cn' || r.pathname.indexOf('/zh_cn/') === 0) return 'zh';
+      const byRef = langOfPath(r.pathname);
+      if (byRef) return byRef;
     } catch {
       /* 坏 Referer 忽略，继续往下判断 */
     }
   }
 
   const cookie = readCookie(request.headers.get('Cookie'), LANG_COOKIE);
-  if (cookie === 'zh' || cookie === 'en') return cookie;
+  if (SITE_LANGS.indexOf(cookie) >= 0) return cookie;
 
   const al = (request.headers.get('Accept-Language') || '').toLowerCase();
-  if (!al) return 'zh';
+  if (!al) return 'en';
   const first = al.split(',')[0].trim();
-  return first.startsWith('en') ? 'en' : 'zh';
+  if (first.startsWith('zh-tw') || first.startsWith('zh-hk') || first.startsWith('zh-hant')) return 'zh_hant';
+  if (first.startsWith('zh')) return 'zh';
+  return 'en';
 }
 
 /** 完整匹配的词条（面向普通访客的路径：登录注册、工单、公告、下载门控） */
@@ -5940,7 +5888,15 @@ async function handleRequest(request, env) {
               const p = await getPref(env, un);
               return p && ['light','dark','android'].includes(p.theme) ? p.theme : null;
             })(),
-            // 所在地区（CN / US / null）：登录后据此决定进哪个语种站
+            // 账户保存的界面语言（zh / zh_hant / en / null）。
+            // 它和地区是两件事：地区决定「你属于哪」，语言决定「你想看哪种文字」。
+            prefLang: await (async () => {
+              const un = u ? u.username : s ? s.username : null;
+              if (!un) return null;
+              const p = await getPref(env, un);
+              return p && SITE_LANGS.indexOf(p.lang) >= 0 ? p.lang : null;
+            })(),
+            // 所在地区（CN / HK / MO / TW / US / OTHER / null）：登录后据此决定进哪个语种站
             prefRegion: await (async () => {
               const un = u ? u.username : s ? s.username : null;
               if (!un) return null;
@@ -6106,6 +6062,16 @@ async function handleRequest(request, env) {
             patch.theme = theme;
           }
 
+          // 语言（可选）：和地区分开存。地区决定「你属于哪」，语言决定「你想看哪种文字」，
+          // 换语言不该改地区（用户明确要求过这一点）。
+          if (body && body.lang !== undefined) {
+            const lang = String(body.lang || '');
+            if (SITE_LANGS.indexOf(lang) < 0) {
+              return json({ ok: false, error: 'lang 只能是 zh、zh_hant 或 en' }, 400);
+            }
+            patch.lang = lang;
+          }
+
           // 所在地区（可选）：只认 SITE_REGIONS 里的地区，决定进中文站还是英文站。
           // 传空字符串 = 清除地区，回到「按本机语种 / 选择页」的默认行为。
           let clearedRegion = false;
@@ -6139,6 +6105,8 @@ async function handleRequest(request, env) {
           const headers = {};
           if (patch.region) {
             headers['Set-Cookie'] = langCookieHeader(langOfRegion(p.region));
+          } else if (patch.lang) {
+            headers['Set-Cookie'] = langCookieHeader(patch.lang);
           }
           // 只有这次真的动了地区，才回 site —— 改主题不该顺手把人跳走
           const regionTouched = patch.region !== undefined;
@@ -6148,11 +6116,12 @@ async function handleRequest(request, env) {
               ok: true,
               pref: {
                 theme: ['light','dark','android'].includes(p.theme) ? p.theme : null,
+                lang: SITE_LANGS.indexOf(p.lang) >= 0 ? p.lang : null,
                 region: langOfRegion(p.region) ? String(p.region).toUpperCase() : null,
                 at: p.at || Date.now(),
               },
               // 该地区对应的站点目录，前端据此决定要不要跳；没动地区就是 null
-              site: siteLang === 'en' ? '/en_us/' : siteLang === 'zh' ? '/zh_cn/' : null,
+              site: siteLang ? (LANG_SITE[siteLang] || null) : null,
               regionCleared: clearedRegion,
             },
             200,
@@ -6269,10 +6238,9 @@ async function handleRequest(request, env) {
             // 这些是「进哪个语种站」的依据，和 IP 无关
             accountRegion: pref && langOfRegion(pref.region) ? String(pref.region).toUpperCase() : null,
             cookieLang: pickLang(request),
-            // 站点语种：zh / en；null 表示会看到中英选择页
-            lang: lang,
-            defaultSite: lang === 'en' ? '/en_us/' : lang === 'zh' ? '/zh_cn/' : null,
-            langPicker: !lang,
+            // 站点语种：zh / zh_hant / en
+            lang: lang || 'en',
+            defaultSite: LANG_SITE[lang || 'en'],
             // 提示页（地区准入开着且被拦时）会用的语言，和站点语种是两件事
             noticeLang: regionLang(country),
             regions: SITE_REGIONS.map((r) => ({ id: r.id, name: r.name, nameEn: r.nameEn, lang: r.lang })),

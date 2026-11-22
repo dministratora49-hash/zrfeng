@@ -1,0 +1,1754 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>/* 儘早落地主題（預設原生安卓；只認控制台「外觀」裡存下的值，避免閃色） */(function(){var t='android';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark'||s==='android')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
+<title>控制台 · zrfeng</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    min-height: 100vh;
+    padding: 56px 16px 40px;
+    background: #050807;
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    color: #e8f5ee;
+    font-size: 14px;
+  }
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,255,140,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,255,140,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+  }
+  .wrap { position: relative; max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 24px; color: #00ff8c; letter-spacing: 1px; margin-bottom: 6px; }
+  .sub { font-size: 12px; color: #7fa893; margin-bottom: 22px; }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 10px; margin-bottom: 22px; }
+  .stat {
+    padding: 14px 10px; text-align: center;
+    border: 1px solid rgba(0,255,140,0.22); border-radius: 12px; background: rgba(10,18,14,0.7);
+  }
+  .stat b { display: block; font-size: 22px; color: #00ff8c; font-family: Orbitron, monospace; }
+  .stat span { font-size: 11px; color: #7fa893; }
+
+  .card {
+    border: 1px solid rgba(0,255,140,0.35); border-radius: 16px;
+    background: rgba(10,18,14,0.9); padding: 20px 18px; margin-bottom: 18px;
+  }
+  .card h2 { font-size: 15px; color: #00ff8c; margin-bottom: 14px; font-weight: 600; }
+
+  .row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 11px 0; border-bottom: 1px solid rgba(0,255,140,0.1); flex-wrap: wrap;
+  }
+  .row:last-child { border-bottom: none; }
+  .info { flex: 1; min-width: 140px; }
+  .name { font-size: 14px; color: #e8f5ee; word-break: break-all; }
+  .meta { font-size: 11px; color: #7fa893; margin-top: 3px; word-break: break-all; }
+
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; margin-left: 6px; vertical-align: middle; }
+  .tag.active  { background: rgba(0,255,140,0.15); color: #00ff8c; border: 1px solid rgba(0,255,140,0.4); }
+  .tag.trial   { background: rgba(255,204,0,0.15); color: #ffcc00; border: 1px solid rgba(255,204,0,0.4); }
+  .tag.blocked { background: rgba(255,77,77,0.15); color: #ff5c5c; border: 1px solid rgba(255,77,77,0.45); }
+  .tag.admin   { background: rgba(0,200,255,0.15); color: #4dd2ff; border: 1px solid rgba(0,200,255,0.4); }
+  .tag.banned  { background: rgba(255,68,68,0.18); color: #ff4444; border: 1px solid rgba(255,68,68,0.55); }
+  .tag.super   { background: rgba(255,215,0,0.18); color: #ffd700; border: 1px solid rgba(255,215,0,0.5); }
+  .tag.off     { background: rgba(255,255,255,0.06); color: #7fa893; border: 1px solid rgba(255,255,255,0.18); }
+  .tag.sub     { background: rgba(170,120,255,0.18); color: #b98cff; border: 1px solid rgba(170,120,255,0.5); }
+
+  button {
+    padding: 7px 13px; border-radius: 8px;
+    border: 1px solid rgba(0,255,140,0.45); background: rgba(0,255,140,0.08);
+    color: #00ff8c; font-size: 12px; cursor: pointer; font-family: inherit; white-space: nowrap;
+  }
+  button:active { opacity: .65; }
+  button:disabled { opacity: .35; cursor: default; }
+  button.warn { border-color: rgba(255,77,77,0.5); background: rgba(255,77,77,0.1); color: #ff8a8a; }
+  button.mute { border-color: rgba(127,168,147,0.4); background: transparent; color: #7fa893; }
+
+  /* 通知條：左邊文字，右邊「已讀」 */
+  .notice {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    border: 1px solid rgba(255,204,0,0.5); border-radius: 14px;
+    background: rgba(255,204,0,0.07); padding: 14px 16px; margin-bottom: 18px;
+  }
+  .notice .nt-l { flex: 1; min-width: 0; }
+  .notice .nt-t { font-size: 14px; color: #ffcc00; font-weight: 600; }
+  .notice .nt-s { font-size: 11px; color: #a9a07a; margin-top: 4px; }
+  .notice button { border-color: rgba(255,204,0,0.55); background: rgba(255,204,0,0.12); color: #ffcc00; }
+
+  .dellist { border-top: 1px solid rgba(255,204,0,0.18); padding-top: 10px; margin-bottom: 18px; }
+  .delrow { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; color: #b9b09a; padding: 5px 0; }
+  .delrow .d-u { color: #e8d9a0; word-break: break-all; }
+  .delrow .d-t { color: #7fa893; white-space: nowrap; font-size: 11px; }
+
+  .msg { font-size: 12px; margin-top: 12px; min-height: 16px; }
+  .msg.ok { color: #00ff8c; }
+  .msg.err { color: #ff5c5c; }
+  .center { text-align: center; color: #7fa893; padding: 30px 0; line-height: 1.9; }
+  .center a { color: #00ff8c; }
+
+  .kv { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; }
+  .kv div { color: #7fa893; }
+  .kv b { color: #e8f5ee; font-weight: 500; }
+
+  /* 維護時間面板 */
+  .maint {
+    border: 1px solid rgba(255,170,0,0.4); border-radius: 16px;
+    background: rgba(18,14,6,0.9); padding: 20px 18px; margin-bottom: 18px;
+  }
+  .maint h2 { font-size: 15px; color: #ffb020; margin-bottom: 6px; font-weight: 600; }
+  .maint .m-stat { font-size: 12px; color: #b9a888; margin-bottom: 14px; line-height: 1.8; }
+  .maint .m-stat b { color: #ffb020; }
+  .m-field { margin-bottom: 12px; }
+  .m-field label { display: block; font-size: 12px; color: #a89b7c; margin-bottom: 5px; }
+  /* 所在地區下拉框：三套主題各自配色，不依賴 .pick（那隻在 android 主題裡有定義） */
+  .pick { margin: 4px 0 2px; }
+  .pick label { display: block; font-size: 12px; color: #7fa893; margin-bottom: 6px; }
+  .pick select {
+    width: 100%; padding: 11px 12px; border-radius: 10px;
+    border: 1px solid rgba(0,255,140,0.35); background: rgba(0,0,0,0.45);
+    color: #e8f5ee; font-size: 14px; font-family: inherit;
+    appearance: none; -webkit-appearance: none;
+    background-image: linear-gradient(45deg, transparent 50%, #00ff8c 50%),
+                      linear-gradient(135deg, #00ff8c 50%, transparent 50%);
+    background-position: calc(100% - 18px) 50%, calc(100% - 13px) 50%;
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+  }
+  .pick select:focus { outline: none; border-color: rgba(0,255,140,0.8); }
+  .pick select option { background: #0a120e; color: #e8f5ee; }
+  html[data-theme="light"] .pick label { color: #6b7f73; }
+  html[data-theme="light"] .pick select {
+    background-color: #fff; color: #1a2b22;
+    border-color: rgba(0,150,90,0.35);
+    background-image: linear-gradient(45deg, transparent 50%, #0a7a4a 50%),
+                      linear-gradient(135deg, #0a7a4a 50%, transparent 50%);
+  }
+  html[data-theme="light"] .pick select option { background: #fff; color: #1a2b22; }
+  html[data-theme="android"] .pick select {
+    background-color: var(--md-surface); color: var(--md-on-surface);
+    border-color: var(--md-outline);
+    background-image: linear-gradient(45deg, transparent 50%, var(--md-on-surface-var) 50%),
+                      linear-gradient(135deg, var(--md-on-surface-var) 50%, transparent 50%);
+  }
+  html[data-theme="android"] .pick label { color: var(--md-on-surface-var); }
+  html[data-theme="android"] .pick select option {
+    background: var(--md-surface); color: var(--md-on-surface);
+  }
+  .m-field input {
+    width: 100%; padding: 10px 12px; border-radius: 9px;
+    border: 1px solid rgba(255,170,0,0.35); background: rgba(0,0,0,0.45);
+    color: #f0e8d8; font-size: 14px; font-family: inherit;
+  }
+  .m-field input:focus { outline: none; border-color: rgba(255,170,0,0.8); }
+  /* 警告內容用多行文字框（管理員自己寫） */
+  .m-field textarea {
+    width: 100%; padding: 10px 12px; border-radius: 9px; font-size: 13.5px;
+    border: 1px solid rgba(255,170,0,0.35); background: rgba(0,0,0,0.45);
+    color: #f0e8d8; font-family: inherit; line-height: 1.7; resize: vertical;
+  }
+  .m-field textarea:focus { outline: none; border-color: rgba(255,170,0,0.8); }
+  /* 頁面維護勾選框 */
+  .m-pages { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
+  .m-page {
+    display: flex; align-items: center; gap: 7px; cursor: pointer;
+    padding: 8px 11px; border-radius: 10px; font-size: 12px;
+    border: 1px solid rgba(255,170,0,0.28); background: rgba(0,0,0,0.35); color: #b9a888;
+  }
+  .m-page.on { border-color: rgba(255,170,0,0.85); background: rgba(255,170,0,0.14); color: #ffcc66; }
+  .m-page input { width: 15px; height: 15px; accent-color: #ffb020; margin: 0; }
+  .m-page em { font-style: normal; font-size: 10px; color: #8a8060; }
+  .m-page.on em { color: #c9a75c; }
+  .m-hint { font-size: 11px; color: #8a8060; line-height: 1.8; margin-top: 8px; }
+  .m-acts { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+  .m-acts button { flex: 1; min-width: 110px; border-color: rgba(255,170,0,0.5); background: rgba(255,170,0,0.1); color: #ffc55c; }
+  .m-quick { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 14px; }
+  .m-quick button { font-size: 11px; padding: 5px 10px; border-color: rgba(255,170,0,0.3); background: transparent; color: #c9b48a; }
+  .m-now { font-size: 11px; color: #8a8060; margin-top: 10px; }
+
+  /* 工單卡片 */
+  .tk-new {
+    display: inline-block; padding: 1px 8px; border-radius: 20px; font-size: 11px;
+    margin-left: 6px; vertical-align: middle;
+    background: rgba(0,200,255,0.15); color: #4dd2ff; border: 1px solid rgba(0,200,255,0.45);
+  }
+  .tk-meta { font-size: 11px; color: #7fa893; line-height: 1.9; margin-bottom: 12px; }
+  .tk-list { display: flex; flex-direction: column; gap: 10px; }
+  .tk-item {
+    padding: 12px 13px; border-radius: 12px;
+    border: 1px solid rgba(0,255,140,0.18); background: rgba(5,8,7,0.6);
+  }
+  .tk-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .tk-title { font-size: 14px; color: #e8f5ee; word-break: break-all; }
+  .tk-time { font-size: 11px; color: #7fa893; white-space: nowrap; }
+  .tk-who { font-size: 11px; color: #7fa893; margin-top: 3px; word-break: break-all; }
+  .tk-body {
+    margin: 8px 0 10px; font-size: 13px; line-height: 1.8; color: #cfe8dc;
+    white-space: pre-wrap; word-break: break-word; max-height: 220px; overflow: auto;
+  }
+  .tk-acts { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+  .tk-acts button { flex: 1; min-width: 120px; }
+  /* 匿名工單：標出來，並且整條壓暗一點（它排在最後） */
+  .tk-item-anon { opacity: 0.78; border-style: dashed; }
+  .tk-anon-tag {
+    display: inline-block; padding: 1px 7px; border-radius: 20px; font-size: 10px;
+    background: rgba(255,176,32,0.14); color: #ffb020; border: 1px solid rgba(255,176,32,0.4);
+  }
+  /* 回覆執行緒 */
+  .tk-thread {
+    margin: 10px 0; padding-left: 10px; border-left: 2px solid rgba(0,255,140,0.18);
+  }
+  .tk-reply { padding: 6px 0; }
+  .tk-reply-who { font-size: 10.5px; color: #7fa893; margin-bottom: 3px; }
+  .tk-reply-who.admin { color: #00ff8c; }
+  .tk-reply-text { font-size: 12.5px; line-height: 1.8; color: #cfe8dc; white-space: pre-wrap; word-break: break-word; }
+  .tk-pending {
+    display: inline-block; padding: 1px 7px; border-radius: 20px; font-size: 10px;
+    background: rgba(255,80,80,0.14); color: #ff7b7b; border: 1px solid rgba(255,80,80,0.4);
+    white-space: nowrap;
+  }
+  .tk-rep { font-size: 10.5px; color: #7fa893; white-space: nowrap; }
+  .tk-reply-form { display: flex; gap: 8px; margin: 10px 0; }
+  .tk-reply-form input {
+    flex: 1; min-width: 0; padding: 8px 10px; border-radius: 8px; font-size: 12.5px;
+    border: 1px solid rgba(0,255,140,0.22); background: rgba(0,0,0,0.4);
+    color: #e8f5ee; font-family: inherit;
+  }
+  .tk-reply-form input:focus { outline: none; border-color: rgba(0,255,140,0.55); }
+  .tk-reply-form button { flex: none; padding: 8px 14px; font-size: 12.5px; }
+
+  /* 彈窗 */
+  .mask {
+    position: fixed; inset: 0; z-index: 100000; background: rgba(0,0,0,.78);
+    display: flex; align-items: center; justify-content: center; padding: 18px;
+  }
+  .mask.hidden { display: none; }
+  .modal {
+    width: 100%; max-width: 380px; padding: 24px 20px;
+    background: rgba(16,10,10,.99); border: 1px solid rgba(255,77,77,.5);
+    border-radius: 16px; box-shadow: 0 0 40px rgba(255,77,77,.16);
+  }
+  .modal h3 { font-size: 17px; color: #ff5c5c; margin-bottom: 8px; }
+  .modal p { font-size: 13px; line-height: 1.85; color: #d8c8c8; margin-bottom: 14px; }
+  .modal p.small { font-size: 12px; color: #a08f8f; }
+  .modal input {
+    width: 100%; padding: 11px 13px; margin-bottom: 12px;
+    border: 1px solid rgba(255,77,77,.4); border-radius: 9px;
+    background: rgba(0,0,0,.45); color: #f0e8e8; font-size: 15px; font-family: inherit;
+  }
+  .modal input:focus { outline: none; border-color: rgba(255,77,77,.85); }
+  .modal input.code { letter-spacing: 7px; text-align: center; font-family: ui-monospace, monospace; font-size: 20px; }
+  .modal .acts { display: flex; gap: 10px; }
+  .modal .acts button { flex: 1; padding: 10px 0; font-size: 13px; }
+  .modal .err { color: #ff7b7b; font-size: 12px; min-height: 17px; margin-bottom: 6px; }
+  .step-hint { font-size: 11px; color: #a08f8f; margin-bottom: 12px; }
+  .modal .m-field { margin-bottom: 10px; }
+  .modal .m-field label { color: #a08f8f; }
+  .modal .m-field input {
+    width: 100%; padding: 10px 12px; border-radius: 9px; font-size: 14px; font-family: inherit;
+    border: 1px solid rgba(255,77,77,.4); background: rgba(0,0,0,.45); color: #f0e8e8;
+  }
+  .modal .m-field input:focus { outline: none; border-color: rgba(255,77,77,.85); }
+  .modal .m-quick { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 0; }
+  .modal .m-quick button {
+    flex: 1; min-width: 62px; font-size: 11px; padding: 6px 8px;
+    border-color: rgba(255,77,77,.35); background: transparent; color: #e0a0a0;
+  }
+
+  @media (max-width: 520px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    h1 { font-size: 20px; }
+  }
+</style>
+<link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="/android.css">
+</head>
+<body>
+<div class="wrap">
+  <h1>控制台</h1>
+  <div class="sub" id="who">載入中…</div>
+  <div id="notices"></div>
+  <div id="maint"></div>
+  <div id="me"></div>
+  <div id="app"></div>
+</div>
+
+<!-- 關閉二次驗證的確認彈窗：風險提示 + 確認關閉 / 取消關閉 -->
+<div class="mask hidden" id="twofaMask">
+  <div class="modal">
+    <h3 id="tfTitle">關閉二次驗證</h3>
+    <div id="tfBody"></div>
+    <div class="err" id="tfErr"></div>
+    <div class="acts" id="tfActs"></div>
+  </div>
+</div>
+
+<!-- 登出彈窗：密碼 → 郵件確認碼 → 二次確認 -->
+<div class="mask hidden" id="delMask">
+  <div class="modal">
+    <h3 id="dmTitle">登出賬戶</h3>
+    <div class="step-hint" id="dmStep">第 1 / 2 步</div>
+    <div id="dmBody"></div>
+    <div class="err" id="dmErr"></div>
+    <div class="acts" id="dmActs"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var who = document.getElementById('who');
+  var noticesEl = document.getElementById('notices');
+  var maintEl = document.getElementById('maint');
+  /** 服務端下發的「可維護頁面」表，渲染勾選框和中文名都用它 */
+  var maintPageList = [];
+  var meEl = document.getElementById('me');
+  var app = document.getElementById('app');
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function p2(n) { return n < 10 ? '0' + n : '' + n; }
+  function fmtDate(ts) {
+    if (!ts) return '—';
+    var d = new Date(ts);
+    return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate());
+  }
+  function fmtTime(ts) {
+    if (!ts) return '—';
+    var d = new Date(ts);
+    return p2(d.getMonth() + 1) + '-' + p2(d.getDate()) + ' ' + p2(d.getHours()) + ':' + p2(d.getMinutes());
+  }
+  function fmtClock(ts) { return fmtTime(ts); }
+  /** 時間戳 → <input type="datetime-local"> 需要的本地格式 */
+  function toLocalInput(ts) {
+    var d = new Date(ts);
+    return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate()) +
+      'T' + p2(d.getHours()) + ':' + p2(d.getMinutes());
+  }
+  function fromLocalInput(v) { return v ? new Date(v).getTime() : NaN; }
+
+  function tagOf(u) {
+    if (u.role === 'super') return '<span class="tag super">主管理員</span>';
+    if (u.role === 'sub') return '<span class="tag sub">副管理員</span>';
+    if (u.banned) return '<span class="tag banned">已封禁</span>';
+    if (u.state === 'active') return '<span class="tag active">已啟用</span>';
+    if (u.state === 'blocked') return '<span class="tag blocked">試用期已到</span>';
+    return '<span class="tag trial">未啟用 ' + (u.days != null ? u.days + ' 天' : '') + '</span>';
+  }
+
+  /* ===================== 我的賬戶 ===================== */
+  var ME = null;
+
+  function renderMe(j) {
+    var u = j.user || {};
+    var acc = j.account || {};
+    var dotColor = acc.dot === 'green' ? '#00ff8c' : (acc.dot === 'yellow' ? '#ffcc00' : '#ff4d4d');
+    var html =
+      '<div class="card"><h2>我的賬戶</h2>' +
+      '<div class="kv">' +
+      '<div>使用者名稱：<b>' + esc(u.username) + '</b></div>' +
+      '<div>郵箱：<b>' + esc(u.email || '（未繫結）') + '</b></div>' +
+      '<div>狀態：<b style="color:' + dotColor + '">' + esc(acc.label || '—') + '</b></div>' +
+      '</div>' +
+      '<div class="msg" id="meMsg"></div>';
+
+    if (u.canDelete) {
+      html +=
+        '<div class="row" style="margin-top:14px;border-top:1px solid rgba(0,255,140,0.1);border-bottom:none">' +
+        '<div class="info"><div class="name">登出賬戶</div>' +
+        '<div class="meta">需要郵件確認碼；登出後該郵箱不可再次註冊，資料無法恢復</div></div>' +
+        '<button class="warn" id="delBtn">登出賬戶</button>' +
+        '</div>';
+    } else if (u.isAdmin) {
+      html += '<div class="msg" style="color:#7fa893">管理員賬戶不可登出。</div>';
+    } else if (u.isTrial) {
+      html += '<div class="msg" style="color:#7fa893">試用賬戶不可登出。</div>';
+    }
+    html += '</div>';
+
+    // 賬戶安全：改使用者名稱 / 改密碼，兩者都必須過郵箱驗證碼
+    var sec = '';
+    if (u.canChangeUsername) {
+      sec += '<div class="row"><div class="info">' +
+        '<div class="name">修改使用者名稱</div>' +
+        '<div class="meta">需要郵箱驗證碼；改後本裝置保持登入，其它裝置需重新登入</div></div>' +
+        '<button data-ch="username">修改</button></div>';
+    }
+    if (u.canChangePassword) {
+      sec += '<div class="row"><div class="info">' +
+        '<div class="name">修改密碼</div>' +
+        '<div class="meta">需要郵箱驗證碼；改後其它裝置會被登出</div></div>' +
+        '<button data-ch="password">修改</button></div>';
+    }
+    if (u.canAddEmail) {
+      sec += '<div class="row"><div class="info">' +
+        '<div class="name">新增郵箱</div>' +
+        '<div class="meta">賬戶還沒有郵箱。繫結郵箱並驗證後，賬戶即完成啟用（只需驗證新郵箱 + 密碼）</div></div>' +
+        '<button data-em="add">新增並啟用</button></div>';
+    }
+    sec += '<div class="row"><div class="info">' +
+      '<div class="name">恢復程式碼</div>' +
+      '<div class="meta">忘記密碼時用它可以重設密碼。格式：key--使用者名稱:郵箱:密碼--32位隨機（區分大小寫）</div></div>' +
+      '<button data-rc="show">' + (u.recoveryCode ? '檢視' : '生成') + '</button></div>';
+    // 二次驗證：隻影響「新裝置登入」，開關狀態存在賬戶偏好裡，換裝置也跟著走
+    var twofaOn = u.twofa !== false;
+    sec += '<div class="row"><div class="info">' +
+      '<div class="name">二次驗證（2FA）' +
+      (twofaOn ? ' <span class="tag active">已開啟</span>' : ' <span class="tag off">已關閉</span>') + '</div>' +
+      '<div class="meta">' +
+      (twofaOn
+        ? '新裝置登入需要郵箱驗證碼（沒有郵箱的賬戶要管理員金鑰）。關閉後在新裝置上登入你的賬戶將不需要驗證。'
+        : '關閉後在新裝置上登入你的賬戶將不需要驗證，僅憑密碼即可進入。') +
+      '</div></div>' +
+      '<button data-2fa="' + (twofaOn ? 'off' : 'on') + '">' + (twofaOn ? '關閉' : '開啟') + '</button></div>';
+    if (u.canChangeEmail) {
+      sec += '<div class="row"><div class="info">' +
+        '<div class="name">更改郵箱</div>' +
+        '<div class="meta">當前：' + esc(u.email || '') + '。需要先驗證當前郵箱，再驗證新郵箱</div></div>' +
+        '<button data-em="change">更改</button></div>';
+      sec += '<div class="row"><div class="info">' +
+        '<div class="name">刪除郵箱</div>' +
+        '<div class="meta">當前：' + esc(u.email || '') + '。刪除前會向這個郵箱傳送驗證碼，驗證透過才真正解綁。' +
+        '刪除後賬戶會回到未啟用狀態</div></div>' +
+        '<button data-em="delete" class="warn">刪除</button></div>';
+    }
+    if (sec) html += '<div class="card"><h2>賬戶安全</h2>' + sec + '</div>';
+
+    // 所在地区 / 国籍：决定登录后进哪个语种站（简体 / 繁体 / 英文）。
+    // 地区表由服务端 /api/me 的 regions 下发，前端不硬编码，加地区只改 worker.js。
+    // 用下拉而不是一行一个国家：以后加到几十个地区也不会把卡片撑长。
+    var REGIONS = (j && j.regions) || [
+      { id: 'CN', name: '中国大陆', lang: 'zh' },
+      { id: 'HK', name: '中国香港', lang: 'zh_hant' },
+      { id: 'MO', name: '中国澳门', lang: 'zh_hant' },
+      { id: 'TW', name: '中国台湾', lang: 'zh_hant' },
+      { id: 'US', name: '美国', lang: 'en' },
+      { id: 'OTHER', name: '其他国籍 / 地区', lang: 'en' }
+    ];
+    var curRegion = u.region || null;
+    var rg = '<div class="card"><h2>所在地區或國籍</h2>' +
+      '<div class="meta" style="margin-bottom:10px">' +
+      '選擇您所在的地區或您的國籍，登入後會直接進入對應的語言站點。選「不指定」則依本機上次選的語種。</div>' +
+      '<div class="pick"><label for="regionSel">地区</label>' +
+      '<select id="regionSel">' +
+      '<option value="">不指定（依本機語種）</option>';
+    REGIONS.forEach(function (r) {
+      rg += '<option value="' + esc(r.id) + '"' +
+        (r.id === curRegion ? ' selected' : '') + '>' +
+        esc(r.name) + '</option>';
+    });
+    rg += '</select></div>' +
+      '<div class="msg" id="regionMsg"></div></div>';
+    html += rg;
+
+    // 外觀：三套主題共存，舊主題一套沒刪，隨時能選回來
+    var THEME_LIST = [
+      { id: 'android', name: '原生安卓', desc: 'Material You 淺色 · Roboto + 思源黑體 · 圓角卡片' },
+      { id: 'light', name: '亮色', desc: '天依藍 #66ccff · 白底卡片（原來的亮色）' },
+      { id: 'dark', name: '暗色', desc: '站點最初的深色熒光綠主題' }
+    ];
+    var curTheme = 'android';
+    try {
+      var tv = localStorage.getItem('zrfeng-theme');
+      if (tv === 'light' || tv === 'dark' || tv === 'android') curTheme = tv;
+    } catch (e) {
+      curTheme = document.documentElement.getAttribute('data-theme') || 'android';
+    }
+    var th = '<div class="card"><h2>外觀</h2>' +
+      '<div class="meta" style="margin-bottom:10px">三套主題都在，選哪套就存哪套；登入後可以一併存到賬戶。</div>';
+    THEME_LIST.forEach(function (t) {
+      th += '<div class="row">' +
+        '<div class="info"><div class="name">' + t.name +
+        (t.id === curTheme ? ' <span class="tag active">使用中</span>' : '') + '</div>' +
+        '<div class="meta">' + t.desc + '</div></div>' +
+        '<button data-theme-pick="' + t.id + '"' + (t.id === curTheme ? ' disabled' : '') + '>' +
+        (t.id === curTheme ? '當前' : '切換') + '</button>' +
+        '</div>';
+    });
+    th += '<div class="msg" id="themeMsg"></div></div>';
+    html += th;
+
+    meEl.innerHTML = html;
+
+    var b = document.getElementById('delBtn');
+    if (b) b.onclick = openDelete;
+    meEl.querySelectorAll('button[data-ch]').forEach(function (x) {
+      x.onclick = function () { openChange(x.dataset.ch); };
+    });
+    meEl.querySelectorAll('button[data-em]').forEach(function (x) {
+      x.onclick = function () { openEmail(x.dataset.em); };
+    });
+    meEl.querySelectorAll('button[data-rc]').forEach(function (x) {
+      x.onclick = function () { openRecoveryCode(); };
+    });
+    meEl.querySelectorAll('button[data-theme-pick]').forEach(function (x) {
+      x.onclick = function () { pickTheme(x.dataset.themePick); };
+    });
+    // 地區是下拉框：選完即存，不彈二次確認
+    var rsel = document.getElementById('regionSel');
+    if (rsel) rsel.onchange = function () { pickRegion(rsel.value); };
+    meEl.querySelectorAll('button[data-2fa]').forEach(function (x) {
+      x.onclick = function () {
+        var enable = x.getAttribute('data-2fa') === 'on';
+        // 關閉要先過風險確認；開啟不需要
+        if (enable) toggle2fa(true);
+        else confirmTurnOff2fa();
+      };
+    });
+  }
+
+  /* ===================== 所在地區：決定登入後進哪個語種站 ===================== */
+  /* 和主題不同，地區儲存不彈二次確認：選中即存賬戶，並立刻寫本機語種 Cookie。
+   * 存完按地區跳一次站，讓使用者馬上看到效果（已經在對應語種站裡就不跳）。 */
+  function pickRegion(region) {
+    var msg = document.getElementById('regionMsg');
+    if (msg) { msg.className = 'msg'; msg.textContent = '正在儲存…'; }
+    fetch('/api/pref', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ region: region || '' })
+    }).then(function (r) { return r.json(); }).then(function (j) {
+      var m = document.getElementById('regionMsg');
+      if (!j || !j.ok) {
+        if (m) { m.className = 'msg err'; m.textContent = '儲存失敗：' + ((j && (j.error || j.message)) || '未知原因'); }
+        // 存失敗就把下拉框撥回原來的值，別讓介面騙人
+        var sel = document.getElementById('regionSel');
+        if (sel) sel.value = (ME && ME.user && ME.user.region) || '';
+        return;
+      }
+      if (m) { m.className = 'msg ok'; m.textContent = j.regionCleared ? '已清除，按本機語種走。' : '已儲存。'; }
+      // 重新拉一次 /api/me，讓下拉框的選中態和地區列表同步重新整理
+      refreshMe();
+      // 選了地區 → 跳到對應語種站；清除地區 → 留在原地
+      if (j.site) {
+        var here = location.pathname;
+        var onZh = here.indexOf('/zh_tw/') === 0;
+        var onEn = here.indexOf('/en_us/') === 0;
+        var wantZh = j.site === '/zh_tw/';
+        if ((wantZh && !onZh) || (!wantZh && !onEn)) {
+          if (m) { m.className = 'msg ok'; m.textContent = '已儲存，正在跳轉到' + (wantZh ? '中文站' : '英文站') + '…'; }
+          setTimeout(function () { location.href = j.site; }, 700);
+        }
+      }
+    }).catch(function () {
+      var m2 = document.getElementById('regionMsg');
+      if (m2) { m2.className = 'msg err'; m2.textContent = '儲存失敗（網路異常）。'; }
+    });
+  }
+
+  /* ===================== 外觀：三套主題切換 ===================== */
+  function pickTheme(id) {
+    if (id !== 'light' && id !== 'dark' && id !== 'android') return;
+    document.documentElement.setAttribute('data-theme', id);
+    try { localStorage.setItem('zrfeng-theme', id); } catch (e) { }
+    try {
+      document.dispatchEvent(new CustomEvent('zrfeng:themechange', { detail: { theme: id } }));
+    } catch (e) { }
+    var msg = document.getElementById('themeMsg');
+    if (msg) { msg.className = 'msg'; msg.textContent = '已切換，正在同步到賬戶…'; }
+    fetch('/api/pref', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ theme: id })
+    }).then(function (r) { return r.json(); }).then(function (j) {
+      var okAcc = !!(j && j.ok);
+      var why = (j && j.error) || '未知原因';
+      if (ME) renderMe(ME);
+      var m2 = document.getElementById('themeMsg');
+      if (m2) {
+        if (okAcc) { m2.className = 'msg ok'; m2.textContent = '已切換，並已存入賬戶。'; }
+        else { m2.className = 'msg err'; m2.textContent = '已在本機切換，但沒存進賬戶：' + why; }
+      }
+    }).catch(function () {
+      if (ME) renderMe(ME);
+      var m3 = document.getElementById('themeMsg');
+      if (m3) { m3.className = 'msg err'; m3.textContent = '已在本機切換，賬戶同步失敗（網路異常）。'; }
+    });
+  }
+
+  /* ===================== 二次驗證（2FA）開關 ===================== */
+  /* 關閉 2FA 是危險操作 —— 先彈風險確認框，使用者明確確認了才真的關。 */
+  var twofaMask = document.getElementById('twofaMask');
+  var tfBody = document.getElementById('tfBody');
+  var tfErr = document.getElementById('tfErr');
+  var tfActs = document.getElementById('tfActs');
+
+  function closeTwofaModal() {
+    if (twofaMask) twofaMask.className = 'mask hidden';
+    if (tfErr) tfErr.textContent = '';
+  }
+
+  /** 彈出「確認關閉二次驗證」 */
+  function confirmTurnOff2fa() {
+    if (!twofaMask) { toggle2fa(false); return; }
+    tfBody.innerHTML =
+      '<p>關閉二次驗證後你的賬戶將存在被劫持的風險，關閉二次驗證後如果賬戶被盜我們將不負任何責任！</p>';
+    tfErr.textContent = '';
+    tfActs.innerHTML =
+      '<button class="mute" id="tfCancel">取消關閉</button>' +
+      '<button class="warn" id="tfOk">確認關閉</button>';
+    twofaMask.className = 'mask';
+
+    var cancel = document.getElementById('tfCancel');
+    var ok = document.getElementById('tfOk');
+    if (cancel) cancel.onclick = closeTwofaModal;
+    if (ok) ok.onclick = function () {
+      closeTwofaModal();
+      toggle2fa(false);
+    };
+  }
+
+  // 點遮罩或按 Esc 都能取消關閉
+  if (twofaMask) {
+    twofaMask.addEventListener('click', function (e) {
+      if (e.target === twofaMask) closeTwofaModal();
+    });
+  }
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && twofaMask && twofaMask.className.indexOf('hidden') === -1) {
+      closeTwofaModal();
+    }
+  });
+
+  function toggle2fa(enable) {
+    var msg = document.getElementById('meMsg');
+    var btn = document.querySelector('button[data-2fa]');
+    if (btn) { btn.disabled = true; btn.textContent = '處理中…'; }
+    function restore() {
+      if (btn) { btn.disabled = false; btn.textContent = enable ? '開啟' : '關閉'; }
+    }
+    fetch('/api/account/2fa', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ enabled: enable })
+    }).then(function (r) { return r.json(); }).then(function (j) {
+      if (!j || !j.ok) {
+        restore();
+        if (msg) { msg.className = 'msg err'; msg.textContent = (j && j.message) || '設定失敗'; }
+        return;
+      }
+      if (ME) {
+        ME.user = ME.user || {};
+        ME.user.twofa = j.twofa;
+        renderMe(ME);
+      }
+      var m2 = document.getElementById('meMsg');
+      if (m2) {
+        m2.className = 'msg ok';
+        m2.textContent = j.twofa
+          ? '二次驗證已開啟：新裝置登入需要驗證。'
+          : '二次驗證已關閉：新裝置登入只需要密碼。';
+      }
+    }).catch(function () {
+      restore();
+      var m3 = document.getElementById('meMsg');
+      if (m3) { m3.className = 'msg err'; m3.textContent = '網路錯誤，設定未儲存'; }
+    });
+  }
+
+  /* ===================== 修改使用者名稱 / 修改密碼 ===================== */
+  var changeField = null;
+
+  function openChange(field) {
+    changeField = field;
+    var isName = field === 'username';
+    setErr('');
+    dmTitle.textContent = isName ? '修改使用者名稱' : '修改密碼';
+    dmStep.textContent = '第 1 / 2 步 · ' + (isName ? '輸入新使用者名稱' : '輸入新密碼');
+    dmBody.innerHTML = isName
+      ? '<p>新使用者名稱需要<b>郵箱驗證</b>後才會生效。</p>' +
+        '<p class="small">3-20 位，僅字母、數字、下劃線、連字元。改後本裝置保持登入，其它裝置需重新登入。</p>' +
+        '<input type="text" id="chVal" placeholder="新使用者名稱" autocomplete="off">'
+      : '<p>新密碼需要<b>郵箱驗證</b>後才會生效。</p>' +
+        '<p class="small">至少 6 位。改後其它裝置會被登出，本裝置保持登入。</p>' +
+        '<input type="password" id="chVal" placeholder="新密碼" autocomplete="new-password">' +
+        '<input type="password" id="chVal2" placeholder="再輸一次新密碼" autocomplete="new-password">';
+    dmActs.innerHTML =
+      '<button class="mute" id="chCancel">取消</button>' +
+      '<button id="chSend">傳送驗證碼</button>';
+    delMask.className = 'mask';
+    document.getElementById('chCancel').onclick = closeModal;
+    document.getElementById('chSend').onclick = sendChange;
+    var v = document.getElementById('chVal');
+    if (v) v.focus();
+  }
+
+  function sendChange() {
+    var isName = changeField === 'username';
+    var v1 = (document.getElementById('chVal') || {}).value || '';
+    if (!v1) { setErr(isName ? '請輸入新使用者名稱' : '請輸入新密碼'); return; }
+    if (!isName) {
+      var v2 = (document.getElementById('chVal2') || {}).value || '';
+      if (v1 !== v2) { setErr('兩次輸入的密碼不一致'); return; }
+      if (v1.length < 6) { setErr('密碼至少 6 位'); return; }
+    }
+    var btn = document.getElementById('chSend');
+    btn.disabled = true;
+    setErr('');
+    fetch('/api/account/change/request', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ field: changeField, value: v1 }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j.ok) { setErr(j.message || '傳送失敗'); btn.disabled = false; return; }
+        openChangeStep2(j.message || '');
+      })
+      .catch(function () { setErr('網路錯誤'); btn.disabled = false; });
+  }
+
+  function openChangeStep2(sentMsg) {
+    var isName = changeField === 'username';
+    setErr('');
+    dmTitle.textContent = isName ? '修改使用者名稱' : '修改密碼';
+    dmStep.textContent = '第 2 / 2 步 · 輸入郵件驗證碼';
+    dmBody.innerHTML =
+      '<p>' + esc(sentMsg) + '</p>' +
+      '<p class="small">10 分鐘內有效。如果沒收到，請檢視垃圾箱。</p>' +
+      '<input type="text" class="code" id="chCode" inputmode="numeric" maxlength="6" placeholder="000000">';
+    dmActs.innerHTML =
+      '<button class="mute" id="chBack">返回</button>' +
+      '<button id="chConfirm">確認修改</button>';
+    document.getElementById('chBack').onclick = function () { openChange(changeField); };
+    document.getElementById('chConfirm').onclick = doChange;
+    var c = document.getElementById('chCode');
+    if (c) { c.focus(); c.onkeydown = function (e) { if (e.key === 'Enter') doChange(); }; }
+  }
+
+  function doChange() {
+    var code = ((document.getElementById('chCode') || {}).value || '').trim();
+    if (!/^\d{6}$/.test(code)) { setErr('請輸入 6 位驗證碼'); return; }
+    var btn = document.getElementById('chConfirm');
+    btn.disabled = true;
+    setErr('');
+    fetch('/api/account/change/confirm', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ field: changeField, code: code }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j.ok) { setErr(j.message || '修改失敗'); btn.disabled = false; return; }
+        dmTitle.textContent = '修改成功';
+        dmStep.textContent = '完成';
+        dmBody.innerHTML = '<p>' + esc(j.message) + '</p>';
+        dmActs.innerHTML = '<button id="chDone">好</button>';
+        document.getElementById('chDone').onclick = function () { closeModal(); loadMe(); };
+        setTimeout(function () { closeModal(); loadMe(); }, 1800);
+      })
+      .catch(function () { setErr('網路錯誤'); btn.disabled = false; });
+  }
+
+  /* ===================== 登出流程（兩步） ===================== */
+  var delMask = document.getElementById('delMask');
+  var dmTitle = document.getElementById('dmTitle');
+  var dmStep = document.getElementById('dmStep');
+  var dmBody = document.getElementById('dmBody');
+  var dmErr = document.getElementById('dmErr');
+  var dmActs = document.getElementById('dmActs');
+  var sentTo = '';
+
+  function closeModal() { delMask.className = 'mask hidden'; }
+
+  // 兜底：點彈窗外的背景、或按 Esc，都能關掉彈窗。
+  // （每個彈窗本來都該有「關閉」按鈕，這一層是防止再出現點不出去的情況）
+  delMask.addEventListener('click', function (e) {
+    if (e.target === delMask) closeModal();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && delMask.className.indexOf('hidden') === -1) closeModal();
+  });
+  function setErr(t) { dmErr.textContent = t || ''; }
+
+  function openDelete() {
+    setErr('');
+    dmTitle.textContent = '登出賬戶';
+    dmStep.textContent = '第 1 / 2 步 · 驗證密碼';
+    dmBody.innerHTML =
+      '<p>登出是不可恢復的操作。確認後會向你的郵箱傳送一個 <b>6 位確認碼</b>，' +
+      '需要再次輸入才能完成登出。</p>' +
+      '<p class="small">登出後該郵箱<b>不可再次註冊</b>。</p>' +
+      '<input type="password" id="dmPwd" placeholder="請輸入當前密碼" autocomplete="current-password">';
+    dmActs.innerHTML =
+      '<button class="mute" id="dmCancel">取消</button>' +
+      '<button class="warn" id="dmSend">傳送確認碼</button>';
+    delMask.className = 'mask';
+    document.getElementById('dmCancel').onclick = closeModal;
+    document.getElementById('dmSend').onclick = sendCode;
+    var p = document.getElementById('dmPwd');
+    if (p) { p.focus(); p.onkeydown = function (e) { if (e.key === 'Enter') sendCode(); }; }
+  }
+
+  function sendCode() {
+    var p = document.getElementById('dmPwd');
+    var pwd = p ? p.value : '';
+    if (!pwd) { setErr('請輸入密碼'); return; }
+    var btn = document.getElementById('dmSend');
+    btn.disabled = true;
+    setErr('');
+    fetch('/api/account/delete/request', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ password: pwd }),
+    })
+      .then(function (r) { return r.json().then(function (j) { return { s: r.status, j: j }; }); })
+      .then(function (res) {
+        if (!res.j.ok) { setErr(res.j.message || '傳送失敗'); btn.disabled = false; return; }
+        sentTo = res.j.message || '';
+        step2();
+      })
+      .catch(function () { setErr('網路錯誤'); btn.disabled = false; });
+  }
+
+  function step2() {
+    setErr('');
+    dmTitle.textContent = '二次確認';
+    dmStep.textContent = '第 2 / 2 步 · 輸入郵件確認碼';
+    dmBody.innerHTML =
+      '<p>' + esc(sentTo) + '</p>' +
+      '<p class="small">10 分鐘內有效。如果沒收到，請檢視垃圾箱。</p>' +
+      '<input type="text" class="code" id="dmCode" inputmode="numeric" maxlength="6" placeholder="000000">';
+    dmActs.innerHTML =
+      '<button class="mute" id="dmBack">返回</button>' +
+      '<button class="warn" id="dmConfirm">確認登出</button>';
+    document.getElementById('dmBack').onclick = openDelete;
+    document.getElementById('dmConfirm').onclick = doConfirm;
+    var c = document.getElementById('dmCode');
+    if (c) { c.focus(); c.onkeydown = function (e) { if (e.key === 'Enter') doConfirm(); }; }
+  }
+
+  function doConfirm() {
+    var c = document.getElementById('dmCode');
+    var code = c ? c.value.trim() : '';
+    if (!/^\d{6}$/.test(code)) { setErr('請輸入 6 位確認碼'); return; }
+    var btn = document.getElementById('dmConfirm');
+    btn.disabled = true;
+    setErr('');
+    fetch('/api/account/delete/confirm', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ code: code }),
+    })
+      .then(function (r) { return r.json().then(function (j) { return { s: r.status, j: j }; }); })
+      .then(function (res) {
+        if (!res.j.ok) { setErr(res.j.message || '登出失敗'); btn.disabled = false; return; }
+        dmTitle.textContent = '已登出';
+        dmStep.textContent = '完成';
+        dmBody.innerHTML =
+          '<p>' + esc(res.j.message) + '</p><p class="small">' + esc(res.j.detail || '') + '</p>' +
+          '<p class="small">正在返回主站…</p>';
+        dmActs.innerHTML = '<button id="dmHome">返回主站</button>';
+        document.getElementById('dmHome').onclick = function () { location.href = '/zh_tw/'; };
+        setTimeout(function () { location.href = '/zh_tw/'; }, 2600);
+      })
+      .catch(function () { setErr('網路錯誤'); btn.disabled = false; });
+  }
+
+  /* ===================== 管理員：登出通知 ===================== */
+  function renderNotices(n) {
+    if (!n || !n.count) { noticesEl.innerHTML = ''; return; }
+    var rows = n.deletions.slice(0, 10).map(function (d) {
+      return '<div class="delrow"><span class="d-u">' + esc(d.username) +
+        (d.email ? ' · ' + esc(d.email) : '') + '</span>' +
+        '<span class="d-t">' + fmtTime(d.at) + '</span></div>';
+    }).join('');
+    noticesEl.innerHTML =
+      '<div class="notice">' +
+      '<div class="nt-l">' +
+      '<div class="nt-t">最近登出 ' + n.count + ' 人</div>' +
+      '<div class="nt-s">點「已讀」後本條訊息消失，之後再有登出會重新出現</div>' +
+      '</div>' +
+      '<button id="readBtn">已讀</button>' +
+      '</div>' +
+      '<div class="dellist">' + rows + '</div>';
+    document.getElementById('readBtn').onclick = function () {
+      var b = document.getElementById('readBtn');
+      b.disabled = true;
+      fetch('/api/admin/notices/read', { method: 'POST' })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          if (j.ok) { noticesEl.innerHTML = ''; loadAdmin(); }
+          else { b.disabled = false; }
+        })
+        .catch(function () { b.disabled = false; });
+    };
+  }
+
+  /* ===================== 管理員：賬戶管理 ===================== */
+  /** 我是不是主管理員（只有主管理員能改別人的管理員許可權） */
+  function amSuper() { return !!(ME && ME.user && ME.user.isSuper); }
+
+  /**
+   * 某一行賬戶的操作按鈕。許可權規則與服務端一致：
+   *   主管理員賬戶 —— 任何人都不能操作
+   *   副管理員賬戶 —— 只有主管理員能操作（副管理員之間互相不能動）
+   *   普通使用者     —— 主/副管理員都能操作
+   *   設/解除副管理員 —— 僅主管理員
+   */
+  function rowButtons(u, iAmSuper) {
+    if (u.role === 'super') return '<button class="mute" disabled>不可操作</button>';
+
+    var canManage = iAmSuper || u.role === 'user';
+    if (!canManage) return '<button class="mute" disabled>副管理員</button>';
+
+    var un = esc(u.username);
+    var out = '';
+    if (u.role === 'user') {
+      if (u.state === 'active') out += '<button class="warn" data-act="deactivate" data-u="' + un + '">取消啟用</button>';
+      else out += '<button data-act="activate" data-u="' + un + '">啟用</button>';
+      out += '<button data-act="extend" data-u="' + un + '">續 7 天</button>';
+    }
+    out += u.banned
+      ? '<button data-act="unban" data-u="' + un + '">解封</button>'
+      : '<button class="warn" data-act="ban" data-u="' + un + '">封禁</button>';
+    // 警告：內容由管理員自己填，按下後發給該賬戶
+    out += '<button class="warn" data-act="warn" data-u="' + un + '">警告</button>';
+    if (iAmSuper) {
+      out += u.role === 'sub'
+        ? '<button class="mute" data-act="demote" data-u="' + un + '">解除管理員</button>'
+        : '<button data-act="promote" data-u="' + un + '">設為副管理員</button>';
+    }
+    return out;
+  }
+
+  var USERS = [];
+
+  /* ===================== 管理員：工單 ===================== */
+  /**
+   * 工單卡片。「聯絡我們」頁提交的工單存兩份都沒有——只在 KV 裡，
+   * 垃圾工單在服務端就地銷燬，所以這裡只會看到正常工單。
+   */
+  function renderTicketCard(tk) {
+    if (!tk || !tk.ok) return '';
+
+    var h = '<div class="card"><h2>工單' +
+      (tk.unread ? '<span class="tk-new">' + tk.unread + ' 條新</span>' : '') +
+      (tk.pendingCount ? '<span class="tk-new">' + tk.pendingCount + ' 條待回覆</span>' : '') +
+      '</h2>' +
+      '<div class="tk-meta">在庫 ' + (tk.count || 0) + ' 條 · 今天收到 ' + (tk.today || 0) +
+      ' / ' + (tk.dailyMax || 0) + ' 條 · 最多保留 ' + (tk.maxKeep || 0) + ' 條' +
+      (tk.anonymousCount ? ' · 其中匿名 ' + tk.anonymousCount + ' 條（排在最後）' : '') + '<br>' +
+      '（標題不足 3 字、正文不足 10 字，或內容全是數字 / 標點的，已在服務端當場銷燬，不落庫）<br>' +
+      '（回覆後使用者會在「<a href="/zh_tw/notice/" target="_blank" style="color:#00ff8c">通知板塊 → 我的訊息</a>」裡看到）' +
+      '</div>';
+
+    if (!tk.tickets || !tk.tickets.length) {
+      return h + '<div class="center">還沒有收到工單</div></div>';
+    }
+
+    h += '<div class="tk-list">';
+    tk.tickets.forEach(function (t) {
+      // 三種署名：已登入 → 使用者名稱；沒登入 → 未登入使用者；勾了匿名 → 已匿名（不顯示使用者名稱）
+      var who;
+      if (t.anonymous) {
+        who = '<span class="tk-anon-tag">已匿名</span>';
+      } else if (t.account) {
+        who = '賬戶 ' + esc(t.account);
+      } else {
+        who = '未登入使用者';
+      }
+      if (t.contact) who += ' · 聯絡方式 ' + esc(t.contact);
+      // 回覆執行緒：使用者的留言 + 管理員的回覆，按時間排
+      var reps = t.replies || [];
+      var thread = '';
+      if (reps.length) {
+        thread = '<div class="tk-thread">';
+        reps.forEach(function (r) {
+          var isAdmin = r.by === 'admin';
+          thread += '<div class="tk-reply">' +
+            '<div class="tk-reply-who' + (isAdmin ? ' admin' : '') + '">' + (isAdmin ? '管理員' : '使用者') +
+            ' · ' + fmtTime(r.at) + '</div>' +
+            '<div class="tk-reply-text">' + esc(r.text) + '</div>' +
+            '</div>';
+        });
+        thread += '</div>';
+      }
+      h += '<div class="tk-item' + (t.anonymous ? ' tk-item-anon' : '') + '">' +
+        '<div class="tk-head"><span class="tk-title">' + esc(t.title) + '</span>' +
+        (t.pending ? '<span class="tk-pending">待回覆</span>' : '') +
+        (t.replyCount ? '<span class="tk-rep">' + t.replyCount + ' 條回覆</span>' : '') +
+        '<span class="tk-time">' + fmtTime(t.at) + '</span></div>' +
+        '<div class="tk-who">' + who + '</div>' +
+        '<div class="tk-body">' + esc(t.body) + '</div>' +
+        thread +
+        '<div class="tk-reply-form">' +
+        '<input type="text" maxlength="1000" placeholder="回覆這條工單（使用者會在通知板塊看到）" data-tk-input="' + esc(t.id) + '">' +
+        '<button data-tk-send="' + esc(t.id) + '">傳送</button>' +
+        '</div>' +
+        '<button class="warn" data-tk="' + esc(t.id) + '">刪除</button>' +
+        '</div>';
+    });
+    h += '</div>';
+
+    h += '<div class="tk-acts">' +
+      (tk.unread ? '<button id="tkRead">標記已讀</button>' : '') +
+      '<button class="warn" id="tkClear">清空全部</button>' +
+      '</div></div>';
+    return h;
+  }
+
+  /** 工單相關的寫操作：做完重新拉一次列表 */
+  function ticketPost(url, body, btn) {
+    if (btn) btn.disabled = true;
+    fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) { if (j && j.ok) loadAdmin(); else if (btn) btn.disabled = false; })
+      .catch(function () { if (btn) btn.disabled = false; });
+  }
+
+  function wireTickets() {
+    var readBtn = document.getElementById('tkRead');
+    if (readBtn) readBtn.onclick = function () { ticketPost('/api/admin/tickets/read', {}, readBtn); };
+
+    var clearBtn = document.getElementById('tkClear');
+    if (clearBtn) clearBtn.onclick = function () {
+      if (typeof confirm === 'function' && !confirm('確定清空全部工單嗎？清空後無法恢復。')) return;
+      ticketPost('/api/admin/tickets/delete', { all: true }, clearBtn);
+    };
+
+    app.querySelectorAll('button[data-tk]').forEach(function (b) {
+      b.onclick = function () {
+        if (typeof confirm === 'function' && !confirm('確定刪除這條工單嗎？')) return;
+        ticketPost('/api/admin/tickets/delete', { id: b.dataset.tk }, b);
+      };
+    });
+
+    // 回覆工單：回覆寫進工單，並在「通知板塊 → 我的訊息」裡通知提交者
+    var sendReply = function (id, btn) {
+      var input = app.querySelector('input[data-tk-input="' + id + '"]');
+      var text = input ? String(input.value || '').trim() : '';
+      if (!text) { if (input) input.focus(); return; }
+      if (btn) btn.disabled = true;
+      fetch('/api/admin/tickets/reply', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id: id, text: text }),
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          if (j && j.ok) { if (input) input.value = ''; loadAdmin(); }
+          else { if (btn) btn.disabled = false; alert((j && j.message) || '回覆失敗'); }
+        })
+        .catch(function () { if (btn) btn.disabled = false; alert('網路錯誤，請稍後再試'); });
+    };
+    app.querySelectorAll('button[data-tk-send]').forEach(function (b) {
+      b.onclick = function () { sendReply(b.dataset.tkSend, b); };
+    });
+    app.querySelectorAll('input[data-tk-input]').forEach(function (inp) {
+      inp.onkeydown = function (e) {
+        if (e.key === 'Enter') {
+          var btn = app.querySelector('button[data-tk-send="' + inp.dataset.tkInput + '"]');
+          if (btn) sendReply(inp.dataset.tkInput, btn);
+        }
+      };
+    });
+  }
+
+  function renderUsers(data, tk) {
+    var s = data.stats || {};
+    var iAmSuper = amSuper();
+    USERS = data.users || [];
+    var html =
+      '<div class="stats">' +
+      '<div class="stat"><b>' + (s.total || 0) + '</b><span>賬戶總數</span></div>' +
+      '<div class="stat"><b>' + (s.active || 0) + '</b><span>已啟用</span></div>' +
+      '<div class="stat"><b>' + (s.trial || 0) + '</b><span>試用中</span></div>' +
+      '<div class="stat"><b style="color:#ff5c5c">' + (s.blocked || 0) + '</b><span>已到期</span></div>' +
+      '<div class="stat"><b style="color:#ff4444">' + (s.banned || 0) + '</b><span>已封禁</span></div>' +
+      '</div>' +
+      renderTicketCard(tk) +
+      '<div class="card"><h2>賬戶管理</h2>';
+
+    if (!data.users.length) {
+      html += '<div class="center">暫無賬戶</div>';
+    } else {
+      data.users.forEach(function (u) {
+        var meta = (u.email || '（無郵箱）') + ' · 註冊於 ' + fmtDate(u.createdAt);
+        if (u.banned) {
+          // 完整的封禁起止時間：開始 →（結束 或 永久）
+          meta += ' · 封禁時段：' + (u.banFrom ? fmtTime(u.banFrom) : '—') +
+            ' → ' + (u.banUntil ? fmtTime(u.banUntil) + '（到點自動解封）' : '永久');
+        }
+        if (u.warnCount) {
+          meta += ' · 已警告 ' + u.warnCount + ' 次' + (u.lastWarnAt ? '（最近 ' + fmtTime(u.lastWarnAt) + '）' : '');
+        }
+        html += '<div class="row"><div class="info">' +
+          '<div class="name">' + esc(u.username) + tagOf(u) + '</div>' +
+          '<div class="meta">' + esc(meta) + '</div></div>' +
+          rowButtons(u, iAmSuper);
+        html += '</div>';
+      });
+    }
+    html += '</div><div class="msg" id="msg"></div>';
+    app.innerHTML = html;
+
+    app.querySelectorAll('button[data-act]').forEach(function (b) { b.onclick = function () { act(b); }; });
+    wireTickets();
+  }
+
+  function note(text, ok) {
+    var m = document.getElementById('msg');
+    if (!m) return;
+    m.textContent = text;
+    m.className = 'msg ' + (ok ? 'ok' : 'err');
+  }
+
+  function act(btn) {
+    var action = btn.dataset.act;
+    var username = btn.dataset.u;
+
+    // 封禁需要先選起止時間，彈窗裡再提交
+    if (action === 'ban') {
+      var target = USERS.filter(function (x) { return x.username === username; })[0];
+      openBan(target || { username: username });
+      return;
+    }
+
+    // 警告需要先寫內容，彈窗裡再提交
+    if (action === 'warn') {
+      var wtarget = USERS.filter(function (x) { return x.username === username; })[0];
+      openWarn(wtarget || { username: username });
+      return;
+    }
+
+    var url, body;
+    if (action === 'extend') {
+      url = '/api/admin/extend';
+      body = { username: username, days: 7 };
+    } else if (action === 'activate' || action === 'deactivate') {
+      url = '/api/admin/activate';
+      body = { username: username, activate: action === 'activate' };
+    } else if (action === 'promote' || action === 'demote') {
+      url = '/api/admin/role';
+      body = { username: username, admin: action === 'promote' };
+    } else {
+      // ban / unban
+      url = '/api/admin/ban';
+      body = { username: username, banned: action === 'ban' };
+    }
+    btn.disabled = true;
+    fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        note(j.message || (j.ok ? '完成' : '失敗'), !!j.ok);
+        if (j.ok) loadAdmin(); else btn.disabled = false;
+      })
+      .catch(function () { note('網路錯誤', false); btn.disabled = false; });
+  }
+
+  /* ===================== 恢復程式碼 ===================== */
+  function openRecoveryCode() {
+    setErr('');
+    var code = (ME && ME.user && ME.user.recoveryCode) || '';
+    dmTitle.textContent = '恢復程式碼';
+    dmStep.textContent = '請抄下來妥善儲存';
+
+    if (!code) {
+      dmBody.innerHTML =
+        '<p>這個賬戶還沒有恢復程式碼。</p>' +
+        '<p class="small">恢復程式碼是在<b>設定密碼的時候</b>生成的。你的賬戶是在這個功能上線前建的，' +
+        '所以暫時沒有 —— <b>去「修改密碼」改一次密碼</b>，就會自動生成一份。</p>';
+      dmActs.innerHTML = '<button id="rcClose">知道了</button>';
+      delMask.className = 'mask';
+      document.getElementById('rcClose').onclick = closeModal;
+      return;
+    }
+
+    dmBody.innerHTML =
+      '<p>忘記密碼時，用它可以重設密碼。</p>' +
+      '<p class="small">⚠️ 這條程式碼裡<b>含有你的密碼</b>，等於一把備用鑰匙 —— 不要發給別人、不要截圖外傳。</p>' +
+      '<div id="rcBox" style="margin:14px 0;padding:12px;border-radius:10px;background:rgba(0,0,0,.45);' +
+      'border:1px solid rgba(0,255,140,.35);font-family:ui-monospace,monospace;font-size:12px;' +
+      'color:#cfe8dc;word-break:break-all;line-height:1.7;user-select:all">' +
+      esc(code.replace(/(key--.*?--)([A-Za-z0-9]{8,})/, function (m, a, b) { return a + b.slice(0, 6) + '••••••••'; })) +
+      '</div>' +
+      '<p class="small" id="rcHint">預設打碼顯示，點「顯示完整」可以看全文。</p>';
+    dmActs.innerHTML =
+      '<button class="mute" id="rcClose">關閉</button>' +
+      '<button class="mute" id="rcToggle">顯示完整</button>' +
+      '<button id="rcCopy">複製</button>';
+    delMask.className = 'mask';
+    document.getElementById('rcClose').onclick = closeModal;
+
+    var shown = false;
+    document.getElementById('rcToggle').onclick = function () {
+      shown = !shown;
+      document.getElementById('rcBox').textContent = shown ? code : code.replace(/(key--.*?--)([A-Za-z0-9]{8,})/, function (m, a, b) { return a + b.slice(0, 6) + '••••••••'; });
+      this.textContent = shown ? '打碼顯示' : '顯示完整';
+    };
+    document.getElementById('rcCopy').onclick = function () {
+      var b = this;
+      navigator.clipboard.writeText(code).then(function () {
+        b.textContent = '已複製 ✓';
+        setTimeout(function () { b.textContent = '複製'; }, 1500);
+      }).catch(function () {
+        var box = document.getElementById('rcBox');
+        box.textContent = code;
+        var r = document.createRange(); r.selectNodeContents(box);
+        var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+        b.textContent = '請長按選中複製';
+      });
+    };
+  }
+
+  /* ===================== 新增郵箱 / 更改郵箱 ===================== */
+  var emailAction = null;
+
+  function openEmail(action) {
+    emailAction = action;
+    setErr('');
+    if (action === 'add') return openEmailAdd();
+    if (action === 'delete') return openEmailDelete();
+    return openEmailChangeOld();
+  }
+
+  /** 刪除郵箱 · 第 1 步：先驗證當前郵箱（驗證碼發到當前繫結的郵箱） */
+  function openEmailDelete() {
+    dmTitle.textContent = '刪除郵箱';
+    dmStep.textContent = '第 1 / 2 步 · 驗證當前郵箱';
+    dmBody.innerHTML =
+      '<p>刪除前要<b>先驗證當前郵箱</b>，我們會把驗證碼發到你現在繫結的郵箱。</p>' +
+      '<p class="small">驗證透過後郵箱會被解綁，賬戶回到未啟用狀態。' +
+      '如果這不是你本人的操作，請直接取消。</p>';
+    dmActs.innerHTML =
+      '<button class="mute" id="emCancel">取消</button>' +
+      '<button class="warn" id="emSendDel">傳送驗證碼到當前郵箱</button>';
+    delMask.className = 'mask';
+    document.getElementById('emCancel').onclick = closeModal;
+    document.getElementById('emSendDel').onclick = function () {
+      var b = document.getElementById('emSendDel');
+      b.disabled = true;
+      setErr('');
+      fetch('/api/account/email/delete/request', {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}',
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          if (!j.ok) { setErr(j.message || '傳送失敗'); b.disabled = false; return; }
+          emailDeleteCodeStep(j.message || '');
+        })
+        .catch(function () { setErr('網路錯誤'); b.disabled = false; });
+    };
+  }
+
+  /** 刪除郵箱 · 第 2 步：輸入驗證碼 */
+  function emailDeleteCodeStep(sentMsg) {
+    setErr('');
+    dmStep.textContent = '第 2 / 2 步 · 輸入驗證碼';
+    dmBody.innerHTML =
+      '<p>' + esc(sentMsg) + '</p>' +
+      '<p class="small">10 分鐘內有效。如果沒收到，請檢視垃圾箱。</p>' +
+      '<input type="text" class="code" id="emCode" inputmode="numeric" maxlength="6" placeholder="000000">';
+    dmActs.innerHTML =
+      '<button class="mute" id="emBack">返回</button>' +
+      '<button class="warn" id="emOk">確認刪除</button>';
+    document.getElementById('emBack').onclick = function () { openEmailDelete(); };
+    document.getElementById('emOk').onclick = function () { confirmEmailDelete(this); };
+    var c = document.getElementById('emCode');
+    if (c) { c.focus(); c.onkeydown = function (e) { if (e.key === 'Enter') confirmEmailDelete(null); }; }
+  }
+
+  function confirmEmailDelete(btn) {
+    var code = ((document.getElementById('emCode') || {}).value || '').trim();
+    if (!/^\d{6}$/.test(code)) { setErr('請輸入 6 位驗證碼'); return; }
+    if (btn) btn.disabled = true;
+    setErr('');
+    fetch('/api/account/email/delete/confirm', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ code: code }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j.ok) { setErr(j.message || '驗證失敗'); if (btn) btn.disabled = false; return; }
+        dmTitle.textContent = '完成';
+        dmStep.textContent = '';
+        dmBody.innerHTML = '<p>' + esc(j.message || '郵箱已刪除') + '</p>';
+        dmActs.innerHTML = '<button id="emDone">好</button>';
+        document.getElementById('emDone').onclick = function () { closeModal(); loadMe(); };
+        setTimeout(function () { closeModal(); loadMe(); }, 1800);
+      })
+      .catch(function () { setErr('網路錯誤'); if (btn) btn.disabled = false; });
+  }
+
+  /** 新增郵箱（賬戶還沒有郵箱）：驗證新郵箱 + 密碼 → 啟用 */
+  function openEmailAdd() {
+    dmTitle.textContent = '新增郵箱並啟用';
+    dmStep.textContent = '第 1 / 2 步 · 新郵箱 + 密碼';
+    dmBody.innerHTML =
+      '<p>繫結郵箱並透過驗證後，賬戶即<b>完成啟用</b>（狀態列變綠）。</p>' +
+      '<p class="small">只需驗證新郵箱；為了確認是你本人，還要輸入當前密碼。</p>' +
+      '<input type="email" id="emMail" placeholder="要繫結的郵箱" autocomplete="email">' +
+      '<input type="password" id="emPwd" placeholder="當前密碼" autocomplete="current-password">';
+    dmActs.innerHTML =
+      '<button class="mute" id="emCancel">取消</button>' +
+      '<button id="emSend">傳送驗證碼</button>';
+    delMask.className = 'mask';
+    document.getElementById('emCancel').onclick = closeModal;
+    document.getElementById('emSend').onclick = sendEmailCode;
+    var m = document.getElementById('emMail');
+    if (m) m.focus();
+  }
+
+  /** 更改郵箱 · 第 1 步：先驗證當前（舊）郵箱 */
+  function openEmailChangeOld() {
+    dmTitle.textContent = '更改郵箱';
+    dmStep.textContent = '第 1 / 2 步 · 驗證當前郵箱';
+    dmBody.innerHTML =
+      '<p>為了安全，改郵箱要<b>先驗證當前郵箱</b>，再驗證新郵箱。</p>' +
+      '<p class="small">點下面的按鈕，我們會把驗證碼發到你現在繫結的郵箱。</p>';
+    dmActs.innerHTML =
+      '<button class="mute" id="emCancel">取消</button>' +
+      '<button id="emSendOld">傳送驗證碼到當前郵箱</button>';
+    delMask.className = 'mask';
+    document.getElementById('emCancel').onclick = closeModal;
+    document.getElementById('emSendOld').onclick = function () {
+      var b = document.getElementById('emSendOld');
+      b.disabled = true;
+      setErr('');
+      emailPost({ action: 'change', step: 'old' }, function (j) {
+        emailCodeStep('change', j.message || '', '舊郵箱驗證碼', '確認並繼續');
+      }, function () { b.disabled = false; });
+    };
+  }
+
+  function sendEmailCode() {
+    var mail = (document.getElementById('emMail') || {}).value || '';
+    var pwd = (document.getElementById('emPwd') || {}).value || '';
+    if (!mail.trim()) { setErr('請輸入郵箱'); return; }
+    if (!pwd) { setErr('請輸入密碼'); return; }
+    var b = document.getElementById('emSend');
+    b.disabled = true;
+    setErr('');
+    emailPost(
+      { action: emailAction, step: 'new', email: mail.trim(), password: pwd },
+      function (j) { emailCodeStep(emailAction, j.message || '', emailAction === 'add' ? '新郵箱驗證碼' : '新郵箱驗證碼', emailAction === 'add' ? '確認並啟用' : '確認更改'); },
+      function () { b.disabled = false; }
+    );
+  }
+
+  /** 通用的「輸入驗證碼」步驟 */
+  function emailCodeStep(action, sentMsg, label, okText) {
+    setErr('');
+    dmStep.textContent = '第 2 / 2 步 · ' + label;
+    dmBody.innerHTML =
+      '<p>' + esc(sentMsg) + '</p>' +
+      '<p class="small">10 分鐘內有效。如果沒收到，請檢視垃圾箱。</p>' +
+      '<input type="text" class="code" id="emCode" inputmode="numeric" maxlength="6" placeholder="000000">';
+    dmActs.innerHTML =
+      '<button class="mute" id="emBack">返回</button>' +
+      '<button id="emOk">' + esc(okText) + '</button>';
+    document.getElementById('emBack').onclick = function () { openEmail(action); };
+    document.getElementById('emOk').onclick = function () { confirmEmail(action, this); };
+    var c = document.getElementById('emCode');
+    if (c) { c.focus(); c.onkeydown = function (e) { if (e.key === 'Enter') confirmEmail(action, null); }; }
+  }
+
+  function emailPost(body, onOk, onErr) {
+    fetch('/api/account/email/request', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j.ok) { setErr(j.message || '傳送失敗'); if (onErr) onErr(); return; }
+        onOk(j);
+      })
+      .catch(function () { setErr('網路錯誤'); if (onErr) onErr(); });
+  }
+
+  function confirmEmail(action, btn) {
+    var code = ((document.getElementById('emCode') || {}).value || '').trim();
+    if (!/^\d{6}$/.test(code)) { setErr('請輸入 6 位驗證碼'); return; }
+    if (btn) btn.disabled = true;
+    setErr('');
+    fetch('/api/account/email/confirm', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: action, code: code }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j.ok) { setErr(j.message || '驗證失敗'); if (btn) btn.disabled = false; return; }
+
+        // 舊郵箱透過 → 繼續輸入新郵箱
+        if (j.needNewEmail) {
+          dmTitle.textContent = '更改郵箱';
+          dmStep.textContent = '第 2 / 2 步 · 輸入新郵箱';
+          dmBody.innerHTML =
+            '<p>' + esc(j.message || '當前郵箱已驗證') + '</p>' +
+            '<p class="small">驗證碼會發到這個新郵箱，驗證透過後才會真正更換。</p>' +
+            '<input type="email" id="emMail" placeholder="新的郵箱地址" autocomplete="email">' +
+            '<input type="hidden" id="emPwd" value="x">';
+          dmActs.innerHTML =
+            '<button class="mute" id="emBack">返回</button>' +
+            '<button id="emSend">傳送驗證碼到新郵箱</button>';
+          document.getElementById('emBack').onclick = function () { openEmailChangeOld(); };
+          document.getElementById('emSend').onclick = function () {
+            var mail = (document.getElementById('emMail') || {}).value || '';
+            if (!mail.trim()) { setErr('請輸入新郵箱'); return; }
+            var b = document.getElementById('emSend');
+            b.disabled = true;
+            setErr('');
+            emailPost({ action: 'change', step: 'new', email: mail.trim() },
+              function (j2) { emailCodeStep('change', j2.message || '', '新郵箱驗證碼', '確認更改'); },
+              function () { b.disabled = false; });
+          };
+          var m = document.getElementById('emMail');
+          if (m) m.focus();
+          return;
+        }
+
+        // 完成
+        dmTitle.textContent = '完成';
+        dmStep.textContent = '';
+        dmBody.innerHTML = '<p>' + esc(j.message || '已完成') + '</p>';
+        dmActs.innerHTML = '<button id="emDone">好</button>';
+        document.getElementById('emDone').onclick = function () { closeModal(); loadMe(); };
+        setTimeout(function () { closeModal(); loadMe(); }, 1800);
+      })
+      .catch(function () { setErr('網路錯誤'); if (btn) btn.disabled = false; });
+  }
+
+  /* ===================== 管理員：封禁（可設起止時間） ===================== */
+  var banTarget = null;
+
+  function toLocalMinute(ts) {
+    var d = new Date(ts);
+    return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate()) +
+      'T' + p2(d.getHours()) + ':' + p2(d.getMinutes());
+  }
+  function parseLocalMinute(v) { return v ? new Date(v).getTime() : NaN; }
+
+  function openBan(u) {
+    banTarget = u;
+    setErr('');
+    dmTitle.textContent = '封禁賬戶';
+    dmStep.textContent = u.username;
+    var untilVal = u.banUntil ? toLocalMinute(u.banUntil) : '';
+    dmBody.innerHTML =
+      '<p>封禁後該賬戶無法下載，登入後會在所有頁面看到 <b>You are banned</b>。</p>' +
+      '<p class="small">「結束時間」留空就是<b>永久封禁</b>；填了就到期自動解封，不需要你再操作。</p>' +
+      '<div class="m-field"><label>開始時間</label>' +
+      '<input type="datetime-local" id="banFrom" value="' + toLocalMinute(Date.now()) + '"></div>' +
+      '<div class="m-field"><label>結束時間（留空 = 永久）</label>' +
+      '<input type="datetime-local" id="banUntil" value="' + untilVal + '"></div>' +
+      '<div class="m-quick">' +
+      '<button data-banq="1440">1 天</button>' +
+      '<button data-banq="10080">7 天</button>' +
+      '<button data-banq="43200">30 天</button>' +
+      '<button data-banq="0">永久</button>' +
+      '</div>';
+    dmActs.innerHTML =
+      '<button class="mute" id="banCancel">取消</button>' +
+      '<button class="warn" id="banOk">確認封禁</button>';
+    delMask.className = 'mask';
+    document.getElementById('banCancel').onclick = closeModal;
+    document.getElementById('banOk').onclick = doBan;
+    dmBody.querySelectorAll('button[data-banq]').forEach(function (b) {
+      b.onclick = function () {
+        var mins = Number(b.dataset.banq);
+        var el = document.getElementById('banUntil');
+        el.value = mins > 0 ? toLocalMinute(Date.now() + mins * 60000) : '';
+      };
+    });
+  }
+
+  function doBan() {
+    if (!banTarget) return;
+    var from = parseLocalMinute(document.getElementById('banFrom').value);
+    var untilRaw = document.getElementById('banUntil').value;
+    var until = untilRaw ? parseLocalMinute(untilRaw) : 0;
+    if (!isFinite(from)) { setErr('請選擇開始時間'); return; }
+    if (until && until <= Math.max(from, Date.now())) { setErr('結束時間必須晚於開始時間'); return; }
+
+    var btn = document.getElementById('banOk');
+    btn.disabled = true;
+    setErr('');
+    fetch('/api/admin/ban', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username: banTarget.username, banned: true, from: from, until: until || 0 }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j.ok) { setErr(j.message || '封禁失敗'); btn.disabled = false; return; }
+        closeModal();
+        note(j.message, true);
+        loadAdmin();
+      })
+      .catch(function () { setErr('網路錯誤'); btn.disabled = false; });
+  }
+
+  /* ===================== 管理員：警告（內容自己填） ===================== */
+  var warnTarget = null;
+
+  function openWarn(u) {
+    warnTarget = u;
+    setErr('');
+    dmTitle.textContent = '警告賬戶';
+    dmStep.textContent = u.username;
+    dmBody.innerHTML =
+      '<p>警告會<b>立刻彈給這個賬戶</b>（所有頁面，琥珀色卡片），同時進他的「通知板塊 → 我的訊息」。</p>' +
+      '<p class="small">他點「我知道了」之後就不再彈，但訊息一直留在通知板塊裡，可以隨時回顧。</p>' +
+      '<div class="m-field"><label>警告內容（自己寫）</label>' +
+      '<textarea id="warnText" maxlength="500" rows="5" placeholder="例如：請不要再上傳重複的檔案，否則會被限制下載。"></textarea></div>' +
+      '<div class="m-quick">' +
+      '<button data-warnq="t1">提醒注意</button>' +
+      '<button data-warnq="t2">最後警告</button>' +
+      '<button data-warnq="t3">停止違規</button>' +
+      '</div>';
+    dmActs.innerHTML =
+      '<button class="mute" id="warnCancel">取消</button>' +
+      '<button class="warn" id="warnOk">傳送警告</button>';
+    delMask.className = 'mask';
+    document.getElementById('warnCancel').onclick = closeModal;
+    document.getElementById('warnOk').onclick = doWarn;
+
+    var presets = {
+      t1: '請注意：近期發現你的操作不符合站點規範，請留意一下，謝謝配合。',
+      t2: '這是最後一次提醒：如再出現同樣的問題，賬戶會被限制使用。',
+      t3: '請立即停止當前的違規操作，否則管理員將對該賬戶進行封禁。',
+    };
+    dmBody.querySelectorAll('button[data-warnq]').forEach(function (b) {
+      b.onclick = function () {
+        var el = document.getElementById('warnText');
+        if (el && !el.value.trim()) el.value = presets[b.dataset.warnq] || '';
+        if (el) el.focus();
+      };
+    });
+  }
+
+  function doWarn() {
+    if (!warnTarget) return;
+    var el = document.getElementById('warnText');
+    var text = el ? String(el.value || '').trim() : '';
+    if (!text) { setErr('請填寫警告內容'); return; }
+    var btn = document.getElementById('warnOk');
+    btn.disabled = true;
+    setErr('');
+    fetch('/api/admin/warn', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username: warnTarget.username, text: text }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j.ok) { setErr(j.message || '警告失敗'); btn.disabled = false; return; }
+        closeModal();
+        note(j.message, true);
+        loadAdmin();
+      })
+      .catch(function () { setErr('網路錯誤'); btn.disabled = false; });
+  }
+
+  /* ===================== 管理員：維護時間 ===================== */
+  function renderMaintenance(m) {
+    if (!m) m = { set: false, active: false };
+    var now = Date.now();
+    var list = m.pageList || [];
+    maintPageList = list;
+
+    var status, color;
+    if (!m.set) { status = '未設定（站點正常開放）'; color = '#7fa893'; }
+    else if (m.active) {
+      status = '維護中 —— ' + (m.pages && m.pages.length ? '僅這些頁面：' + pageNames(m.pages) : '全站所有頁面');
+      color = '#ffb020';
+    }
+    else if (now < m.start) { status = '已排期，將於 ' + fmtClock(m.start) + ' 自動開始'; color = '#ffcc00'; }
+    else { status = '已結束'; color = '#7fa893'; }
+
+    var checked = {};
+    (m.pages || []).forEach(function (id) { checked[id] = true; });
+
+    maintEl.innerHTML =
+      '<div class="maint"><h2>維護時間</h2>' +
+      '<div class="m-stat">當前狀態：<b style="color:' + color + '">' + esc(status) + '</b>' +
+      (m.set ? '<br>維護時段：' + fmtClock(m.start) + ' → ' + fmtClock(m.end) : '') +
+      '</div>' +
+      '<div class="m-field"><label>開始時間（到這個點，按下面勾選的範圍開始彈維護彈窗）</label>' +
+      '<input type="datetime-local" id="mStart" value="' + (m.set ? toLocalInput(m.start) : '') + '"></div>' +
+      '<div class="m-field"><label>結束時間（到這個點，自動關閉維護彈窗）</label>' +
+      '<input type="datetime-local" id="mEnd" value="' + (m.set ? toLocalInput(m.end) : '') + '"></div>' +
+      '<div class="m-field"><label>頁面維護（勾哪個頁面，維護時那個頁面就進不去；一個都不勾 = 全站維護）</label>' +
+      '<div class="m-pages" id="mPages">' +
+      list.map(function (p) {
+        return '<label class="m-page' + (checked[p.id] ? ' on' : '') + '">' +
+          '<input type="checkbox" data-page="' + esc(p.id) + '"' + (checked[p.id] ? ' checked' : '') + '>' +
+          '<span>' + esc(p.name) + '</span>' +
+          '<em>' + esc(p.path) + '</em></label>';
+      }).join('') +
+      '</div>' +
+      '<div class="m-hint">勾了的頁面會彈維護彈窗、並且在導航頁上顯示 Offline；沒勾的頁面照常訪問。' +
+      '<br>「聯絡我們」不在這個列表裡 —— 它永遠保持可用，被封禁的人要靠它聯絡你。</div>' +
+      '</div>' +
+      '<div class="m-field"><label>本次維護訪問金鑰（給工作人員在維護期間預覽用，可隨時改；留空 = 不設）</label>' +
+      '<input type="text" id="mKey" placeholder="' + (m.keySet ? '已設定 · 留空則沿用原金鑰' : '例如 zrfeng-staff-2026') + '" autocomplete="off"></div>' +
+      '<div class="m-stat" style="margin:6px 0 12px">' +
+      (m.keySet
+        ? '訪問金鑰：<b>已設定</b>（維護結束後自動銷燬，金鑰本身不會回顯；維護期間拿它就能進任何頁面預覽）'
+        : '訪問金鑰：<b>未設定</b>（不設的話，維護期間誰都進不去）') +
+      '</div>' +
+      '<div class="m-quick">' +
+      '<button data-quick="30">立即開始 · 30 分鐘</button>' +
+      '<button data-quick="60">立即開始 · 1 小時</button>' +
+      '<button data-quick="120">立即開始 · 2 小時</button>' +
+      '</div>' +
+      '<div class="m-acts">' +
+      '<button id="mSave">儲存維護時間</button>' +
+      '<button class="mute" id="mClear">清除維護時間</button>' +
+      '</div>' +
+      '<div class="msg" id="mMsg"></div>' +
+      '<div class="m-now">本機當前時間：' + new Date().toLocaleString('zh-CN') + '</div>' +
+      '</div>';
+
+    // 勾上高亮，手機上看得清哪幾個被勾了
+    var pageBox = document.getElementById('mPages');
+    if (pageBox) {
+      pageBox.addEventListener('change', function (e) {
+        var cb = e.target;
+        if (!cb || cb.type !== 'checkbox') return;
+        var lab = cb.parentNode;
+        if (lab) lab.className = 'm-page' + (cb.checked ? ' on' : '');
+      });
+    }
+
+    /** 收集當前勾選的頁面 id */
+    function pickedPages() {
+      var out = [];
+      maintEl.querySelectorAll('#mPages input[type=checkbox]').forEach(function (cb) {
+        if (cb.checked) out.push(cb.getAttribute('data-page'));
+      });
+      return out;
+    }
+
+    document.getElementById('mSave').onclick = function () {
+      var s = fromLocalInput(document.getElementById('mStart').value);
+      var e = fromLocalInput(document.getElementById('mEnd').value);
+      if (!isFinite(s) || !isFinite(e)) { mNote('請選擇開始和結束時間', false); return; }
+      if (e <= s) { mNote('結束時間必須晚於開始時間', false); return; }
+      var keyEl = document.getElementById('mKey');
+      var keyVal = keyEl ? keyEl.value.trim() : '';
+      saveMaint({ start: s, end: e, key: keyVal, keepKey: !keyVal, pages: pickedPages() }, this);
+    };
+    document.getElementById('mClear').onclick = function () {
+      saveMaint({ clear: true }, this);
+    };
+    maintEl.querySelectorAll('button[data-quick]').forEach(function (b) {
+      b.onclick = function () {
+        var mins = Number(b.dataset.quick);
+        var s = Date.now();
+        var kEl = document.getElementById('mKey');
+        var kv = kEl ? kEl.value.trim() : '';
+        saveMaint({ start: s, end: s + mins * 60000, key: kv, keepKey: !kv, pages: pickedPages() }, b);
+      };
+    });
+  }
+
+  /** 頁面 id → 中文名（表由服務端在 maintenance.pageList 裡下發） */
+  function pageNames(ids) {
+    return (ids || []).map(function (id) {
+      for (var i = 0; i < maintPageList.length; i++) {
+        if (maintPageList[i].id === id) return maintPageList[i].name;
+      }
+      return id;
+    }).join('、');
+  }
+
+  function mNote(text, ok) {
+    var el = document.getElementById('mMsg');
+    if (!el) return;
+    el.textContent = text;
+    el.className = 'msg ' + (ok ? 'ok' : 'err');
+  }
+
+  function saveMaint(body, btn) {
+    if (btn) btn.disabled = true;
+    fetch('/api/admin/maintenance', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        mNote(j.message || (j.ok ? '已儲存' : '儲存失敗'), !!j.ok);
+        // 儲存介面只回維護狀態、不回頁面表，把剛才那份錶帶上，免得勾選框消失
+        if (j.ok) {
+          renderMaintenance(Object.assign({}, j.maintenance, {
+            pageList: (j.maintenance && j.maintenance.pageList) || maintPageList,
+          }));
+        }
+        else if (btn) btn.disabled = false;
+      })
+      .catch(function () { mNote('網路錯誤', false); if (btn) btn.disabled = false; });
+  }
+
+  function loadAdmin() {
+    // 賬戶列表和工單一起拉（工單列表單獨一個介面，互不影響）
+    return Promise.all([
+      fetch('/api/admin/users', { cache: 'no-store' })
+        .then(function (r) { return r.json(); })
+        .catch(function () { return { ok: false }; }),
+      fetch('/api/admin/tickets', { cache: 'no-store' })
+        .then(function (r) { return r.json(); })
+        .catch(function () { return { ok: false }; }),
+    ])
+      .then(function (res) {
+        var j = res[0], tk = res[1];
+        if (!j.ok) {
+          noticesEl.innerHTML = '';
+          maintEl.innerHTML = '';
+          app.innerHTML = '';
+          return;
+        }
+        renderNotices(j.notices);
+        renderMaintenance(j.maintenance);
+        renderUsers(j, tk);
+      })
+      .catch(function () { /* 靜默 */ });
+  }
+
+  /* ===================== 入口 ===================== */
+  function loadMe() {
+    return fetch('/api/me', { cache: 'no-store' })
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      if (!j.loggedIn) {
+        who.textContent = '未登入';
+        meEl.innerHTML = '<div class="card"><div class="center">請先<a href="/zh_tw/login/">登入</a>後再訪問控制台。</div></div>';
+        return;
+      }
+      ME = j;
+      var u = j.user || {};
+      who.textContent = u.isSuper
+        ? '主管理員檢視 · 可管理賬戶、設定管理員、維護時間'
+        : (u.isAdmin
+            ? '副管理員檢視 · 可管理普通使用者、設定維護時間（不能操作管理員賬戶）'
+            : '賬戶檢視 · 可檢視狀態與登出賬戶');
+      renderMe(j);
+      if (u.isAdmin) loadAdmin();
+    })
+    .catch(function () {
+      who.textContent = '載入失敗';
+      meEl.innerHTML = '<div class="card"><div class="center">網路錯誤，請稍後重試。</div></div>';
+    });
+  }
+
+  loadMe();
+  /** 只重拉 /api/me 並重渲染「我的賬戶」，不碰管理員區（改地區後用） */
+  function refreshMe() {
+    fetch('/api/me', { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (j && j.loggedIn) { ME = j; renderMe(j); }
+      })
+      .catch(function () { /* 忽略：頁面上已有提示 */ });
+  }
+})();
+</script>
+  <script src="/status.js" defer></script>
+</body>
+</html>

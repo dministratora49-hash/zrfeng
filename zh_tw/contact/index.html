@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>/* 儘早落地主題（預設原生安卓；只認控制台「外觀」裡存下的值，避免閃色） */(function(){var t='android';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark'||s==='android')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
+<title>聯絡我們 · zrfeng.top</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    min-height: 100vh;
+    background: #050807;
+    background-image:
+      radial-gradient(circle at 20% 20%, rgba(0, 255, 140, 0.06) 0%, transparent 50%),
+      radial-gradient(circle at 80% 80%, rgba(0, 255, 140, 0.05) 0%, transparent 50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    padding: 80px 24px 24px;
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    color: #e8f5ee;
+  }
+
+  /* 網格背景 */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,255,140,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,255,140,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+  }
+
+  .top {
+    position: relative;
+    text-align: center;
+    width: 100%;
+    max-width: 620px;
+  }
+
+  h1 {
+    font-size: 36px;
+    margin-bottom: 20px;
+    background: linear-gradient(90deg, #ffffff, #00ff8c);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  p.sub {
+    color: #7fa893;
+    font-size: 14px;
+    letter-spacing: 1px;
+    margin-bottom: 40px;
+  }
+
+  /* ===== 分節標題 ===== */
+  .sec-title {
+    margin-bottom: 16px;
+    padding-left: 6px;
+    text-align: left;
+    font-size: 13px;
+    letter-spacing: 2px;
+    color: #00ff8c;
+  }
+
+  /* ===== 郵箱列表 ===== */
+  .list {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    text-align: left;
+  }
+
+  .item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 18px 20px;
+    border: 1px solid rgba(0, 255, 140, 0.35);
+    border-radius: 16px;
+    background: rgba(10, 18, 14, 0.85);
+    box-shadow: 0 0 16px rgba(0, 255, 140, 0.1);
+    transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+  }
+  .item:hover {
+    transform: translateY(-2px);
+    border-color: #00ff8c;
+    box-shadow: 0 0 26px rgba(0, 255, 140, 0.3);
+  }
+
+  .addr {
+    flex: 1;
+    min-width: 0;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #e8f5ee;
+    text-decoration: none;
+    word-break: break-all;
+    transition: color 0.2s;
+  }
+  .addr:hover { color: #00ff8c; }
+
+  /* 標註：主要 / 回覆隨緣 */
+  .tag {
+    flex-shrink: 0;
+    padding: 3px 12px;
+    font-size: 12px;
+    letter-spacing: 1px;
+    border-radius: 20px;
+    white-space: nowrap;
+  }
+  .tag.main {
+    color: #00ff8c;
+    border: 1px solid rgba(0, 255, 140, 0.45);
+    background: rgba(0, 255, 140, 0.1);
+    box-shadow: 0 0 12px rgba(0, 255, 140, 0.15);
+  }
+  .tag.casual {
+    color: #ffb74d;
+    border: 1px solid rgba(255, 183, 77, 0.35);
+    background: rgba(255, 183, 77, 0.08);
+  }
+
+  .copy {
+    flex-shrink: 0;
+    padding: 6px 14px;
+    font-size: 12px;
+    font-family: inherit;
+    letter-spacing: 1px;
+    color: #7fa893;
+    border: 1px solid rgba(0, 255, 140, 0.25);
+    border-radius: 20px;
+    background: transparent;
+    cursor: pointer;
+    transition: color 0.2s, border-color 0.2s, background 0.2s;
+  }
+  .copy:hover {
+    color: #00ff8c;
+    border-color: rgba(0, 255, 140, 0.6);
+    background: rgba(0, 255, 140, 0.08);
+  }
+  .copy.done {
+    color: #00ff8c;
+    border-color: #00ff8c;
+    background: rgba(0, 255, 140, 0.14);
+  }
+
+  /* ===== 提交工單 ===== */
+  .sec-title.gap { margin-top: 38px; }
+
+  .ticket {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 18px 20px 20px;
+    text-align: left;
+    border: 1px solid rgba(0, 255, 140, 0.35);
+    border-radius: 16px;
+    background: rgba(10, 18, 14, 0.85);
+    box-shadow: 0 0 16px rgba(0, 255, 140, 0.1);
+  }
+
+  .tk-input {
+    width: 100%;
+    padding: 12px 14px;
+    font-size: 14px;
+    font-family: inherit;
+    line-height: 1.6;
+    color: #e8f5ee;
+    background: rgba(5, 8, 7, 0.92);
+    border: 1px solid rgba(0, 255, 140, 0.25);
+    border-radius: 10px;
+    outline: none;
+    resize: vertical;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .tk-input::placeholder { color: #4a6a58; }
+  .tk-input:focus {
+    border-color: #00ff8c;
+    box-shadow: 0 0 14px rgba(0, 255, 140, 0.22);
+  }
+  .tk-area { min-height: 132px; }
+
+  .tk-send {
+    padding: 12px 20px;
+    font-size: 14px;
+    font-family: inherit;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: #050807;
+    border: none;
+    border-radius: 10px;
+    background: linear-gradient(90deg, #00ff8c, #00d97a);
+    cursor: pointer;
+    transition: opacity 0.2s, box-shadow 0.2s;
+  }
+  .tk-send:hover { box-shadow: 0 0 22px rgba(0, 255, 140, 0.45); }
+  .tk-send:disabled { opacity: 0.55; cursor: default; box-shadow: none; }
+
+  .tk-msg {
+    display: none;
+    padding: 10px 14px;
+    font-size: 13px;
+    line-height: 1.7;
+    border-radius: 10px;
+    word-break: break-word;
+  }
+  .tk-msg.show { display: block; }
+  .tk-msg.ok {
+    color: #00ff8c;
+    border: 1px solid rgba(0, 255, 140, 0.4);
+    background: rgba(0, 255, 140, 0.08);
+  }
+  .tk-msg.bad {
+    color: #ff8a80;
+    border: 1px solid rgba(255, 92, 92, 0.4);
+    background: rgba(255, 92, 92, 0.08);
+  }
+
+  .tk-tip {
+    font-size: 12px;
+    line-height: 1.9;
+    color: #6c8c7c;
+  }
+
+  /* 機器人陷阱：正常使用者永遠看不到這個框 */
+  .tk-hp {
+    position: absolute;
+    left: -9999px;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+  }
+
+  /* 匿名傳送 */
+  .tk-anon {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin: 4px 0 14px;
+    font-size: 13px;
+    color: #4a6a58;
+    cursor: pointer;
+    line-height: 1.7;
+  }
+  .tk-anon input {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    margin-top: 3px;
+    accent-color: #4a8f6a;
+  }
+  .tk-anon-tip {
+    font-size: 11px;
+    color: #7f9c8c;
+  }
+
+  /* ===== 返回按鈕 ===== */
+  .back {
+    position: relative;
+    margin-top: 38px;
+  }
+  .back a {
+    display: inline-block;
+    padding: 11px 36px;
+    font-size: 14px;
+    letter-spacing: 2px;
+    color: #00ff8c;
+    text-decoration: none;
+    border: 1px solid rgba(0, 255, 140, 0.4);
+    border-radius: 8px;
+    background: rgba(0, 255, 140, 0.06);
+    transition: background 0.25s, border-color 0.25s, box-shadow 0.25s;
+  }
+  .back a:hover {
+    background: rgba(0, 255, 140, 0.14);
+    border-color: #00ff8c;
+    box-shadow: 0 0 22px rgba(0, 255, 140, 0.3);
+  }
+
+  .bottom {
+    position: relative;
+    text-align: center;
+    font-size: 12px;
+    color: #4a6a58;
+    line-height: 2;
+    letter-spacing: 1px;
+    margin-top: 48px;
+  }
+
+  @media (max-width: 520px) {
+    body { padding-top: 56px; }
+    h1 { font-size: 28px; }
+    .item { padding: 16px 16px; gap: 10px; }
+    .addr { font-size: 13px; }
+  }
+</style>
+<link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="/android.css">
+</head>
+<body>
+  <div class="top">
+    <h1>聯絡我們</h1>
+    <p class="sub">歡迎透過以下郵箱與我取得聯絡</p>
+
+    <div class="sec-title">主要聯絡方式</div>
+
+    <div class="list">
+      <div class="item">
+        <a class="addr" href="mailto:3802780917@qq.com">3802780917@qq.com</a>
+        <span class="tag main">主要</span>
+        <button class="copy" type="button" data-mail="3802780917@qq.com">複製</button>
+      </div>
+
+      <div class="item">
+        <a class="addr" href="mailto:summer@zrfeng.top">summer@zrfeng.top</a>
+        <button class="copy" type="button" data-mail="summer@zrfeng.top">複製</button>
+      </div>
+
+      <div class="item">
+        <a class="addr" href="mailto:zrfengmc@outlook.com">zrfengmc@outlook.com</a>
+        <span class="tag casual">回覆隨緣</span>
+        <button class="copy" type="button" data-mail="zrfengmc@outlook.com">複製</button>
+      </div>
+
+      <div class="item">
+        <a class="addr" href="mailto:dministratora49@gmail.com">dministratora49@gmail.com</a>
+        <span class="tag casual">回覆隨緣</span>
+        <button class="copy" type="button" data-mail="dministratora49@gmail.com">複製</button>
+      </div>
+    </div>
+
+    <div class="sec-title gap">提交工單</div>
+
+    <div class="ticket">
+      <input class="tk-input" id="tkTitle" type="text" maxlength="80" autocomplete="off"
+             placeholder="標題（至少 3 個字）">
+      <textarea class="tk-input tk-area" id="tkBody" maxlength="2000"
+                placeholder="正文（至少 10 個字）—— 請把問題或想法寫清楚一點"></textarea>
+      <input class="tk-input" id="tkContact" type="text" maxlength="100" autocomplete="off"
+             placeholder="聯絡方式（選填，方便我回復你）">
+
+      <!-- 機器人陷阱：正常使用者看不見這個框，也不會去填 -->
+      <div class="tk-hp" aria-hidden="true">
+        <label for="tkSite">你的個人網站</label>
+        <input id="tkSite" name="website" type="text" tabindex="-1" autocomplete="off">
+      </div>
+
+      <label class="tk-anon" for="tkAnon">
+        <input id="tkAnon" type="checkbox">
+        <span>匿名傳送</span>
+        <span class="tk-anon-tip">（勾上後控制台只顯示「已匿名」，不顯示你的使用者名稱；代價是這條工單優先順序會降低，排在最下面）</span>
+      </label>
+
+      <button class="tk-send" id="tkSend" type="button">提交工單</button>
+      <div class="tk-msg" id="tkMsg"></div>
+      <div class="tk-tip">
+        標題至少 3 個字，正文至少 10 個字。<br>
+        標題或正文裡全是數字 / 標點的話，會被當成垃圾工單直接銷燬（不儲存、不留記錄）。
+      </div>
+    </div>
+
+    <div class="back">
+      <a href="/zh_tw/guide">← 返回導航站</a>
+    </div>
+  </div>
+
+  <div class="bottom">
+    <div>zrfeng.top</div>
+    <div>© 2026 zrfeng.top — All Rights Reserved</div>
+  </div>
+
+<script>
+(function () {
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest ? e.target.closest('.copy') : null;
+    if (!btn) return;
+    var mail = btn.getAttribute('data-mail');
+    if (!mail) return;
+
+    function done() {
+      var old = btn.textContent;
+      btn.textContent = '已複製';
+      btn.classList.add('done');
+      setTimeout(function () {
+        btn.textContent = old;
+        btn.classList.remove('done');
+      }, 1500);
+    }
+
+    /* 優先用剪貼簿介面；不可用時回退到舊方式；都失敗則提示手動複製 */
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(mail).then(done).catch(fallback);
+    } else {
+      fallback();
+    }
+
+    function fallback() {
+      try {
+        var ta = document.createElement('textarea');
+        ta.value = mail;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.top = '-1000px';
+        document.body.appendChild(ta);
+        ta.select();
+        var ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+        if (ok) { done(); return; }
+      } catch (err) { /* 忽略，走下面的提示 */ }
+      btn.textContent = '請長按複製';
+      setTimeout(function () { btn.textContent = '複製'; }, 1800);
+    }
+  });
+})();
+</script>
+
+<script>
+/* ===================== 提交工單 =====================
+ * 判定規則和服務端完全一致：本地先攔一次，省一趟網路往返；
+ * 服務端還會再判一次（前端可以被繞過，以服務端為準）。
+ */
+(function () {
+  var titleEl = document.getElementById('tkTitle');
+  var bodyEl = document.getElementById('tkBody');
+  var contactEl = document.getElementById('tkContact');
+  var siteEl = document.getElementById('tkSite');
+  var anonEl = document.getElementById('tkAnon');
+  var sendBtn = document.getElementById('tkSend');
+  var msgEl = document.getElementById('tkMsg');
+  if (!sendBtn || !msgEl) return;
+
+  var TITLE_MIN = 3;
+  var BODY_MIN = 10;
+
+  /** 指令碼開始跑的時間：配合服務端判斷「是不是機器人秒填秒交」 */
+  var START = Date.now();
+
+  /** 字數：去掉空白後按碼點算 */
+  function charCount(s) {
+    return Array.from(String(s == null ? '' : s).replace(/\s+/gu, '')).length;
+  }
+
+  /** 裡面有沒有實際文字（漢字 / 字母 / 假名……） */
+  function hasWord(s) {
+    return /\p{L}/u.test(String(s == null ? '' : s));
+  }
+
+  function show(text, ok) {
+    msgEl.textContent = text;
+    msgEl.className = 'tk-msg show ' + (ok ? 'ok' : 'bad');
+  }
+
+  function localSpam(t, b) {
+    if (charCount(t) < TITLE_MIN) {
+      return '標題至少要 ' + TITLE_MIN + ' 個字，這條已按垃圾工單銷燬，補充後可以重新提交。';
+    }
+    if (charCount(b) < BODY_MIN) {
+      return '正文至少要 ' + BODY_MIN + ' 個字，這條已按垃圾工單銷燬，補充後可以重新提交。';
+    }
+    if (!hasWord(t) || !hasWord(b)) {
+      return '標題或正文裡沒有實際文字（全是數字或標點），這條已按垃圾工單銷燬。';
+    }
+    return '';
+  }
+
+  sendBtn.addEventListener('click', function () {
+    var t = titleEl.value.trim();
+    var b = bodyEl.value.trim();
+    var c = contactEl.value.trim();
+
+    if (!t && !b) { show('請填寫標題和正文內容', false); return; }
+
+    var spam = localSpam(t, b);
+    if (spam) { show(spam, false); return; }
+
+    sendBtn.disabled = true;
+    show('正在提交…', true);
+
+    fetch('/api/ticket', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        title: t,
+        body: b,
+        contact: c,
+        site: siteEl ? siteEl.value : '',
+        elapsedMs: Date.now() - START,
+        anonymous: !!(anonEl && anonEl.checked),
+      }),
+    })
+      .then(function (r) { return r.json().catch(function () { return {}; }); })
+      .then(function (j) {
+        if (j && j.ok) {
+          titleEl.value = '';
+          bodyEl.value = '';
+          contactEl.value = '';
+          if (anonEl) anonEl.checked = false;
+          // 編號是以後檢視回復、繼續追問的憑據；回覆出現在「通知板塊 → 我的訊息」
+          show(
+            (j.message || '工單已提交，我會盡快檢視。') +
+              (j.id ? '　編號 ' + j.id + '（回覆會出現在「通知板塊 → 我的訊息」裡）' : ''),
+            true
+          );
+        } else {
+          // 內容太短 / 全是數字標點：服務端已把這條銷燬，文字留在框裡讓人改
+          show((j && j.message) || '提交失敗，請稍後再試', false);
+        }
+      })
+      .catch(function () { show('網路錯誤，請稍後再試', false); })
+      .then(function () { sendBtn.disabled = false; });
+  });
+})();
+</script>
+  <script src="/status.js" defer></script>
+</body>
+</html>

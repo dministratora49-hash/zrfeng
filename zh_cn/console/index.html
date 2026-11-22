@@ -423,26 +423,28 @@
     }
     if (sec) html += '<div class="card"><h2>账户安全</h2>' + sec + '</div>';
 
-    // 所在地区：决定登录后进中文站还是英文站。
+    // 所在地区 / 国籍：决定登录后进哪个语种站（简体 / 繁体 / 英文）。
     // 地区表由服务端 /api/me 的 regions 下发，前端不硬编码，加地区只改 worker.js。
-    // 用下拉而不是一行一个国家：以后加到几十个国家也不会把卡片撑长。
-    // 不显示「进入哪个站」—— 地区名本身就够说明，加那句反而在提示技术细节。
+    // 用下拉而不是一行一个国家：以后加到几十个地区也不会把卡片撑长。
     var REGIONS = (j && j.regions) || [
-      { id: 'CN', name: '中华人民共和国', lang: 'zh' },
-      { id: 'US', name: '美利坚合众国', lang: 'en' }
+      { id: 'CN', name: '中国大陆', lang: 'zh' },
+      { id: 'HK', name: '中国香港', lang: 'zh_hant' },
+      { id: 'MO', name: '中国澳门', lang: 'zh_hant' },
+      { id: 'TW', name: '中国台湾', lang: 'zh_hant' },
+      { id: 'US', name: '美国', lang: 'en' },
+      { id: 'OTHER', name: '其他国籍 / 地区', lang: 'en' }
     ];
     var curRegion = u.region || null;
-    var rg = '<div class="card"><h2>所在地区</h2>' +
+    var rg = '<div class="card"><h2>所在地区或国籍</h2>' +
       '<div class="meta" style="margin-bottom:10px">' +
-      '选择你所在的地区，登录后会直接进入对应的语言站点。' +
-      '选「不指定」则按本机上次选的语种走；都没选过会先看到语言选择页。</div>' +
+      '选择您所在的地区或您的国籍，登录后会直接进入对应的语言站点。选「不指定」则按本机上次选的语种走。</div>' +
       '<div class="pick"><label for="regionSel">地区</label>' +
       '<select id="regionSel">' +
       '<option value="">不指定（按本机语种）</option>';
     REGIONS.forEach(function (r) {
       rg += '<option value="' + esc(r.id) + '"' +
         (r.id === curRegion ? ' selected' : '') + '>' +
-        esc(r.name) + '（' + esc(r.id) + '）</option>';
+        esc(r.name) + '</option>';
     });
     rg += '</select></div>' +
       '<div class="msg" id="regionMsg"></div></div>';
@@ -1748,6 +1750,5 @@
 })();
 </script>
   <script src="/status.js" defer></script>
-<p style="text-align:center;font-size:12px;margin:16px 0"><a href="/en_us/console/?lang=en" style="color:#7fa893;text-decoration:none">English</a></p>
 </body>
 </html>

@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>/* 儘早落地主題（預設原生安卓；只認控制台「外觀」裡存下的值，避免閃色） */(function(){var t='android';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark'||s==='android')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
+<title>北京時間 · 同步阿里時間伺服器</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { min-height:100vh;
+    background: radial-gradient(circle at 20% 20%, #06120c 0%, #030805 60%, #010302 100%);
+    color:#00e676; font-family:"Consolas","JetBrains Mono",monospace;
+    display:flex; align-items:center; justify-content:center; padding:16px; }
+  .card { border:1px solid rgba(0,230,118,.25); background:rgba(0,20,10,.55);
+    border-radius:14px; padding:28px 22px; max-width:720px; width:100%;
+    box-shadow:0 0 40px rgba(0,230,118,.12); }
+  .badge { display:inline-block; border:1px solid rgba(0,230,118,.4); border-radius:20px;
+    padding:4px 14px; font-size:12px; letter-spacing:2px; background:rgba(0,230,118,.08); }
+  h1 { font-size:22px; margin:18px 0 6px; color:#e8ffe8; }
+  .sub { font-size:12px; color:rgba(0,230,118,.6); margin-bottom:22px; }
+  .big { font-size:clamp(38px,10vw,72px); color:#00ff88;
+    text-shadow:0 0 18px rgba(0,255,136,.5); margin-bottom:8px;
+    font-variant-numeric:tabular-nums; }
+  .big small { font-size:.42em; color:rgba(0,255,136,.75); }
+  .ampm { font-size:.35em; color:#bdfccf; letter-spacing:2px; margin-left:6px; }
+  .date { font-size:17px; color:#bdfccf; letter-spacing:3px; margin-bottom:22px; }
+  .grid { display:flex; gap:8px; flex-wrap:wrap; }
+  .cell { flex:1; min-width:74px; border:1px solid rgba(0,230,118,.25);
+    background:rgba(0,30,15,.4); border-radius:8px; text-align:center; padding:10px 4px; }
+  .cell .v { font-size:24px; color:#00ff88; font-variant-numeric:tabular-nums; }
+  .cell .l { font-size:11px; color:rgba(0,230,118,.55); margin-top:4px; }
+  .status { margin-top:18px; font-size:12px; color:rgba(0,230,118,.6); line-height:1.6;
+    word-break:break-all; }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#00ff88;
+    box-shadow:0 0 8px #00ff88; margin-right:6px; animation:pulse 1.5s infinite; }
+  .dot.red { background:#ff5555; box-shadow:0 0 8px #ff5555; }
+  @keyframes pulse { 50% { opacity:.35; } }
+  .btn-row { display:flex; gap:10px; margin-top:22px; }
+  .btn { flex:1; text-align:center; padding:12px;
+    border:1px solid rgba(0,230,118,.4); border-radius:8px;
+    background:rgba(0,230,118,.08); color:#00e676;
+    text-decoration:none; font-size:14px; letter-spacing:4px;
+    cursor:pointer; user-select:none; -webkit-tap-highlight-color:transparent; transition:.2s; }
+  .btn:active { background:rgba(0,230,118,.25); box-shadow:0 0 14px rgba(0,255,136,.4); }
+</style>
+<link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="/android.css">
+</head>
+<body>
+<div class="card">
+  <span class="badge">⏱ 北京時間（同步阿里時間伺服器）</span>
+  <h1>北京時間</h1>
+  <div class="sub">UTC+8 · 啟動時同步阿里時間伺服器，含網路延遲補償，每10分鐘重校準</div>
+
+  <div class="big"><span id="t-main">--:--:--</span><small id="t-frac">.0000</small><span class="ampm" id="t-ampm"></span></div>
+  <div class="date" id="date">----年--月--日 星期-</div>
+
+  <div class="grid">
+    <div class="cell"><div class="v" id="y">----</div><div class="l">年</div></div>
+    <div class="cell"><div class="v" id="mo">--</div><div class="l">月</div></div>
+    <div class="cell"><div class="v" id="d">--</div><div class="l">日</div></div>
+    <div class="cell"><div class="v" id="h">--</div><div class="l">時</div></div>
+    <div class="cell"><div class="v" id="mi">--</div><div class="l">分</div></div>
+    <div class="cell"><div class="v" id="s">--</div><div class="l">秒</div></div>
+    <div class="cell"><div class="v" id="ms">.0000</div><div class="l">小數</div></div>
+  </div>
+
+  <div class="status">
+    <span class="dot" id="dot"></span><span id="sync">正在同步阿里時間伺服器…</span>
+    <div id="detail" style="opacity:.7;margin-top:6px;"></div>
+  </div>
+
+  <div class="btn-row">
+    <div class="btn" id="fmtBtn">切換為12小時制</div>
+    <a class="btn" href="/zh_tw/guide">← 返回</a>
+  </div>
+</div>
+
+<script>
+'use strict';
+var offset = 0;
+var use12 = (function(){ try{ return localStorage.getItem('clockUse12')==='1'; }catch(e){ return false; } })();
+var syncTimer = null;
+
+var pad = function(n){ return String(n).padStart(2,'0'); };
+var $ = function(id){ return document.getElementById(id); };
+var week = ['日','一','二','三','四','五','六'];
+var p = 0;
+
+/* ===== 12/24小時制切換（事件委託，只綁一次） ===== */
+document.addEventListener('click', function(ev){
+  var t = ev.target;
+  if (t && t.id === 'fmtBtn') {
+    use12 = !use12;
+    try{ localStorage.setItem('clockUse12', use12?'1':'0'); }catch(e){}
+    var btn = $('fmtBtn');
+    if (btn) btn.textContent = use12 ? '切換為24小時制' : '切換為12小時制';
+  }
+});
+
+/* ===== 時間同步：阿里 → timeapi.io → 代理轉發 ===== */
+function jsonp(url, timeout){
+  return new Promise(function(res, rej){
+    var cb='_cb'+(++p), s=document.createElement('script');
+    var t=setTimeout(function(){ cleanup(); rej('超時'); }, timeout||6000);
+    function cleanup(){ clearTimeout(t); try{delete window[cb];}catch(e){} if(s.parentNode)s.parentNode.removeChild(s); }
+    window[cb]=function(d){ cleanup(); res(d); };
+    s.onerror=function(){ cleanup(); rej('載入失敗'); };
+    s.src=url+(url.indexOf('?')>=0?'&':'?')+'callback='+cb;
+    document.head.appendChild(s);
+  });
+}
+
+function ok(msg){ $('dot').classList.remove('red'); $('sync').textContent=msg; $('detail').textContent=''; }
+function fail(msg,detail){ $('dot').classList.add('red'); $('sync').textContent=msg; $('detail').textContent=detail; }
+
+function syncTime(){
+  var logs=[];
+  return jsonp('https://acs.m.taobao.com/gw/mtop.common.getTimestamp/')
+    .then(function(j){
+      offset=(+j.data.t)-Date.now();
+      ok('✔ 已同步（阿里時間伺服器）校準 '+offset.toFixed(1)+'ms · 10分鐘後重校');
+    })
+    .catch(function(){
+      logs.push('阿里:失敗');
+      var t0=Date.now();
+      return fetch('https://www.timeapi.io/api/Time/current/zone?timeZone=Asia/Shanghai',{cache:'no-store'})
+        .then(function(r){return r.json();})
+        .then(function(j){
+          var rtt=Date.now()-t0;
+          offset=new Date(j.dateTime+'Z').getTime()-8*3600e3+rtt/2-Date.now();
+          ok('✔ 已同步（timeapi.io 備用）校準 '+offset.toFixed(1)+'ms');
+        });
+    })
+    .catch(function(){
+      logs.push('timeapi:失敗');
+      var t0=Date.now();
+      return fetch('https://api.allorigins.win/raw?url='+encodeURIComponent('https://acs.m.taobao.com/gw/mtop.common.getTimestamp/'),{cache:'no-store'})
+        .then(function(r){return r.json();})
+        .then(function(j){
+          var rtt=Date.now()-t0;
+          offset=(+j.data.t)+rtt/2-Date.now();
+          ok('✔ 已同步（代理轉發阿里）校準 '+offset.toFixed(1)+'ms');
+        });
+    })
+    .catch(function(){
+      logs.push('代理:失敗');
+      fail('⚠ 全部通道失敗，暫用本機時間，30秒後重試','失敗詳情: '+logs.join(' | '));
+      setTimeout(syncTime, 30000);
+    });
+}
+
+function startSync(){
+  if(syncTimer) return;
+  syncTime();
+  syncTimer = setInterval(syncTime, 10*60*1000);
+}
+
+/* ===== 渲染 ===== */
+function render(){
+  var d=new Date(Date.now()+offset);
+  var frac=(d.getMilliseconds()/1000).toFixed(4).slice(1);
+  var h=d.getHours(), ap='';
+  if(use12){ ap = h<12?'上午':'下午'; h=h%12; if(h===0)h=12; }
+  $('t-main').textContent=pad(h)+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
+  $('t-frac').textContent=frac;
+  $('t-ampm').textContent=ap;
+  $('date').textContent=d.getFullYear()+'年'+pad(d.getMonth()+1)+'月'+pad(d.getDate())+'日 星期'+week[d.getDay()];
+  $('y').textContent=d.getFullYear();
+  $('mo').textContent=pad(d.getMonth()+1);
+  $('d').textContent=pad(d.getDate());
+  $('h').textContent=pad(h);
+  $('mi').textContent=pad(d.getMinutes());
+  $('s').textContent=pad(d.getSeconds());
+  $('ms').textContent=frac;
+  requestAnimationFrame(render);
+}
+
+$('fmtBtn').textContent = use12 ? '切換為24小時制' : '切換為12小時制';
+render();
+startSync();
+</script>
+  <script src="/status.js" defer></script>
+</body>
+</html>

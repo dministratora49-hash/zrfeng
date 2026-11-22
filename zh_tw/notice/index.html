@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>/* 儘早落地主題（預設原生安卓；只認控制台「外觀」裡存下的值，避免閃色） */(function(){var t='android';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark'||s==='android')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
+<title>通知板塊</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    min-height: 100vh;
+    background: #050807;
+    background-image:
+      radial-gradient(circle at 15% 10%, rgba(0, 255, 140, 0.07) 0%, transparent 45%),
+      radial-gradient(circle at 85% 85%, rgba(0, 255, 140, 0.05) 0%, transparent 45%);
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    color: #e8f5ee;
+    padding: 80px 16px 48px;
+  }
+
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,255,140,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,255,140,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .wrap {
+ position: relative; z-index: 1; max-width: 720px; margin: 0 auto; }
+
+  h1 {
+    font-size: 30px;
+    text-align: center;
+    background: linear-gradient(90deg, #ffffff, #00ff8c);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 10px;
+  }
+
+  p.sub { text-align: center; color: #7fa893; font-size: 13px; letter-spacing: 1px; margin-bottom: 28px; }
+
+  .card {
+    background: rgba(10, 18, 14, 0.85);
+    border: 1px solid rgba(0, 255, 140, 0.22);
+    border-radius: 16px;
+    padding: 20px 18px;
+    margin-bottom: 20px;
+    box-shadow: 0 0 18px rgba(0, 255, 140, 0.06);
+  }
+
+  .card h2 {
+    font-size: 15px;
+    color: #00ff8c;
+    letter-spacing: 1.5px;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card h2 .bar { width: 3px; height: 15px; background: #00ff8c; border-radius: 2px; display: inline-block; }
+
+  .hint { font-size: 12px; color: #6d8a7b; line-height: 1.8; margin-bottom: 12px; }
+
+  .empty { font-size: 13px; color: #5d7a6c; text-align: center; padding: 18px 0; }
+
+  /* ---------- 公告 ---------- */
+  .nt {
+    border-bottom: 1px dashed rgba(0, 255, 140, 0.14);
+    padding: 14px 0;
+  }
+  .nt:last-child { border-bottom: none; padding-bottom: 0; }
+  .nt:first-child { padding-top: 0; }
+  .nt-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 7px; }
+  .nt-title { font-size: 15px; font-weight: 700; color: #e8f5ee; }
+  .nt-time { font-size: 11px; color: #5d7a6c; font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .nt-body { font-size: 13px; line-height: 1.9; color: #b9d2c5; white-space: pre-wrap; word-break: break-word; }
+  .tag {
+    font-size: 10px; padding: 2px 8px; border-radius: 20px; letter-spacing: .5px;
+    border: 1px solid rgba(0, 255, 140, 0.35); color: #00ff8c; background: rgba(0, 255, 140, 0.08);
+  }
+  .tag.maint { border-color: rgba(255, 176, 32, 0.45); color: #ffb020; background: rgba(255, 176, 32, 0.1); }
+
+  /* 公告右上角的「刪除」：只對管理員顯示，小號不搶眼但看得出來是危險操作 */
+  .nt-del {
+    margin-left: auto;
+    padding: 3px 10px;
+    font-size: 11px;
+    font-family: inherit;
+    border-radius: 20px;
+    cursor: pointer;
+    color: #ff6b6b;
+    background: rgba(255, 77, 77, 0.1);
+    border: 1px solid rgba(255, 77, 77, 0.4);
+    transition: background .18s, border-color .18s;
+  }
+  .nt-del:hover:not(:disabled) {
+    background: rgba(255, 77, 77, 0.2);
+    border-color: rgba(255, 77, 77, 0.7);
+  }
+  .nt-del:disabled { opacity: .5; cursor: default; }
+  /* 淺色主題下紅色要壓深一點，否則在白底上發飄 */
+  html[data-theme="light"] .nt-del { color: #c62828; border-color: rgba(198, 40, 40, .4); background: rgba(255, 80, 80, .1); }
+  html[data-theme="light"] .nt-del:hover:not(:disabled) { background: rgba(255, 80, 80, .18); }
+  /* 安卓主題用 Material 的 error 色 */
+  html[data-theme="android"] .nt-del {
+    color: var(--md-error, #ffb4ab);
+    border-color: color-mix(in srgb, var(--md-error, #ffb4ab) 45%, transparent);
+    background: color-mix(in srgb, var(--md-error, #ffb4ab) 12%, transparent);
+  }
+
+  /* ---------- 我的訊息 ---------- */
+  .who { font-size: 12px; color: #7fa893; margin-bottom: 12px; line-height: 1.9; }
+  .who b { color: #00ff8c; font-weight: 700; }
+
+  .msg {
+    display: flex; gap: 10px; padding: 11px 12px; border-radius: 10px;
+    background: rgba(0, 255, 140, 0.05);
+    border: 1px solid rgba(0, 255, 140, 0.14);
+    margin-bottom: 9px;
+  }
+  .msg:last-child { margin-bottom: 0; }
+  .msg .dot { width: 7px; height: 7px; border-radius: 50%; background: #00ff8c; flex: none; margin-top: 6px; box-shadow: 0 0 7px #00ff8c; }
+  .msg .tx { font-size: 13px; line-height: 1.8; color: #cfe8dc; word-break: break-word; }
+  .msg .tm { font-size: 11px; color: #5d7a6c; margin-top: 4px; font-family: ui-monospace, Menlo, Consolas, monospace; }
+
+  /* ---------- 工單 ---------- */
+  .tk {
+    border: 1px solid rgba(0, 255, 140, 0.16);
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 14px;
+    background: rgba(6, 14, 10, 0.6);
+  }
+  .tk:last-child { margin-bottom: 0; }
+  .tk-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+  .tk-title { font-size: 14px; font-weight: 700; }
+  .tk-meta { font-size: 11px; color: #5d7a6c; font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .tk-body { font-size: 12.5px; line-height: 1.85; color: #a9c3b6; white-space: pre-wrap; word-break: break-word; margin-bottom: 10px; }
+
+  .rp { margin: 8px 0 0; padding-left: 10px; border-left: 2px solid rgba(0, 255, 140, 0.18); }
+  .rp-item { padding: 7px 0; }
+  .rp-who { font-size: 11px; margin-bottom: 3px; }
+  .rp-who.admin { color: #00ff8c; }
+  .rp-who.user { color: #7fa893; }
+  .rp-text { font-size: 12.5px; line-height: 1.8; color: #cfe8dc; white-space: pre-wrap; word-break: break-word; }
+  .rp-time { font-size: 10.5px; color: #4a6a58; margin-top: 3px; font-family: ui-monospace, Menlo, Consolas, monospace; }
+
+  .tk-form { display: flex; gap: 8px; margin-top: 12px; }
+  .tk-form input {
+    flex: 1; min-width: 0; padding: 9px 11px; border-radius: 9px; font-size: 13px;
+    border: 1px solid rgba(0, 255, 140, 0.25); background: rgba(0, 0, 0, 0.35);
+    color: #e8f5ee; font-family: inherit;
+  }
+  .tk-form input:focus { outline: none; border-color: rgba(0, 255, 140, 0.6); }
+  .tk-form button {
+    padding: 9px 16px; border-radius: 9px; font-size: 13px; cursor: pointer; font-family: inherit;
+    border: 1px solid rgba(0, 255, 140, 0.45); background: rgba(0, 255, 140, 0.12); color: #00ff8c;
+  }
+  .tk-form button:active { background: rgba(0, 255, 140, 0.25); }
+  .tk-form button:disabled { opacity: .5; }
+
+  .fld { margin-bottom: 10px; }
+  .fld label { display: block; font-size: 12px; color: #7fa893; margin-bottom: 6px; }
+  .fld input, .fld textarea {
+    width: 100%; padding: 10px 12px; border-radius: 10px; font-size: 13px;
+    border: 1px solid rgba(0, 255, 140, 0.25); background: rgba(0, 0, 0, 0.35);
+    color: #e8f5ee; font-family: inherit; resize: vertical;
+  }
+  .fld textarea { min-height: 90px; line-height: 1.7; }
+  .fld input:focus, .fld textarea:focus { outline: none; border-color: rgba(0, 255, 140, 0.6); }
+
+  .btn {
+    display: inline-block; padding: 10px 18px; border-radius: 10px; font-size: 13px; cursor: pointer;
+    border: 1px solid rgba(0, 255, 140, 0.45); background: rgba(0, 255, 140, 0.12);
+    color: #00ff8c; font-family: inherit;
+  }
+  .btn:active { background: rgba(0, 255, 140, 0.25); }
+  .btn:disabled { opacity: .5; }
+  .btn.ghost { border-color: rgba(255, 107, 107, 0.4); color: #ff8a8a; background: rgba(255, 107, 107, 0.08); }
+  .btn.small { padding: 5px 12px; font-size: 12px; }
+
+  .msg-line { font-size: 12px; min-height: 17px; margin-top: 8px; }
+  .msg-line.ok { color: #00ff8c; }
+  .msg-line.err { color: #ff7b7b; }
+
+  /* ---------- 公告分頁 ---------- */
+  .pg {
+    display: none; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 10px; margin-top: 16px;
+    padding-top: 14px; border-top: 1px dashed rgba(0, 255, 140, 0.14);
+  }
+  .pg-info { font-size: 12px; color: #7fa893; font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .pg-acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .pg-size { font-size: 12px; color: #7fa893; display: flex; align-items: center; gap: 6px; }
+  .pg-size select {
+    padding: 5px 8px; border-radius: 8px; font-size: 12px; font-family: inherit;
+    border: 1px solid rgba(0, 255, 140, 0.25); background: rgba(0, 0, 0, 0.35);
+    color: #e8f5ee;
+  }
+  .pg-size select:focus { outline: none; border-color: rgba(0, 255, 140, 0.6); }
+  .pg-jump { font-size: 12px; color: #7fa893; display: flex; align-items: center; gap: 6px; }
+  .pg-jump input {
+    width: 58px; padding: 5px 8px; border-radius: 8px; font-size: 12px;
+    font-family: ui-monospace, Menlo, Consolas, monospace; text-align: center;
+    border: 1px solid rgba(0, 255, 140, 0.25); background: rgba(0, 0, 0, 0.35);
+    color: #e8f5ee; -moz-appearance: textfield;
+  }
+  .pg-jump input::-webkit-outer-spin-button,
+  .pg-jump input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .pg-jump input:focus { outline: none; border-color: rgba(0, 255, 140, 0.6); }
+  .btn[disabled] { opacity: .35; cursor: default; }
+
+  .links { text-align: center; margin-top: 26px; font-size: 12px; }
+  .links a { color: #7fa893; text-decoration: none; margin: 0 10px; }
+  .links a:hover { color: #00ff8c; }
+
+  footer { text-align: center; color: #3d5a4b; font-size: 11px; margin-top: 24px; letter-spacing: 1px; }
+</style>
+<link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="/android.css">
+</head>
+<body>
+<div class="wrap">
+  <h1>通知板塊</h1>
+  <p class="sub">站點公告 · 維護訊息 · 我的訊息</p>
+
+  <div class="card">
+    <h2><span class="bar"></span>站點公告</h2>
+    <div id="pubList"><div class="empty">正在載入…</div></div>
+    <div class="pg" id="pgBar">
+      <div class="pg-info" id="pgInfo"></div>
+      <div class="pg-acts">
+        <button class="btn small" id="pgPrev" type="button">上一頁</button>
+        <button class="btn small" id="pgNext" type="button">下一頁</button>
+        <label class="pg-size">每頁
+          <select id="pgSize">
+            <option value="10" selected>10</option>
+            <option value="20">20</option>
+            <option value="30">30</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select> 條
+        </label>
+        <label class="pg-jump">跳至
+          <input id="pgJump" type="number" min="1" step="1" inputmode="numeric" placeholder="1">
+          <button class="btn small" id="pgGo" type="button">跳轉</button>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2><span class="bar"></span>我的訊息</h2>
+    <div class="who" id="whoLine">正在確認身份…</div>
+    <div id="msgList"></div>
+    <div id="tkList"></div>
+  </div>
+
+  <div class="card" id="adminCard" style="display:none">
+    <h2><span class="bar"></span>釋出公告（管理員）</h2>
+    <div class="fld">
+      <label for="adTitle">標題</label>
+      <input id="adTitle" type="text" maxlength="80" placeholder="例如：站點已恢復訪問">
+    </div>
+    <div class="fld">
+      <label for="adBody">正文</label>
+      <textarea id="adBody" maxlength="2000" placeholder="寫點想告訴大家的事…"></textarea>
+    </div>
+    <button class="btn" id="adPost" type="button">釋出公告</button>
+    <button class="btn ghost small" id="adClear" type="button" style="margin-left:8px">清空全部公告</button>
+    <button class="btn small" id="adTranslate" type="button">補翻舊公告</button>
+    <div class="msg-line" id="adMsg"></div>
+  </div>
+
+  <div class="links">
+    <a href="/zh_tw/">主站</a>
+    <a href="/zh_tw/guide/">導航頁</a>
+    <a href="/zh_tw/contact/">聯絡我們</a>
+  </div>
+  <footer>zrfeng.top · 通知板塊</footer>
+</div>
+<script src="/status.js" defer></script>
+<script>
+(function () {
+  'use strict';
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+  function p2(n) { return n < 10 ? '0' + n : '' + n; }
+  function fmt(ts) {
+    if (!ts) return '';
+    var d = new Date(Number(ts));
+    return (d.getMonth() + 1) + '-' + d.getDate() + ' ' + p2(d.getHours()) + ':' + p2(d.getMinutes());
+  }
+  function el(id) { return document.getElementById(id); }
+
+  /* 當前賬戶是不是管理員。renderNotices 要給每條公告掛「刪除」按鈕，
+   * 但它拿不到 /api/my/notifications 的返回值，所以用這個模組級標記。 */
+  var IS_ADMIN = false;
+  /* 最近一次渲染的公告列表：身份從「遊客」變成「管理員」時用它重渲染，
+   * 讓刪除按鈕當場出現，不用等使用者翻頁或重新整理。 */
+  var lastNoticeList = null;
+
+  /* ---------------- 站點公告 ---------------- */
+  function renderNotices(list) {
+    lastNoticeList = list || [];
+    var box = el('pubList');
+    if (!box) return;
+    if (!list || !list.length) {
+      box.innerHTML = '<div class="empty">還沒有公告</div>';
+      return;
+    }
+    var h = '';
+    for (var i = 0; i < list.length; i++) {
+      var n = list[i];
+      var tag = n.kind === 'maint' ? '<span class="tag maint">維護</span>' : '<span class="tag">公告</span>';
+      // 刪除按鈕只給管理員；id 走 data- 屬性，避免拼進 onclick 造成注入
+      var del = IS_ADMIN
+        ? '<button class="nt-del" type="button" data-del="' + esc(n.id) + '" ' +
+          'title="刪除這條公告">刪除</button>'
+        : '';
+      h += '<div class="nt">' +
+        '<div class="nt-head">' + tag +
+        '<span class="nt-title">' + esc(n.title) + '</span>' +
+        '<span class="nt-time">' + esc(fmt(n.at)) + '</span>' +
+        del +
+        '</div>' +
+        '<div class="nt-body">' + esc(n.body) + '</div>' +
+        '</div>';
+    }
+    box.innerHTML = h;
+
+    // 繫結刪除：點一次確認，確認後調介面並就地移除，不整頁重新整理
+    var btns = box.querySelectorAll('button[data-del]');
+    for (var k = 0; k < btns.length; k++) {
+      btns[k].onclick = function () { deleteNotice(this, this.getAttribute('data-del')); };
+    }
+  }
+
+  /** 刪除單條公告：確認 → 調介面 → 從列表裡拿掉（失敗則還原按鈕） */
+  function deleteNotice(btn, id) {
+    if (!id) return;
+    if (!confirm('確定要刪除這條公告嗎？刪除後無法恢復。')) return;
+    var row = btn ? btn.parentNode.parentNode : null;
+    if (btn) { btn.disabled = true; btn.textContent = '刪除中…'; }
+    fetch('/api/admin/notices/delete', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: id }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j || !j.ok) {
+          if (btn) { btn.disabled = false; btn.textContent = '刪除'; }
+          alert((j && (j.message || j.error)) || '刪除失敗');
+          return;
+        }
+        // 從 DOM 裡摘掉這一條；列表空了就顯示佔位
+        if (row && row.parentNode) row.parentNode.removeChild(row);
+        var box = el('pubList');
+        if (box && !box.querySelector('.nt')) {
+          box.innerHTML = '<div class="empty">還沒有公告</div>';
+        }
+        // 總數變了，重新拉一頁讓分頁資訊跟著更新
+        if (typeof pgTotal === 'number' && pgTotal > 0) pgTotal--;
+        if (typeof renderPager === 'function') renderPager();
+        if (pgTotal <= 0 && typeof loadNotices === 'function') loadNotices(0);
+      })
+      .catch(function () {
+        if (btn) { btn.disabled = false; btn.textContent = '刪除'; }
+        alert('網路錯誤，請重試');
+      });
+  }
+
+  /* ---------------- 公告分頁 ---------------- */
+  var PG_SIZE_DEFAULT = 10;
+  var PG_SIZE_KEY = 'zrfeng-notice-size';   // 每頁條數記在本機，下次進來還是這個數
+  var pgSize = PG_SIZE_DEFAULT;
+  var pgOffset = 0;
+  var pgTotal = 0;
+
+  function loadPgSize() {
+    var v = PG_SIZE_DEFAULT;
+    try {
+      var s = parseInt(localStorage.getItem(PG_SIZE_KEY), 10);
+      if (s > 0) v = s;
+    } catch (e) { /* 隱私模式下 localStorage 可能不可用，用預設值 */ }
+    return v;
+  }
+
+  function savePgSize(n) {
+    try { localStorage.setItem(PG_SIZE_KEY, String(n)); } catch (e) { /* 忽略 */ }
+  }
+
+  /** 分頁條：頁碼資訊 + 上一頁/下一頁的可用狀態 */
+  function renderPager() {
+    var bar = el('pgBar');
+    if (!bar) return;
+    if (pgTotal <= 0) { bar.style.display = 'none'; return; }
+    bar.style.display = 'flex';
+
+    var pages = Math.max(1, Math.ceil(pgTotal / pgSize));
+    var cur = Math.floor(pgOffset / pgSize) + 1;
+    var info = el('pgInfo');
+    if (info) info.textContent = '第 ' + cur + ' / ' + pages + ' 頁 · 共 ' + pgTotal + ' 條';
+
+    var prev = el('pgPrev'), next = el('pgNext');
+    if (prev) prev.disabled = pgOffset <= 0;
+    if (next) next.disabled = pgOffset + pgSize >= pgTotal;
+
+    var sel = el('pgSize');
+    if (sel) sel.value = String(pgSize);
+
+    // 跳頁輸入框的邊界跟著總頁數走
+    var jump = el('pgJump');
+    if (jump) {
+      jump.max = String(pages);
+      jump.placeholder = String(cur);
+      jump.value = '';
+    }
+  }
+
+  /** 跳到第 n 頁（1 起算）；越界就夾到首/尾頁，非法輸入直接忽略 */
+  function jumpToPage(n) {
+    var pages = Math.max(1, Math.ceil(pgTotal / pgSize));
+    var p = parseInt(n, 10);
+    if (!(p > 0)) return false;
+    if (p > pages) p = pages;
+    var target = (p - 1) * pgSize;
+    if (target === pgOffset) return true;
+    loadNotices(target);
+    return true;
+  }
+
+  /**
+   * 拉一頁公告。傳 offset 就跳到那一頁偏移，不傳則沿用當前偏移。
+   * 兩種情況會自己回退：頁碼越界（別人刪了公告）、總數為 0。
+   */
+  function loadNotices(offset) {
+    if (typeof offset === 'number') pgOffset = Math.max(0, offset);
+    var box = el('pubList');
+    if (box) box.innerHTML = '<div class="empty">正在載入…</div>';
+    // 請求期間先禁用翻頁，避免連點把 offset 點亂
+    var bp = el('pgPrev'), bn = el('pgNext');
+    if (bp) bp.disabled = true;
+    if (bn) bn.disabled = true;
+
+    return fetch('/api/notices?limit=' + pgSize + '&offset=' + pgOffset, { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        var total = Number(j && (j.total != null ? j.total : j.count));
+        pgTotal = Number.isFinite(total) && total > 0 ? total : 0;
+
+        // 當前頁已經超出範圍（公告被刪 / 換了每頁條數）→ 回到最後一頁
+        if (pgOffset > 0 && pgOffset >= pgTotal) {
+          var last = Math.max(0, Math.floor((pgTotal - 1) / pgSize) * pgSize);
+          if (last !== pgOffset) { pgOffset = last; return loadNotices(); }
+        }
+
+        renderNotices((j && j.notices) || []);
+        renderPager();
+      })
+      .catch(function () {
+        var b = el('pubList');
+        if (b) b.innerHTML = '<div class="empty">公告載入失敗，請重新整理重試</div>';
+        var bar = el('pgBar');
+        if (bar) bar.style.display = 'none';
+      });
+  }
+
+  function bindPager() {
+    var prev = el('pgPrev');
+    if (prev) {
+      prev.onclick = function () {
+        if (pgOffset <= 0) return;
+        loadNotices(Math.max(0, pgOffset - pgSize));
+      };
+    }
+    var next = el('pgNext');
+    if (next) {
+      next.onclick = function () {
+        if (pgOffset + pgSize >= pgTotal) return;
+        loadNotices(pgOffset + pgSize);
+      };
+    }
+    var sel = el('pgSize');
+    if (sel) {
+      sel.onchange = function () {
+        var n = parseInt(this.value, 10);
+        if (!(n > 0)) return;
+        pgSize = n;
+        savePgSize(n);
+        loadNotices(0);          // 換每頁條數就回第一頁，避免偏移錯位
+      };
+    }
+
+    // 跳轉到第 N 頁：回車或點「跳轉」都行
+    var jump = el('pgJump');
+    var go = el('pgGo');
+    function doJump() {
+      if (jump && jumpToPage(jump.value)) jump.value = '';
+    }
+    if (go) go.onclick = doJump;
+    if (jump) {
+      jump.onkeydown = function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); doJump(); }
+      };
+    }
+  }
+
+  /* ---------------- 我的工單 + 回覆 ---------------- */
+  function renderTickets(tickets) {
+    var box = el('tkList');
+    if (!box) return;
+    if (!tickets || !tickets.length) {
+      box.innerHTML = '';
+      return;
+    }
+    var h = '<div class="hint" style="margin-top:18px">我提交過的工單（可以直接在這裡繼續回覆）</div>';
+    for (var i = 0; i < tickets.length; i++) {
+      var t = tickets[i];
+      h += '<div class="tk" data-tk="' + esc(t.id) + '">' +
+        '<div class="tk-head">' +
+        '<span class="tk-title">' + esc(t.title) + '</span>' +
+        (t.anonymous ? '<span class="tag">已匿名</span>' : '') +
+        '<span class="tk-meta">' + esc(fmt(t.at)) + '</span>' +
+        '</div>' +
+        '<div class="tk-body">' + esc(t.body) + '</div>';
+
+      var reps = t.replies || [];
+      if (reps.length) {
+        h += '<div class="rp">';
+        for (var k = 0; k < reps.length; k++) {
+          var r = reps[k];
+          var isAdmin = r.by === 'admin';
+          h += '<div class="rp-item">' +
+            '<div class="rp-who ' + (isAdmin ? 'admin' : 'user') + '">' + (isAdmin ? '管理員' : '我') + '</div>' +
+            '<div class="rp-text">' + esc(r.text) + '</div>' +
+            '<div class="rp-time">' + esc(fmt(r.at)) + '</div>' +
+            '</div>';
+        }
+        h += '</div>';
+      } else {
+        h += '<div class="hint">還沒有回覆，可以補充說明。</div>';
+      }
+
+      h += '<div class="tk-form">' +
+        '<input type="text" maxlength="1000" placeholder="繼續回覆這條工單…" data-rp-input="' + esc(t.id) + '">' +
+        '<button type="button" data-rp-send="' + esc(t.id) + '">傳送</button>' +
+        '</div></div>';
+    }
+    box.innerHTML = h;
+
+    // 繫結傳送
+    var btns = box.querySelectorAll('[data-rp-send]');
+    for (var b = 0; b < btns.length; b++) {
+      btns[b].onclick = function () { sendReply(this.getAttribute('data-rp-send'), this); };
+    }
+    var inputs = box.querySelectorAll('[data-rp-input]');
+    for (var q = 0; q < inputs.length; q++) {
+      inputs[q].onkeydown = function (e) {
+        if (e.key === 'Enter') {
+          var id = this.getAttribute('data-rp-input');
+          var btn = box.querySelector('[data-rp-send="' + id + '"]');
+          if (btn) sendReply(id, btn);
+        }
+      };
+    }
+  }
+
+  function sendReply(id, btn) {
+    var input = document.querySelector('[data-rp-input="' + id + '"]');
+    var text = input ? String(input.value || '').trim() : '';
+    if (!text) { if (input) input.focus(); return; }
+    if (btn) btn.disabled = true;
+    fetch('/api/ticket/reply', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: id, text: text }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (j && j.ok) {
+          if (input) input.value = '';
+          loadMine();
+        } else {
+          alert((j && j.message) || '回覆失敗');
+        }
+      })
+      .catch(function () { alert('網路錯誤，請稍後再試'); })
+      .then(function () { if (btn) btn.disabled = false; });
+  }
+
+  /* ---------------- 我的訊息 + 身份 ---------------- */
+  function renderMine(j) {
+    var me = (j && j.me) || {};
+    var who = el('whoLine');
+    if (who) {
+      if (me.loggedIn) {
+        who.innerHTML = '已登入：<b>' + esc(me.username || '') + '</b>　—— 工單回覆會放到這裡。';
+      } else if (me.byDevice) {
+        who.innerHTML = '未登入（按這臺裝置記住）。登入後訊息會跟著賬戶走，換裝置或清快取就找不到了。';
+      } else {
+        who.innerHTML = '還沒有身份資訊，先去 <a href="/zh_tw/login/" style="color:#00ff8c">登入</a> 吧。';
+      }
+    }
+
+    var list = (j && j.notifications) || [];
+    var box = el('msgList');
+    if (box) {
+      if (!list.length) {
+        box.innerHTML = '<div class="empty">暫時沒有新訊息</div>';
+      } else {
+        var h = '';
+        for (var i = 0; i < list.length; i++) {
+          var n = list[i];
+          h += '<div class="msg"><span class="dot"></span><div>' +
+            '<div class="tx">' + esc(n.text) + '</div>' +
+            '<div class="tm">' + esc(fmt(n.at)) + '</div>' +
+            '</div></div>';
+        }
+        box.innerHTML = h;
+      }
+    }
+
+    var ac = el('adminCard');
+    if (ac) ac.style.display = me.isAdmin ? 'block' : 'none';
+
+    // 記下是不是管理員，供公告列表決定要不要顯示「刪除」按鈕；
+    // 身份變了（登入 / 登出）就重渲染一次，讓按鈕跟著出現或消失
+    var wasAdmin = IS_ADMIN;
+    IS_ADMIN = !!me.isAdmin;
+    if (wasAdmin !== IS_ADMIN && typeof lastNoticeList !== 'undefined' && lastNoticeList) {
+      renderNotices(lastNoticeList);
+    }
+
+    renderTickets((j && j.tickets) || []);
+  }
+
+  function loadMine() {
+    return fetch('/api/my/notifications', { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(renderMine)
+      .catch(function () {
+        var box = el('msgList');
+        if (box) box.innerHTML = '<div class="empty">載入失敗，請重新整理重試</div>';
+      });
+  }
+
+  /* ---------------- 管理員發公告 ---------------- */
+  function bindAdmin() {
+    var btn = el('adPost');
+    if (btn) {
+      btn.onclick = function () {
+        var t = el('adTitle'), b = el('adBody'), m = el('adMsg');
+        var title = t ? t.value.trim() : '';
+        var body = b ? b.value.trim() : '';
+        if (!title || !body) {
+          if (m) { m.textContent = '標題和正文都要填'; m.className = 'msg-line err'; }
+          return;
+        }
+        btn.disabled = true;
+        if (m) { m.textContent = '正在釋出…'; m.className = 'msg-line'; }
+        fetch('/api/admin/notices', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ title: title, body: body }),
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (j) {
+            if (j && j.ok) {
+              if (m) { m.textContent = '釋出成功'; m.className = 'msg-line ok'; }
+              if (t) t.value = '';
+              if (b) b.value = '';
+              loadNotices(0);   // 新公告在最前面，回到第一頁才看得到
+            } else if (m) {
+              m.textContent = (j && j.message) || '釋出失敗';
+              m.className = 'msg-line err';
+            }
+          })
+          .catch(function () { if (m) { m.textContent = '網路錯誤'; m.className = 'msg-line err'; } })
+          .then(function () { btn.disabled = false; });
+      };
+    }
+
+    var clr = el('adClear');
+    if (clr) {
+      clr.onclick = function () {
+        if (!confirm('確定要清空全部公告嗎？')) return;
+        var m = el('adMsg');
+        clr.disabled = true;
+        fetch('/api/admin/notices/delete', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ all: true }),
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (j) {
+            if (m) { m.textContent = (j && j.message) || ''; m.className = 'msg-line ok'; }
+            loadNotices(0);
+          })
+          .catch(function () { if (m) { m.textContent = '網路錯誤'; m.className = 'msg-line err'; } })
+          .then(function () { clr.disabled = false; });
+      };
+    }
+  }
+
+  /* ---------------- 補翻舊公告（管理員） ---------------- */
+  function bindTranslate() {
+    var btn = el('adTranslate');
+    if (!btn) return;
+    btn.onclick = function () {
+      var m = el('adMsg');
+      btn.disabled = true;
+      if (m) { m.textContent = '正在翻譯…'; m.className = 'msg-line'; }
+      (function step() {
+        fetch('/api/admin/notices/translate', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ limit: 3 }),
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (j) {
+            if (!j || !j.ok) {
+              if (m) { m.textContent = (j && j.message) || '翻譯失敗'; m.className = 'msg-line err'; }
+              btn.disabled = false;
+              return;
+            }
+            if (m) { m.textContent = j.message; m.className = 'msg-line ok'; }
+            if (j.remaining > 0) { step(); return; }
+            loadNotices(0);
+            btn.disabled = false;
+          })
+          .catch(function () {
+            if (m) { m.textContent = '網路錯誤'; m.className = 'msg-line err'; }
+            btn.disabled = false;
+          });
+      })();
+    };
+  }
+
+  function boot() {
+    pgSize = loadPgSize();   // 上次選過的每頁條數
+    var sel = el('pgSize');
+    if (sel) sel.value = String(pgSize);
+    bindAdmin();
+    bindPager();
+    bindTranslate();
+    loadNotices(0);
+    loadMine();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+})();
+</script>
+</body>
+</html>

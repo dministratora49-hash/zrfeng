@@ -76,6 +76,20 @@
     'border:1px solid rgba(0,255,140,.45);color:#00ff8c;text-decoration:none;' +
     'font-size:12px;line-height:1.3;white-space:nowrap;background:rgba(0,255,140,.07);}' +
     '#' + BAR_ID + ' .sb-btn:active{background:rgba(0,255,140,.2);}' +
+    /* 右上角语言选择：一个下拉，三档（简 / 繁 / EN）。
+       和地区解耦 —— 换语言只换界面语种，不动账户里的地区。 */
+    '#' + BAR_ID + ' .sb-lang{display:inline-flex;align-items:center;gap:4px;}' +
+    '#' + BAR_ID + ' .sb-lang select{' +
+    'appearance:none;-webkit-appearance:none;cursor:pointer;' +
+    'padding:4px 20px 4px 9px;border-radius:7px;font-family:inherit;font-size:12px;line-height:1.3;' +
+    'border:1px solid rgba(0,255,140,.45);background:rgba(0,255,140,.07);color:#00ff8c;' +
+    'background-image:linear-gradient(45deg,transparent 50%,#00ff8c 50%),' +
+    'linear-gradient(135deg,#00ff8c 50%,transparent 50%);' +
+    'background-position:calc(100% - 11px) 50%,calc(100% - 7px) 50%;' +
+    'background-size:4px 4px,4px 4px;background-repeat:no-repeat;}' +
+    '#' + BAR_ID + ' .sb-lang select:focus{outline:none;}' +
+    '#' + BAR_ID + ' .sb-lang select option{background:#0a120e;color:#e8f5ee;}' +
+    '@media (max-width:420px){#' + BAR_ID + ' .sb-lang select{padding:3px 18px 3px 7px;font-size:11px;}}' +
     '@media (max-width:420px){' +
     '#' + BAR_ID + '{padding:0 8px;gap:6px;}' +
     '#' + BAR_ID + ' .sb-pre{display:none;}' +
@@ -341,33 +355,59 @@
   function themeName(t) { return (THEMES[t] || THEMES.dark); }
 
 
-  /** 登录后：账户里有偏好、且和这台设备不一致 → 滑出来问一次是否套用 */
+  /* 账户偏好 = 主题 + 语言，两件事合起来算一份「偏好」。
+   * 只要有一项和设备当前不一致，就滑出来问一次；两项都一致就不问。 */
   function maybeAskUsePref(data) {
     if (prefPrompted) return;
     var user = data && data.loggedIn ? String(data.username || '') : '';
     if (!user) return;
-    var saved = data.prefTheme;
-    if (!isTheme(saved)) return;
-    var cur = currentTheme();
-    if (saved === cur) { writePrefAck(user, saved); return; }
-    if (readPrefAck(user) === saved) return;   // 这台设备已经对这个值做过选择
+
+    var savedTheme = data.prefTheme;
+    var savedLang = data.prefLang || null;
+    var hasTheme = isTheme(savedTheme);
+    var hasLang = !!(savedLang && SITE_LANG_SITE[savedLang]);
+    if (!hasTheme && !hasLang) return;
+
+    var curTheme = currentTheme();
+    var curLang = currentSiteLang();
+    var themeDiff = hasTheme && savedTheme !== curTheme;
+    var langDiff = hasLang && savedLang !== curLang;
+    if (!themeDiff && !langDiff) {
+      writePrefAck(user, ackValue(savedTheme, savedLang));
+      return;
+    }
+    var key = ackValue(savedTheme, savedLang);
+    if (readPrefAck(user) === key) return;
+
     prefPrompted = true;
+    var parts = [];
+    if (themeDiff) parts.push('「' + themeName(savedTheme) + '」模式');
+    if (langDiff) parts.push('「' + (SITE_LANG_NAME[savedLang] || savedLang) + '」语言');
+    var curParts = [];
+    if (themeDiff) curParts.push('「' + themeName(curTheme) + '」模式');
+    if (langDiff) curParts.push('「' + (SITE_LANG_NAME[curLang] || '当前') + '」语言');
+
     showMcToast({
       icon: '⚙',
       title: '账户偏好设置',
-      desc: '你的账户保存了「' + themeName(saved) + '」模式，这台设备现在是「' + themeName(cur) + '」。要使用账户里的偏好吗？',
+      desc: '你的账户保存了 ' + parts.join(' 和 ') + '，这台设备现在是 ' + curParts.join(' 和 ') + '。要使用账户里的偏好吗？',
       autoHideMs: 15000,
       actions: [
         {
           text: '使用账户偏好',
           cls: 'primary',
           onClick: function () {
-            applyTheme(saved, true);
-            writePrefAck(user, saved);
+            writePrefAck(user, key);
+            if (themeDiff) applyTheme(savedTheme, true);
+            if (langDiff) {
+              // 语言要换站，跳走之后就不用再弹「已套用」了
+              location.replace(pathInLang(savedLang) + location.search);
+              return;
+            }
             showMcToast({
-              icon: themeMeta(saved).ico,
+              icon: themeMeta(savedTheme).ico,
               title: '已套用账户偏好',
-              desc: '现在是「' + themeName(saved) + '」模式。',
+              desc: '现在是「' + themeName(savedTheme) + '」模式。',
               autoHideMs: 2800
             });
           }
@@ -375,69 +415,88 @@
         {
           text: '保持这台设备',
           cls: 'mute',
-          onClick: function () { writePrefAck(user, saved); }
+          onClick: function () { writePrefAck(user, key); }
         }
       ]
     });
   }
 
-  /* ==================== 所在地区 → 语种站 ====================
-   * 账户在控制台选了「所在地区」后，登录状态下应该停在对应语种站：
-   * 选了美国却还站在 /zh_cn/ 上，就自动换到 /en_us/ 的同名页面（反之亦然）。
-   *
-   * 只跳一次：用 sessionStorage 记「这台设备已经为该地区跳过一次」，
-   * 免得用户在英文站上手动点回中文后被反复弹回去。
-   * 只对页面生效：/api、静态资源不碰（status.js 本来就只在页面里跑）。
+  /** 把主题 + 语言压成一个字符串做「这台设备已确认过」的标记 */
+  function ackValue(theme, lang) {
+    return String(theme || '') + '|' + String(lang || '');
+  }
+
+  /**
+   * 用户手动切换语言后（已登录）：问要不要把这个语言存成账户默认。
+   *   存 → 写账户偏好，然后跳过去（以后任何设备登录都按这个语言）
+   *   不存 → 只改本机 Cookie，跳过去；账户偏好保持原样
+   * 不管选哪个，都会跳 —— 语言切换本身是立即生效的。
    */
-  var REGION_REDIRECT_KEY = 'zrfeng-region-redirect:';
-
-  function regionRedirectKey(user, region) {
-    return REGION_REDIRECT_KEY + String(user || '').toLowerCase() + ':' + String(region || '');
+  function askSaveLangPref(want, target) {
+    var name = SITE_LANG_NAME[want] || want;
+    var logged = lastStatus && lastStatus.loggedIn ? String(lastStatus.username || '') : '';
+    showMcToast({
+      icon: '🌐',
+      title: '账户偏好设置',
+      desc: '要把「' + name + '」保存为账户默认语言吗？保存后换设备登录也会用这个语言；不保存就只在这台设备生效。',
+      autoHideMs: 18000,
+      actions: [
+        {
+          text: '保存到账户',
+          cls: 'primary',
+          onClick: function () {
+            fetch('/api/pref', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ lang: want })
+            }).catch(function () { /* 存失败也照常跳，本机 Cookie 已经改了 */ })
+              .then(function () {
+                if (logged) writePrefAck(logged, ackValue((lastStatus || {}).prefTheme, want));
+                location.href = target + location.search;
+              });
+          }
+        },
+        {
+          text: '只改本机',
+          cls: 'mute',
+          onClick: function () { location.href = target + location.search; }
+        }
+      ]
+    });
   }
 
-  function regionAlreadyJumped(user, region) {
-    try { return sessionStorage.getItem(regionRedirectKey(user, region)) === '1'; } catch (e) { return false; }
-  }
+  /* ==================== 界面语言（与地区解耦） ====================
+   * 三档：简 / 繁 / EN。右上角下拉切换。
+   *
+   * 关键约定：
+   *   1) 换语言**不动账户里的地区** —— 语言是「你现在想看哪种文字」，
+   *      地区是「你在哪」，两件事分开；
+   *   2) 换完弹一次「账户偏好设置」，问要不要把这个语言存成账户默认，
+   *      以后在任何设备登录都按它来（这一步和主题共用同一套弹窗）；
+   *   3) 未登录也能换，只是不弹偏好设置（没有账户可存）。
+   */
+  var SITE_LANG_SITE = { zh: '/zh_cn/', zh_hant: '/zh_tw/', en: '/en_us/' };
+  var SITE_LANG_NAME = { zh: '简体中文', zh_hant: '繁體中文', en: 'English' };
+  var SITE_PREFIXES = [['/zh_tw', 'zh_hant'], ['/zh_cn', 'zh'], ['/en_us', 'en']];
 
-  function markRegionJumped(user, region) {
-    try { sessionStorage.setItem(regionRedirectKey(user, region), '1'); } catch (e) { }
-  }
-
-  /** 地区代码 → 目标语种目录（和服务端 SITE_REGIONS 保持一致） */
-  function siteLangOfRegion(region) {
-    var r = String(region || '').toUpperCase();
-    if (r === 'CN') return 'zh';
-    if (r === 'US') return 'en';
+  /** 当前页在哪个语种站；不在任何语种目录就返回 null */
+  function currentSiteLang() {
+    var p = location.pathname;
+    for (var i = 0; i < SITE_PREFIXES.length; i++) {
+      var pre = SITE_PREFIXES[i][0];
+      if (p === pre || p.indexOf(pre + '/') === 0) return SITE_PREFIXES[i][1];
+    }
     return null;
   }
 
-  function maybeFollowRegion(data) {
-    if (!data || !data.loggedIn) return;
-    var user = String(data.username || '');
-    var region = data.prefRegion || null;
-    if (!user || !region) return;
-
-    var wantLang = siteLangOfRegion(region);
-    if (!wantLang) return;
-
-    var path = location.pathname;
-    var onEn = path === '/en_us' || path.indexOf('/en_us/') === 0;
-    var onZh = path === '/zh_cn' || path.indexOf('/zh_cn/') === 0;
-    // 只在两个语种目录之间互跳；根路径 / 选择页不碰（那边由服务端决定）
-    if (!onEn && !onZh) return;
-
-    var curLang = onEn ? 'en' : 'zh';
-    if (curLang === wantLang) {
-      // 已经在正确的语种站 → 清掉标记，下次换地区还能再跳
-      try { sessionStorage.removeItem(regionRedirectKey(user, region)); } catch (e) { }
-      return;
-    }
-    if (regionAlreadyJumped(user, region)) return;
-
-    markRegionJumped(user, region);
-    var rest = onEn ? path.slice('/en_us'.length) : path.slice('/zh_cn'.length);
-    if (!rest) rest = '/';
-    location.replace((wantLang === 'en' ? '/en_us' : '/zh_cn') + rest + location.search);
+  /** 当前页面路径 → 目标语种的同名页面 */
+  function pathInLang(lang) {
+    var cur = currentSiteLang();
+    var base = SITE_LANG_SITE[lang] || SITE_LANG_SITE.en;
+    if (!cur) return base;
+    var curBase = SITE_LANG_SITE[cur];
+    var rest = location.pathname.slice(curBase.length - 1);
+    return base.replace(/\/$/, '') + (rest === '/' ? '/' : rest);
   }
 
 
@@ -992,6 +1051,39 @@
 
     var right = document.createElement('div');
     right.className = 'sb-r';
+
+    /* 右上角语言选择器：三档，和地区无关，未登录也能用。
+       放在控制台 / 登出前面，保证任何状态下都在最右侧固定位置。 */
+    (function addLangSwitch() {
+      var cur = currentSiteLang() || 'en';
+      var wrap = document.createElement('span');
+      wrap.className = 'sb-lang';
+      var sel = document.createElement('select');
+      sel.setAttribute('aria-label', '选择语言 / Language');
+      sel.title = '选择界面语言（不影响账户地区）';
+      [['zh', '简体'], ['zh_hant', '繁體'], ['en', 'EN']].forEach(function (p) {
+        var o = document.createElement('option');
+        o.value = p[0];
+        o.textContent = p[1];
+        if (p[0] === cur) o.selected = true;
+        sel.appendChild(o);
+      });
+      sel.onchange = function () {
+        var want = sel.value;
+        if (want === currentSiteLang()) return;
+        // 记住本机选择；随后整页跳到目标语种站
+        try { document.cookie = 'zrfeng-lang=' + want + '; Path=/; Max-Age=15552000; SameSite=Lax'; } catch (e) { }
+        var target = pathInLang(want);
+        // 已登录：先去问要不要存成账户偏好，由弹窗决定是否跳转
+        if (lastStatus && lastStatus.loggedIn) {
+          askSaveLangPref(want, target);
+          return;
+        }
+        location.href = target + location.search;
+      };
+      wrap.appendChild(sel);
+      right.appendChild(wrap);
+    })();
     // 右上角控制台：已激活（完成邮箱验证）的用户可见。
     // 管理员额外可见 —— 否则没人能去激活被拦截的账户。
     if (data && data.loggedIn && (acc.activated || data.isAdmin)) {

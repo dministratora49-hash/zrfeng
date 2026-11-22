@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>/* 儘早落地主題（預設原生安卓；只認控制台「外觀」裡存下的值，避免閃色） */(function(){var t='android';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark'||s==='android')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
+<title>登入 / 註冊 · zrfeng.top</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    min-height: 100vh;
+    background: #050807;
+    background-image:
+      radial-gradient(circle at 20% 20%, rgba(0, 255, 140, 0.06) 0%, transparent 50%),
+      radial-gradient(circle at 80% 80%, rgba(0, 255, 140, 0.05) 0%, transparent 50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 48px 20px;
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    color: #e8f5ee;
+  }
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,255,140,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,255,140,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+  }
+
+  .card {
+    position: relative;
+    width: 100%;
+    max-width: 420px;
+    padding: 32px 26px;
+    border: 1px solid rgba(0, 255, 140, 0.35);
+    border-radius: 16px;
+    background: rgba(10, 18, 14, 0.9);
+    box-shadow: 0 0 30px rgba(0, 255, 140, 0.1);
+  }
+
+  h1 {
+    font-size: 26px;
+    text-align: center;
+    margin-bottom: 6px;
+    background: linear-gradient(90deg, #ffffff, #00ff8c);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .sub {
+    text-align: center;
+    font-size: 12px;
+    color: #7fa893;
+    letter-spacing: 1px;
+    margin-bottom: 24px;
+  }
+
+  /* 標籤切換 */
+  .tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 22px;
+    padding: 4px;
+    border-radius: 10px;
+    background: rgba(0, 255, 140, 0.05);
+  }
+  .tab {
+    flex: 1;
+    padding: 9px 0;
+    font-size: 14px;
+    font-family: inherit;
+    letter-spacing: 1px;
+    color: #7fa893;
+    background: transparent;
+    border: none;
+    border-radius: 7px;
+    cursor: pointer;
+    transition: all 0.22s;
+  }
+  .tab.on {
+    color: #050807;
+    font-weight: 700;
+    background: #00ff8c;
+    box-shadow: 0 0 16px rgba(0, 255, 140, 0.35);
+  }
+
+  .field { margin-bottom: 15px; }
+  .field label {
+    display: block;
+    font-size: 12px;
+    color: #7fa893;
+    letter-spacing: 1px;
+    margin-bottom: 7px;
+  }
+  .field input {
+    width: 100%;
+    padding: 12px 14px;
+    font-size: 14px;
+    font-family: inherit;
+    color: #e8f5ee;
+    background: rgba(5, 8, 7, 0.85);
+    border: 1px solid rgba(0, 255, 140, 0.22);
+    border-radius: 9px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .field input:focus {
+    border-color: #00ff8c;
+    box-shadow: 0 0 0 3px rgba(0, 255, 140, 0.1);
+  }
+  .field input::placeholder { color: #4a6a58; }
+
+  /* 郵箱即時校驗提示 */
+  .hint {
+    margin-top: 6px;
+    font-size: 12px;
+    line-height: 1.5;
+    min-height: 16px;
+  }
+  .hint.ok { color: #00ff8c; }
+  .hint.bad { color: #ff7a7a; }
+
+  /* 驗證碼一行 */
+  .row-code { display: flex; gap: 8px; }
+  .row-code input { flex: 1; }
+  .row-code button {
+    flex-shrink: 0;
+    padding: 0 16px;
+    font-size: 13px;
+    font-family: inherit;
+    color: #00ff8c;
+    background: rgba(0, 255, 140, 0.08);
+    border: 1px solid rgba(0, 255, 140, 0.35);
+    border-radius: 9px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s;
+  }
+  .row-code button:hover:not(:disabled) {
+    background: rgba(0, 255, 140, 0.18);
+    border-color: #00ff8c;
+  }
+  .row-code button:disabled { color: #4a6a58; border-color: rgba(0,255,140,0.15); cursor: not-allowed; }
+
+  /* 人機驗證 */
+  .captcha-box {
+    padding: 12px 14px;
+    border: 1px dashed rgba(0, 255, 140, 0.3);
+    border-radius: 9px;
+    background: rgba(0, 255, 140, 0.03);
+  }
+  .captcha-row { display: flex; align-items: center; gap: 10px; }
+  .captcha-q {
+    font-size: 15px;
+    color: #00ff8c;
+    letter-spacing: 1px;
+    white-space: nowrap;
+  }
+  .captcha-row input { flex: 1; min-width: 0; padding: 8px 10px; font-size: 14px; font-family: inherit;
+    color: #e8f5ee; background: rgba(5,8,7,0.85); border: 1px solid rgba(0,255,140,0.22);
+    border-radius: 7px; outline: none; }
+  .captcha-row input:focus { border-color: #00ff8c; }
+  .refresh {
+    flex-shrink: 0; padding: 7px 10px; font-size: 15px; line-height: 1;
+    background: transparent; color: #7fa893; border: 1px solid rgba(0,255,140,0.2);
+    border-radius: 7px; cursor: pointer; transition: all 0.2s;
+  }
+  .refresh:hover { color: #00ff8c; border-color: #00ff8c; }
+
+  /* 提交按鈕 */
+  .submit {
+    width: 100%;
+    margin-top: 20px;
+    padding: 13px 0;
+    font-size: 15px;
+    font-family: inherit;
+    font-weight: 700;
+    letter-spacing: 3px;
+    color: #050807;
+    background: linear-gradient(90deg, #00ff8c, #00d97a);
+    border: none;
+    border-radius: 9px;
+    cursor: pointer;
+    transition: box-shadow 0.25s, transform 0.15s;
+  }
+  .submit:hover { box-shadow: 0 0 26px rgba(0, 255, 140, 0.45); }
+  .submit:active { transform: scale(0.99); }
+  .submit:disabled { opacity: 0.55; cursor: not-allowed; box-shadow: none; }
+
+  /* 提示條 */
+  .msg {
+    margin-top: 16px;
+    padding: 11px 13px;
+    font-size: 13px;
+    line-height: 1.6;
+    border-radius: 8px;
+    display: none;
+  }
+  .msg.show { display: block; }
+  .msg.ok { color: #00ff8c; background: rgba(0, 255, 140, 0.08); border: 1px solid rgba(0,255,140,0.3); }
+  .msg.err { color: #ff9b9b; background: rgba(255, 90, 90, 0.08); border: 1px solid rgba(255,90,90,0.3); }
+
+  .links {
+    margin-top: 20px;
+    text-align: center;
+    font-size: 12px;
+    color: #4a6a58;
+    line-height: 2;
+  }
+  .links a { color: #7fa893; text-decoration: none; }
+  .links a:hover { color: #00ff8c; }
+
+  .hide { display: none !important; }
+
+  @media (max-width: 420px) {
+    .card { padding: 26px 18px; }
+    h1 { font-size: 22px; }
+  }
+
+</style>
+<link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="/android.css">
+</head>
+<body>
+  <div class="card">
+    <h1 id="title">歡迎回來</h1>
+    <p class="sub" id="subtitle">登入後即可下載資源</p>
+
+    <div class="tabs">
+      <button class="tab on" id="tabLogin" type="button">登入</button>
+      <button class="tab" id="tabReg" type="button">註冊</button>
+    </div>
+
+    <!-- 登入表單 -->
+    <form id="formLogin" autocomplete="on">
+      <div class="field">
+        <label>賬號 / 郵箱</label>
+        <input type="text" id="loginAccount" placeholder="使用者名稱或郵箱" autocomplete="username" required>
+      </div>
+      <div class="field">
+        <label>密碼</label>
+        <input type="password" id="loginPassword" placeholder="請輸入密碼" autocomplete="current-password" required>
+      </div>
+
+      <div class="field">
+        <label>人機驗證</label>
+        <div class="captcha-box" id="captchaBoxLogin">
+          <div class="captcha-row" id="mathLogin">
+            <span class="captcha-q" id="captchaQLogin">載入中…</span>
+            <input type="text" id="captchaALogin" placeholder="答案" inputmode="numeric" autocomplete="off">
+            <button class="refresh" type="button" id="refreshLogin" title="換一題">↻</button>
+          </div>
+          <div id="turnstileLogin" class="hide"></div>
+        </div>
+      </div>
+
+      <button class="submit" type="submit" id="btnLogin">登 錄</button>
+
+      <div style="text-align:center;margin-top:12px">
+        <a href="#" id="forgotLink" style="font-size:13px;color:#7fa893;text-decoration:none">忘記密碼？</a>
+      </div>
+      <div class="msg" id="msgLogin"></div>
+    </form>
+
+    <!-- 登錄檔單 -->
+    <div id="formForgot" class="hide">
+      <div class="field">
+        <label>怎麼找回？</label>
+        <div style="display:flex;gap:8px;margin-bottom:14px">
+          <button type="button" id="fmCode" class="tab on" style="flex:1">用恢復程式碼</button>
+          <button type="button" id="fmMail" class="tab" style="flex:1">用郵箱驗證碼</button>
+        </div>
+      </div>
+
+      <!-- 方式一：恢復程式碼 -->
+      <div id="paneCode">
+        <div class="field">
+          <label>恢復程式碼</label>
+          <input type="text" id="rcInput" placeholder="key--使用者名稱:密碼--32位隨機" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="field">
+          <label>新密碼</label>
+          <input type="password" id="rcNew" placeholder="至少 6 位" autocomplete="new-password">
+        </div>
+        <div class="field">
+          <label>再輸一次新密碼</label>
+          <input type="password" id="rcNew2" placeholder="確認新密碼" autocomplete="new-password">
+        </div>
+        <button class="submit" type="button" id="rcSubmit">重設密碼</button>
+        <div class="msg" id="msgForgotCode"></div>
+        <div style="font-size:12px;color:#5c7a6b;line-height:1.8;margin-top:10px">
+          恢復程式碼在「控制台 → 賬戶安全 → 恢復程式碼」裡檢視。它區分大小寫，請完整複製。
+        </div>
+      </div>
+
+      <!-- 方式二：郵箱驗證碼 -->
+      <div id="paneMail" class="hide">
+        <div class="field">
+          <label>賬號 / 郵箱</label>
+          <input type="text" id="fmAccount" placeholder="使用者名稱或郵箱" autocomplete="username">
+        </div>
+        <div class="field">
+          <label>人機驗證</label>
+          <div class="captcha-box" id="captchaBoxForgot">
+            <div class="captcha-row" id="mathForgot">
+              <span class="captcha-q" id="captchaQForgot">載入中…</span>
+              <input type="text" id="captchaAForgot" placeholder="答案" inputmode="numeric" autocomplete="off">
+              <button class="refresh" type="button" id="refreshForgot" title="換一題">↻</button>
+            </div>
+            <div id="turnstileForgot" class="hide"></div>
+          </div>
+        </div>
+        <button class="submit" type="button" id="fmSend" style="background:linear-gradient(135deg,#00c96e,#00a85c)">傳送驗證碼</button>
+
+        <div id="fmMailStep2" class="hide" style="margin-top:16px">
+          <div class="field">
+            <label>郵箱驗證碼</label>
+            <input type="text" id="fmCodeInput" placeholder="6 位數字" inputmode="numeric" maxlength="6" autocomplete="off">
+          </div>
+          <div class="field">
+            <label>新密碼</label>
+            <input type="password" id="fmNew" placeholder="至少 6 位" autocomplete="new-password">
+          </div>
+          <div class="field">
+            <label>再輸一次新密碼</label>
+            <input type="password" id="fmNew2" placeholder="確認新密碼" autocomplete="new-password">
+          </div>
+          <button class="submit" type="button" id="fmConfirm">重設密碼</button>
+        </div>
+        <div class="msg" id="msgForgotMail"></div>
+      </div>
+
+      <div style="text-align:center;margin-top:14px">
+        <a href="#" id="forgotBack" style="font-size:13px;color:#7fa893;text-decoration:none">← 返回登入</a>
+      </div>
+    </div>
+
+    <form id="formReg" class="hide" autocomplete="on">
+      <div class="field">
+        <label>郵箱</label>
+        <input type="email" id="regEmail" placeholder="僅支援 .com .cn .net .top 結尾" autocomplete="email" required>
+        <div class="hint" id="emailHint"></div>
+      </div>
+
+      <div class="field">
+        <label>郵箱驗證碼</label>
+        <div class="row-code">
+          <input type="text" id="regCode" placeholder="6 位驗證碼" inputmode="numeric" maxlength="6" autocomplete="off">
+          <button type="button" id="btnSendCode">傳送驗證碼</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>使用者名稱</label>
+        <input type="text" id="regUser" placeholder="3-20 位字母數字下劃線" autocomplete="username" required>
+      </div>
+
+      <div class="field">
+        <label>密碼</label>
+        <input type="password" id="regPass" placeholder="至少 6 位" autocomplete="new-password" required>
+      </div>
+
+      <div class="field">
+        <label>人機驗證</label>
+        <div class="captcha-box">
+          <div class="captcha-row" id="mathReg">
+            <span class="captcha-q" id="captchaQReg">載入中…</span>
+            <input type="text" id="captchaAReg" placeholder="答案" inputmode="numeric" autocomplete="off">
+            <button class="refresh" type="button" id="refreshReg" title="換一題">↻</button>
+          </div>
+          <div id="turnstileReg" class="hide"></div>
+        </div>
+      </div>
+
+      <button class="submit" type="submit" id="btnReg">注 冊</button>
+      <div class="msg" id="msgReg"></div>
+    </form>
+
+    <div class="links">
+      <a href="/zh_tw/guide">← 返回導航站</a>
+    </div>
+  </div>
+
+<script>
+(function () {
+  var SITE = 'https://www.zrfeng.top';
+  var cfg = { turnstile: false, turnstileSiteKey: '' };
+
+  /* 登入 / 註冊 / 驗證成功後跳到哪：服務端按賬戶「所在地區」下發 site
+   * （/zh_tw/ 或 /en_us/）；沒下發就留在當前語種，不硬編碼成中文站。 */
+  function goAfterAuth(data) {
+    var to = (data && data.site) || (location.pathname.indexOf('/en_us/') === 0 ? '/en_us/' : '/zh_tw/');
+    location.href = SITE + to;
+  }
+
+  /* ---------- 工具 ---------- */
+  function $(id) { return document.getElementById(id); }
+  function show(el, text, type) {
+    el.textContent = text;
+    el.className = 'msg show ' + (type || 'ok');
+  }
+  function hide(el) { el.className = 'msg'; el.textContent = ''; }
+
+  async function api(path, options) {
+    var opt = options || {};
+    var res = await fetch(SITE + path, {
+      method: opt.method || 'GET',
+      headers: { 'content-type': 'application/json' },
+      credentials: 'same-origin',
+      body: opt.body ? JSON.stringify(opt.body) : undefined
+    });
+    var data;
+    try { data = await res.json(); } catch (e) { data = { ok: false, message: '伺服器響應異常' }; }
+    return { status: res.status, data: data };
+  }
+
+  /* ---------- 人機驗證 ---------- */
+  var captcha = { login: {}, reg: {} };
+
+  async function loadCaptcha(which) {
+    var qEl = $(which === 'login' ? 'captchaQLogin' : 'captchaQReg');
+    var aEl = $(which === 'login' ? 'captchaALogin' : 'captchaAReg');
+    if (cfg.turnstile) { qEl.parentNode.classList.add('hide'); return; }
+    qEl.textContent = '載入中…';
+    if (aEl) aEl.value = '';
+    try {
+      var r = await api('/api/captcha');
+      if (r.data && r.data.ok && r.data.mode === 'math') {
+        captcha[which] = { id: r.data.id };
+        qEl.textContent = r.data.question;
+      } else {
+        qEl.textContent = '驗證載入失敗，點選 ↻ 重試';
+      }
+    } catch (e) {
+      qEl.textContent = '網路異常，點選 ↻ 重試';
+    }
+  }
+
+  /* ---------- 郵箱即時校驗 ---------- */
+  var emailTimer = null;
+  $('regEmail').addEventListener('input', function () {
+    var el = $('emailHint');
+    var v = this.value.trim();
+    clearTimeout(emailTimer);
+    if (!v) { el.textContent = ''; el.className = 'hint'; return; }
+    emailTimer = setTimeout(async function () {
+      try {
+        var r = await api('/api/email-check', { method: 'POST', body: { email: v } });
+        if (r.data.ok) {
+          el.textContent = '✓ 該郵箱可用';
+          el.className = 'hint ok';
+        } else {
+          el.textContent = '✕ ' + r.data.message;
+          el.className = 'hint bad';
+        }
+      } catch (e) { el.textContent = ''; el.className = 'hint'; }
+    }, 320);
+  });
+
+  /* ---------- 傳送驗證碼 ---------- */
+  var sendTimer = 0;
+  $('btnSendCode').addEventListener('click', async function () {
+    var btn = this;
+    var email = $('regEmail').value.trim();
+    var hint = $('emailHint');
+
+    if (!email) {
+      hint.textContent = '✕ 請先填寫郵箱';
+      hint.className = 'hint bad';
+      return;
+    }
+    if (cfg.turnstile && !window.turnstileAnswered) {
+      show($('msgReg'), '請先完成人機驗證', 'err');
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = '傳送中…';
+    var payload = { email: email };
+    if (cfg.turnstile) payload.turnstileToken = window.turnstileAnswered || '';
+    else {
+      payload.captchaId = captcha.reg.id;
+      payload.captchaAnswer = $('captchaAReg').value;
+    }
+
+    var r = await api('/api/send-code', { method: 'POST', body: payload });
+
+    if (r.data.ok) {
+      show($('msgReg'), r.data.message || '驗證碼已傳送', 'ok');
+      sendTimer = 60;
+      tick();
+      loadCaptcha('reg'); /* 用完即換，防重放 */
+    } else {
+      show($('msgReg'), r.data.message || '傳送失敗', 'err');
+      btn.disabled = false;
+      btn.textContent = '傳送驗證碼';
+      loadCaptcha('reg');
+    }
+  });
+
+  function tick() {
+    var btn = $('btnSendCode');
+    if (sendTimer <= 0) {
+      btn.disabled = false;
+      btn.textContent = '傳送驗證碼';
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = sendTimer + ' 秒後重發';
+    sendTimer--;
+    setTimeout(tick, 1000);
+  }
+
+  /* ---------- 登入 ---------- */
+  $('formLogin').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    var btn = $('btnLogin');
+    var msg = $('msgLogin');
+    hide(msg);
+
+    var payload = {
+      account: $('loginAccount').value.trim(),
+      password: $('loginPassword').value
+    };
+    if (cfg.turnstile) payload.turnstileToken = window.turnstileAnswered || '';
+    else {
+      payload.captchaId = captcha.login.id;
+      payload.captchaAnswer = $('captchaALogin').value;
+    }
+
+    btn.disabled = true;
+    btn.textContent = '登入中…';
+    var r = await api('/api/login', { method: 'POST', body: payload });
+
+    if (r.data.ok) {
+      show(msg, '登入成功，正在跳轉…', 'ok');
+      setTimeout(function () { goAfterAuth(r.data); }, 700);
+    } else if (r.data.needDeviceKey) {
+      // 沒有郵箱的賬戶：改用「管理員給的金鑰」確認身份
+      show(msg, r.data.message || '我們無法認證你的身份，請輸入管理員給你的金鑰', 'err');
+      deviceKeyStep(r.data.ticket, btn);
+    } else if (r.data.blocked) {
+      // 檢測到 VPN / 代理：賬號已被封停，彈出專用提示
+      if (window.zrfengProxyBlock) window.zrfengProxyBlock(r.data.message);
+      show(msg, '檢測到VPN或代理，賬戶已被封停', 'err');
+      btn.disabled = false;
+      btn.textContent = '登 錄';
+      if (!cfg.turnstile) loadCaptcha('login');
+    } else if (r.data.needDeviceVerify) {
+      // 新裝置：賬號密碼已透過，還要輸一次發到郵箱的驗證碼
+      show(msg, r.data.message || '這是一臺新裝置，請輸入郵箱驗證碼', 'ok');
+      deviceStep(r.data.ticket, btn);
+    } else {
+      show(msg, r.data.message || '登入失敗', 'err');
+      btn.disabled = false;
+      btn.textContent = '登 錄';
+      if (!cfg.turnstile) loadCaptcha('login');
+    }
+  });
+
+  /* ---------- 新裝置登入驗證 ---------- */
+  var devTicket = null;
+
+  function deviceStep(ticket, loginBtn) {
+    devTicket = ticket;
+    var wrap = document.createElement('div');
+    wrap.id = 'devBox';
+    wrap.style.cssText = 'margin-top:14px;padding:14px;border:1px solid rgba(0,255,140,.35);border-radius:12px;background:rgba(0,255,140,.05)';
+    wrap.innerHTML =
+      '<div style="font-size:13px;color:#a9c6b8;margin-bottom:8px">這臺裝置是第一次登入，請輸入傳送到你郵箱的 6 位驗證碼：</div>' +
+      '<input id="devCode" inputmode="numeric" maxlength="6" placeholder="000000" ' +
+      'style="width:100%;padding:11px 13px;border-radius:9px;border:1px solid rgba(0,255,140,.4);background:rgba(0,0,0,.45);color:#e8f5ee;font-size:18px;letter-spacing:7px;text-align:center;font-family:ui-monospace,monospace;margin-bottom:10px">' +
+      '<div style="display:flex;gap:10px">' +
+      '<button type="button" id="devResend" style="flex:1;padding:10px 0;border-radius:9px;border:1px solid rgba(0,255,140,.45);background:transparent;color:#00ff8c;font-size:13px;font-family:inherit;cursor:pointer">重新傳送</button>' +
+      '<button type="button" id="devOk" style="flex:1;padding:10px 0;border-radius:9px;border:none;background:linear-gradient(135deg,#00ff8c,#00c96e);color:#04140c;font-weight:700;font-size:14px;font-family:inherit;cursor:pointer">驗證並登入</button>' +
+      '</div>';
+    var host = loginBtn.closest('form') || loginBtn.parentNode;
+    host.appendChild(wrap);
+    if (loginBtn) { loginBtn.disabled = true; }
+    var input = document.getElementById('devCode');
+    if (input) input.focus();
+    document.getElementById('devOk').onclick = function () { doDeviceVerify(); };
+    document.getElementById('devResend').onclick = function () { resendDeviceCode(this); };
+    if (input) input.onkeydown = function (e) { if (e.key === 'Enter') doDeviceVerify(); };
+  }
+
+  async function doDeviceVerify() {
+    var msg = $('msgLogin');
+    var code = (document.getElementById('devCode') || {}).value || '';
+    if (!/^\d{6}$/.test(code.trim())) { if (msg) show(msg, '請輸入 6 位驗證碼', 'err'); return; }
+    var btn = document.getElementById('devOk');
+    if (btn) btn.disabled = true;
+    try {
+      var r = await api('/api/login/verify', { method: 'POST', body: { ticket: devTicket, code: code.trim() } });
+      if (r.data.ok) {
+        if (msg) show(msg, '驗證透過，正在跳轉…', 'ok');
+        setTimeout(function () { goAfterAuth(r.data); }, 700);
+      } else {
+        if (msg) show(msg, r.data.message || '驗證失敗', 'err');
+        if (btn) btn.disabled = false;
+      }
+    } catch (e) {
+      if (msg) show(msg, '網路錯誤', 'err');
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async function resendDeviceCode(el) {
+    var msg = $('msgLogin');
+    el.disabled = true;
+    try {
+      var r = await api('/api/login/verify', { method: 'POST', body: { ticket: devTicket, resend: true } });
+      if (msg) show(msg, r.data.message || '已重新傳送', r.data.ok ? 'ok' : 'err');
+    } catch (e) {
+      if (msg) show(msg, '網路錯誤', 'err');
+    }
+    setTimeout(function () { el.disabled = false; }, 3000);
+  }
+
+  /* ---------- 無郵箱賬戶：管理員金鑰 ---------- */
+  function deviceKeyStep(ticket, loginBtn) {
+    devTicket = ticket;
+    var wrap = document.createElement('div');
+    wrap.id = 'devKeyBox';
+    wrap.style.cssText = 'margin-top:14px;padding:14px;border:1px solid rgba(255,120,120,.4);border-radius:12px;background:rgba(255,80,80,.05)';
+    wrap.innerHTML =
+      '<div style="font-size:13px;color:#e0b0b0;margin-bottom:10px;line-height:1.7">' +
+        '這個賬戶沒有繫結郵箱，無法傳送驗證碼。<br>請輸入<b>管理員給你的金鑰</b>以確認身份：' +
+      '</div>' +
+      '<input id="devKey" placeholder="管理員給你的金鑰" autocomplete="off" ' +
+      'style="width:100%;padding:11px 13px;border-radius:9px;border:1px solid rgba(255,120,120,.45);background:rgba(0,0,0,.45);color:#e8f5ee;font-size:15px;margin-bottom:10px">' +
+      '<button type="button" id="devKeyOk" style="width:100%;padding:11px 0;border-radius:9px;border:none;background:linear-gradient(135deg,#00ff8c,#00c96e);color:#04140c;font-weight:700;font-size:14px;font-family:inherit;cursor:pointer">確認身份</button>';
+    var host = loginBtn.closest('form') || loginBtn.parentNode;
+    host.appendChild(wrap);
+    if (loginBtn) loginBtn.disabled = true;
+    var input = document.getElementById('devKey');
+    if (input) { input.focus(); input.onkeydown = function (e) { if (e.key === 'Enter') doDeviceKey(); }; }
+    document.getElementById('devKeyOk').onclick = function () { doDeviceKey(); };
+  }
+
+  async function doDeviceKey() {
+    var msg = $('msgLogin');
+    var key = ((document.getElementById('devKey') || {}).value || '').trim();
+    if (!key) { if (msg) show(msg, '請輸入金鑰', 'err'); return; }
+    var btn = document.getElementById('devKeyOk');
+    if (btn) btn.disabled = true;
+    try {
+      var r = await api('/api/login/verify', { method: 'POST', body: { ticket: devTicket, key: key } });
+      if (r.data.ok) {
+        if (msg) show(msg, '身份確認，正在跳轉…', 'ok');
+        setTimeout(function () { goAfterAuth(r.data); }, 700);
+      } else {
+        if (msg) show(msg, r.data.message || '你無權訪問', 'err');
+        if (btn) btn.disabled = false;
+      }
+    } catch (e) {
+      if (msg) show(msg, '網路錯誤', 'err');
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  /* ---------- 忘記密碼 ---------- */
+  var forgotCaptcha = { id: '', answer: '' };
+
+  function showForgot(on) {
+    $('formLogin').className = on ? 'hide' : '';
+    $('formReg').className = 'hide';
+    $('formForgot').className = on ? '' : 'hide';
+    $('tabLogin').className = 'tab' + (on ? '' : ' on');
+    $('tabReg').className = 'tab';
+    if (on) {
+      loadForgotCaptcha();
+      var el = $('rcInput');
+      if (el) el.focus();
+    }
+  }
+
+  function switchForgot(which) {
+    var isCode = which === 'code';
+    $('fmCode').className = 'tab' + (isCode ? ' on' : '');
+    $('fmMail').className = 'tab' + (isCode ? '' : ' on');
+    $('paneCode').className = isCode ? '' : 'hide';
+    $('paneMail').className = isCode ? 'hide' : '';
+  }
+
+  async function loadForgotCaptcha() {
+    if (cfg.turnstile) return;
+    try {
+      var r = await api('/api/captcha');
+      forgotCaptcha.id = r.data.id;
+      $('captchaQForgot').textContent = r.data.question;
+      $('captchaAForgot').value = '';
+    } catch (e) { /* 忽略 */ }
+  }
+
+  $('forgotLink').addEventListener('click', function (e) { e.preventDefault(); showForgot(true); });
+  $('forgotBack').addEventListener('click', function (e) { e.preventDefault(); showForgot(false); });
+  $('fmCode').addEventListener('click', function () { switchForgot('code'); });
+  $('fmMail').addEventListener('click', function () { switchForgot('mail'); });
+  $('refreshForgot').addEventListener('click', loadForgotCaptcha);
+
+  /* 方式一：恢復程式碼 */
+  $('rcSubmit').addEventListener('click', async function () {
+    var btn = this, msg = $('msgForgotCode');
+    hide(msg);
+    var code = $('rcInput').value.trim();
+    var p1 = $('rcNew').value, p2 = $('rcNew2').value;
+    if (!code) { show(msg, '請輸入恢復程式碼', 'err'); return; }
+    if (p1.length < 6) { show(msg, '新密碼至少 6 位', 'err'); return; }
+    if (p1 !== p2) { show(msg, '兩次輸入的新密碼不一致', 'err'); return; }
+    btn.disabled = true;
+    try {
+      var r = await api('/api/recover/code', { method: 'POST', body: { code: code, password: p1 } });
+      if (r.data.ok) {
+        show(msg, '密碼已重設！正在回到登入頁…', 'ok');
+        setTimeout(function () {
+          showForgot(false);
+          $('loginAccount').value = r.data.username || $('loginAccount').value;
+          $('loginPassword').value = '';
+          $('loginPassword').focus();
+          btn.disabled = false;
+          $('rcInput').value = ''; $('rcNew').value = ''; $('rcNew2').value = '';
+        }, 1200);
+      } else {
+        show(msg, r.data.message || '重設失敗', 'err');
+        btn.disabled = false;
+      }
+    } catch (e) { show(msg, '網路錯誤', 'err'); btn.disabled = false; }
+  });
+
+  /* 方式二：郵箱驗證碼 */
+  $('fmSend').addEventListener('click', async function () {
+    var btn = this, msg = $('msgForgotMail');
+    hide(msg);
+    var acc = $('fmAccount').value.trim();
+    if (!acc) { show(msg, '請輸入使用者名稱或郵箱', 'err'); return; }
+    var payload = { account: acc };
+    if (cfg.turnstile) payload.turnstileToken = window.turnstileAnswered || '';
+    else {
+      payload.captchaId = forgotCaptcha.id;
+      payload.captchaAnswer = $('captchaAForgot').value.trim();
+    }
+    btn.disabled = true;
+    try {
+      var r = await api('/api/recover/email/request', { method: 'POST', body: payload });
+      if (r.data.ok) {
+        show(msg, r.data.message || '驗證碼已傳送', 'ok');
+        $('fmMailStep2').className = '';
+        var el = $('fmCodeInput');
+        if (el) el.focus();
+      } else {
+        show(msg, r.data.message || '傳送失敗', 'err');
+        if (!cfg.turnstile) loadForgotCaptcha();
+      }
+    } catch (e) { show(msg, '網路錯誤', 'err'); }
+    btn.disabled = false;
+  });
+
+  $('fmConfirm').addEventListener('click', async function () {
+    var btn = this, msg = $('msgForgotMail');
+    hide(msg);
+    var acc = $('fmAccount').value.trim();
+    var code = $('fmCodeInput').value.trim();
+    var p1 = $('fmNew').value, p2 = $('fmNew2').value;
+    if (!/^\d{6}$/.test(code)) { show(msg, '請輸入 6 位驗證碼', 'err'); return; }
+    if (p1.length < 6) { show(msg, '新密碼至少 6 位', 'err'); return; }
+    if (p1 !== p2) { show(msg, '兩次輸入的新密碼不一致', 'err'); return; }
+    btn.disabled = true;
+    try {
+      var r = await api('/api/recover/email/confirm', { method: 'POST', body: { account: acc, code: code, password: p1 } });
+      if (r.data.ok) {
+        show(msg, '密碼已重設！正在回到登入頁…', 'ok');
+        setTimeout(function () {
+          showForgot(false);
+          $('loginAccount').value = r.data.username || acc;
+          $('loginPassword').value = '';
+          $('loginPassword').focus();
+          btn.disabled = false;
+          $('fmMailStep2').className = 'hide';
+          $('fmCodeInput').value = ''; $('fmNew').value = ''; $('fmNew2').value = '';
+        }, 1200);
+      } else {
+        show(msg, r.data.message || '重設失敗', 'err');
+        btn.disabled = false;
+      }
+    } catch (e) { show(msg, '網路錯誤', 'err'); btn.disabled = false; }
+  });
+
+  /* ---------- 註冊 ---------- */
+  $('formReg').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    var btn = $('btnReg');
+    var msg = $('msgReg');
+    hide(msg);
+
+    var payload = {
+      email: $('regEmail').value.trim(),
+      code: $('regCode').value.trim(),
+      username: $('regUser').value.trim(),
+      password: $('regPass').value
+    };
+    if (cfg.turnstile) payload.turnstileToken = window.turnstileAnswered || '';
+    else {
+      payload.captchaId = captcha.reg.id;
+      payload.captchaAnswer = $('captchaAReg').value;
+    }
+
+    btn.disabled = true;
+    btn.textContent = '註冊中…';
+    var r = await api('/api/register', { method: 'POST', body: payload });
+
+    if (r.data.ok) {
+      show(msg, '註冊成功，正在跳轉…', 'ok');
+      setTimeout(function () { goAfterAuth(r.data); }, 700);
+    } else if (r.data.blocked) {
+      // 註冊時檢測到 VPN / 代理：賬號已建但立即封停
+      if (window.zrfengProxyBlock) window.zrfengProxyBlock(r.data.message);
+      show(msg, '檢測到VPN或代理，賬戶已被封停', 'err');
+      btn.disabled = false;
+      btn.textContent = '注 冊';
+      if (!cfg.turnstile) loadCaptcha('reg');
+    } else {
+      show(msg, r.data.message || '註冊失敗', 'err');
+      btn.disabled = false;
+      btn.textContent = '注 冊';
+      if (!cfg.turnstile) loadCaptcha('reg');
+    }
+  });
+
+  /* ---------- 切換登入/註冊 ---------- */
+  function switchTo(which) {
+    var isLogin = which === 'login';
+    $('tabLogin').className = 'tab' + (isLogin ? ' on' : '');
+    $('tabReg').className = 'tab' + (isLogin ? '' : ' on');
+    $('formLogin').className = isLogin ? '' : 'hide';
+    $('formReg').className = isLogin ? 'hide' : '';
+    $('title').textContent = isLogin ? '歡迎回來' : '建立賬號';
+    $('subtitle').textContent = isLogin ? '登入後即可下載資源' : '僅支援 .com .cn .net .top 郵箱';
+    hide($('msgLogin')); hide($('msgReg'));
+  }
+  $('tabLogin').addEventListener('click', function () { switchTo('login'); });
+  $('tabReg').addEventListener('click', function () { switchTo('reg'); });
+
+  /* ---------- 換題 ---------- */
+  $('refreshLogin').addEventListener('click', function () { loadCaptcha('login'); });
+  $('refreshReg').addEventListener('click', function () { loadCaptcha('reg'); });
+
+  /* ---------- 初始化 ---------- */
+  (async function init() {
+    try {
+      var r = await api('/api/config');
+      if (r.data && r.data.ok) {
+        cfg.turnstile = !!r.data.turnstile;
+        cfg.turnstileSiteKey = r.data.turnstileSiteKey || '';
+      }
+    } catch (e) { /* 用預設的算術題 */ }
+
+    if (cfg.turnstile && cfg.turnstileSiteKey) {
+      /* 用 Cloudflare Turnstile */
+      var s = document.createElement('script');
+      s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+      s.async = true; s.defer = true;
+      s.onload = function () {
+        ['turnstileLogin', 'turnstileReg'].forEach(function (id) {
+          var box = $(id);
+          box.classList.remove('hide');
+          window.turnstile.render(box, {
+            sitekey: cfg.turnstileSiteKey,
+            callback: function (token) { window.turnstileAnswered = token; }
+          });
+        });
+      };
+      document.head.appendChild(s);
+    } else {
+      loadCaptcha('login');
+      loadCaptcha('reg');
+    }
+
+    /* 已登入的話直接跳走 */
+    try {
+      var me = await api('/api/me');
+      if (me.data && me.data.loggedIn) {
+        goAfterAuth(me.data);
+      }
+    } catch (e) { /* 忽略 */ }
+  })();
+})();
+</script>
+  <script src="/status.js" defer></script>
+</body>
+</html>

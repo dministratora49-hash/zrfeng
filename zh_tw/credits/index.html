@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>/* 儘早落地主題（預設原生安卓；只認控制台「外觀」裡存下的值，避免閃色） */(function(){var t='android';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark'||s==='android')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
+  <title>鳴謝名單 · zrfeng.top</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family:"Microsoft YaHei","PingFang SC",sans-serif;
+      background:linear-gradient(135deg,#0a101c 0%,#0d2818 100%);
+      min-height:100vh; display:flex; align-items:center;
+      justify-content:center; padding:20px; color:#e8f0f0;
+    }
+    .card {
+      background:rgba(10,16,28,.92);
+      border:1px solid rgba(0,255,170,.15);
+      border-radius:16px; max-width:620px; width:100%;
+      padding:32px 28px; box-shadow:0 0 40px rgba(0,255,170,.06);
+    }
+    header { text-align:center; margin-bottom:22px; }
+    header h1 { color:#00ffaa; font-size:24px; margin-bottom:8px; }
+    header p { color:#8899aa; font-size:13px; }
+    .lead { line-height:1.9; font-size:14px; color:#8899aa; text-align:center; margin-bottom:22px; }
+
+    /* 名單：編號用等寬數字，名字一行，說明一行 */
+    .credits { list-style:none; }
+    .cr {
+      display:flex; gap:14px; align-items:flex-start;
+      padding:16px 16px 16px 14px; margin-bottom:12px;
+      background:rgba(0,255,170,.04);
+      border:1px solid rgba(0,255,170,.12);
+      border-radius:12px;
+    }
+    .cr:last-child { margin-bottom:0; }
+    .cr .num {
+      flex:0 0 30px; height:30px; line-height:30px; text-align:center;
+      border-radius:50%; font-size:13px; font-weight:600;
+      font-variant-numeric:tabular-nums;
+      color:#00ffaa; background:rgba(0,255,170,.12);
+      border:1px solid rgba(0,255,170,.28);
+    }
+    .cr .who { color:#fff; font-size:16px; font-weight:600; line-height:1.5; }
+    .cr .role { color:#cdd8d8; font-size:13.5px; line-height:1.8; margin-top:2px; }
+
+    .back { text-align:center; margin-top:28px; }
+    .back a {
+      display:inline-block; padding:10px 36px;
+      border:1px solid rgba(0,255,170,.3); border-radius:24px;
+      color:#00ffaa; text-decoration:none; font-size:14px;
+      transition:all .2s;
+    }
+    .back a:hover { background:rgba(0,255,170,.08); }
+    footer { text-align:center; color:#5a6a7a; font-size:12px; margin-top:20px; }
+
+    /* ---- 亮色主題（天依藍）---- */
+    html[data-theme="light"] .lead { color:var(--lt-muted); }
+    html[data-theme="light"] .cr { background:rgba(102,204,255,.06); border-color:var(--lt-line); }
+    html[data-theme="light"] .cr .num { color:#0b7fb8; background:rgba(102,204,255,.16); border-color:var(--lt-line-2); }
+    html[data-theme="light"] .cr .who { color:var(--lt-fg); }
+    html[data-theme="light"] .cr .role { color:var(--lt-fg2); }
+
+    /* ---- 原生安卓（Material 3）---- */
+    html[data-theme="android"] .lead { color:var(--md-on-surface-var); }
+    html[data-theme="android"] .cr {
+      background:var(--md-surface-1); border-color:var(--md-outline-var);
+    }
+    html[data-theme="android"] .cr .num {
+      color:var(--md-on-primary-container); background:var(--md-primary-container);
+      border-color:transparent;
+    }
+    html[data-theme="android"] .cr .who { color:var(--md-on-surface); }
+    html[data-theme="android"] .cr .role { color:var(--md-on-surface-var); }
+  </style>
+<link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="/android.css">
+</head>
+<body>
+  <div class="card">
+    <header>
+      <h1>鳴謝名單</h1>
+      <p>Credits</p>
+    </header>
+
+    <p class="lead">這個站能從零跑起來，靠的不只是一個人的熬夜。</p>
+
+    <ol class="credits">
+      <li class="cr">
+        <span class="num">1</span>
+        <div>
+          <div class="who">Summer</div>
+          <div class="role">站長</div>
+        </div>
+      </li>
+
+      <li class="cr">
+        <span class="num">2</span>
+        <div>
+          <div class="who">寧靜立方工作室</div>
+          <div class="role">負責網站運維</div>
+        </div>
+      </li>
+
+      <li class="cr">
+        <span class="num">3</span>
+        <div>
+          <div class="who">Google</div>
+          <div class="role">感謝 Google 開發並開源 Android UI</div>
+        </div>
+      </li>
+    </ol>
+
+    <div class="back">
+      <a href="/zh_tw/guide/">← 返回導航頁</a>
+    </div>
+
+    <footer>© 2026 zrfeng.top · 自然風，正在吹 🍃</footer>
+  </div>
+  <script src="/status.js" defer></script>
+</body>
+</html>

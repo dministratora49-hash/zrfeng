@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script>/* 儘早落地主題（預設原生安卓；只認控制台「外觀」裡存下的值，避免閃色） */(function(){var t='android';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark'||s==='android')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
+<title>聊天室</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    min-height: 100vh;
+    background: #050807;
+    background-image:
+      radial-gradient(circle at 15% 10%, rgba(0, 255, 140, 0.07) 0%, transparent 45%),
+      radial-gradient(circle at 85% 85%, rgba(0, 255, 140, 0.05) 0%, transparent 45%);
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    color: #e8f5ee;
+    padding: 70px 16px 24px;
+  }
+
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,255,140,0.03) 1px, transparent 1px),
+      linear-gradient(rgba(0,255,140,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .wrap { position: relative; z-index: 1; max-width: 780px; margin: 0 auto; }
+
+  h1 {
+    font-size: 26px;
+    text-align: center;
+    background: linear-gradient(90deg, #ffffff, #00ff8c);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 8px;
+  }
+  p.sub { text-align: center; color: #7fa893; font-size: 12px; letter-spacing: 1px; margin-bottom: 18px; }
+
+  /* ---------- 聊天主體 ---------- */
+  .chat-card {
+    background: rgba(10, 18, 14, 0.85);
+    border: 1px solid rgba(0, 255, 140, 0.22);
+    border-radius: 16px;
+    box-shadow: 0 0 18px rgba(0, 255, 140, 0.06);
+    display: flex;
+    flex-direction: column;
+    height: min(70vh, 640px);
+    overflow: hidden;
+  }
+
+  .chat-head {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; flex-wrap: wrap;
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(0, 255, 140, 0.14);
+    font-size: 12px; color: #7fa893;
+  }
+  .chat-head .left { display: flex; align-items: center; gap: 8px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: #00ff8c; box-shadow: 0 0 7px #00ff8c; flex: none; }
+  .dot.off { background: #ff7b7b; box-shadow: 0 0 7px #ff7b7b; }
+  .chat-head b { color: #00ff8c; }
+  .head-acts { display: flex; gap: 8px; align-items: center; }
+  .linkbtn {
+    background: none; border: none; color: #7fa893; font-size: 12px;
+    cursor: pointer; font-family: inherit; padding: 2px 4px;
+  }
+  .linkbtn:hover { color: #00ff8c; }
+
+  /* ---------- 訊息區 ---------- */
+  .msgs {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    scroll-behavior: smooth;
+  }
+  .msgs::-webkit-scrollbar { width: 6px; }
+  .msgs::-webkit-scrollbar-thumb { background: rgba(0,255,140,.2); border-radius: 3px; }
+
+  /* Chatterbox 的氣泡佈局：頭像在左（自己的在右），氣泡圓角卡片 */
+  .m { display: flex; gap: 10px; align-items: flex-start; max-width: 88%; }
+  .m.mine { align-self: flex-end; flex-direction: row-reverse; }
+  .m .ava {
+    width: 36px; height: 36px; border-radius: 50%; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0, 255, 140, 0.12);
+    border: 1px solid rgba(0, 255, 140, 0.3);
+    color: #00ff8c; font-size: 14px; font-weight: 700;
+    overflow: hidden;
+  }
+  .m .ava img { width: 100%; height: 100%; object-fit: cover; }
+  .m-body { min-width: 0; }
+  .m.mine .m-body { display: flex; flex-direction: column; align-items: flex-end; }
+  .m-meta { font-size: 10.5px; color: #5d7a6c; margin-bottom: 3px; display: flex; gap: 6px; align-items: center; }
+  .m-meta .nm { color: #7fa893; }
+  .m.admin .m-meta .nm { color: #ffb020; }
+  .m-bubble {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(0, 255, 140, 0.14);
+    border-radius: 4px 14px 14px 14px;
+    padding: 9px 13px;
+    font-size: 13.5px;
+    line-height: 1.7;
+    color: #cfe8dc;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .m.mine .m-bubble {
+    background: rgba(0, 255, 140, 0.14);
+    border-color: rgba(0, 255, 140, 0.3);
+    border-radius: 14px 4px 14px 14px;
+    color: #e8f5ee;
+  }
+  .m.sys { align-self: center; max-width: 100%; }
+  .m.sys .m-bubble {
+    background: transparent; border: none; color: #5d7a6c;
+    font-size: 11.5px; padding: 2px 0; text-align: center;
+  }
+  /* 撤回按鈕（管理員） */
+  .m-del {
+    display: none; background: none; border: none; color: #5d7a6c;
+    font-size: 10.5px; cursor: pointer; font-family: inherit; padding: 2px 0 0;
+  }
+  .m.mine.can-del .m-del, .m:not(.mine).can-del .m-del { display: block; }
+  .m-del:hover { color: #ff7b7b; }
+
+  .empty { text-align: center; color: #4a6a58; font-size: 13px; padding: 30px 0; }
+
+  /* ---------- 輸入區 ---------- */
+  .composer {
+    border-top: 1px solid rgba(0, 255, 140, 0.14);
+    padding: 10px 12px 12px;
+    background: rgba(6, 14, 10, 0.6);
+  }
+  .composer .row { display: flex; gap: 8px; align-items: flex-end; }
+  .composer textarea {
+    flex: 1; min-height: 42px; max-height: 120px; resize: none;
+    padding: 10px 12px; border-radius: 10px; font-size: 13px; font-family: inherit;
+    border: 1px solid rgba(0, 255, 140, 0.25); background: rgba(0, 0, 0, 0.35);
+    color: #e8f5ee; line-height: 1.6;
+  }
+  .composer textarea:focus { outline: none; border-color: rgba(0, 255, 140, 0.6); }
+  .composer button.send {
+    padding: 10px 18px; border-radius: 10px; font-size: 13px; cursor: pointer;
+    border: 1px solid rgba(0, 255, 140, 0.45); background: rgba(0, 255, 140, 0.12);
+    color: #00ff8c; font-family: inherit; white-space: nowrap;
+  }
+  .composer button.send:active { background: rgba(0, 255, 140, 0.25); }
+  .composer button.send:disabled { opacity: .45; cursor: default; }
+  .composer .hint {
+    font-size: 11px; color: #4a6a58; margin-top: 6px;
+    display: flex; justify-content: space-between; gap: 8px;
+  }
+  .composer .hint .err { color: #ff7b7b; }
+
+  .links { text-align: center; margin-top: 20px; font-size: 12px; }
+  .links a { color: #7fa893; text-decoration: none; margin: 0 10px; }
+  .links a:hover { color: #00ff8c; }
+  footer { text-align: center; color: #3d5a4b; font-size: 11px; margin-top: 18px; letter-spacing: 1px; }
+
+  /* ---------- 彈窗（未登入 / 成員 / 安全提醒） ---------- */
+  .mask {
+    position: fixed; inset: 0; z-index: 50;
+    background: rgba(2, 6, 4, 0.86);
+    backdrop-filter: blur(6px);
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px;
+  }
+  .mask[hidden] { display: none; }
+  .dlg {
+    width: 100%; max-width: 460px;
+    background: rgba(12, 22, 17, 0.98);
+    border: 1px solid rgba(255, 176, 32, 0.35);
+    border-radius: 16px;
+    padding: 22px 20px 18px;
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.6);
+  }
+  .dlg.danger { border-color: rgba(255, 107, 107, 0.4); }
+  .dlg-icon { font-size: 28px; margin-bottom: 10px; }
+  .dlg h2 { font-size: 16px; color: #ffb020; margin-bottom: 12px; line-height: 1.5; }
+  .dlg.danger h2 { color: #ff8a8a; }
+  .dlg p { font-size: 13px; line-height: 1.85; color: #b9d2c5; margin-bottom: 10px; }
+  .dlg p strong { color: #e8f5ee; }
+  .dlg .warnbox {
+    background: rgba(255, 176, 32, 0.07);
+    border-left: 3px solid rgba(255, 176, 32, 0.5);
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 12.5px;
+    line-height: 1.8;
+    color: #d8c9a8;
+    margin-bottom: 14px;
+  }
+  .dlg .check {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12.5px; color: #7fa893; margin: 16px 0 4px; cursor: pointer;
+    user-select: none;
+  }
+  .dlg .check input { width: 15px; height: 15px; accent-color: #00ff8c; cursor: pointer; }
+  .dlg-acts { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; flex-wrap: wrap; }
+  .dlg-acts button {
+    padding: 10px 20px; border-radius: 10px; font-size: 13px; cursor: pointer;
+    font-family: inherit; border: 1px solid rgba(0, 255, 140, 0.45);
+    background: rgba(0, 255, 140, 0.12); color: #00ff8c;
+  }
+  .dlg-acts button.ghost {
+    border-color: rgba(255, 255, 255, 0.18);
+    background: transparent; color: #9fb8ab;
+  }
+  .dlg-acts button:active { filter: brightness(1.3); }
+
+  /* ---------- 成員列表（Chatterbox 的 MembersView 簡化版） ---------- */
+  .member-list { max-height: 320px; overflow-y: auto; margin: 4px 0 0; }
+  .member {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 2px; border-bottom: 1px solid rgba(0, 255, 140, 0.1);
+  }
+  .member:last-child { border-bottom: none; }
+  .member .ava {
+    width: 32px; height: 32px; border-radius: 50%; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0, 255, 140, 0.12);
+    border: 1px solid rgba(0, 255, 140, 0.28);
+    color: #00ff8c; font-size: 13px; font-weight: 700;
+  }
+  .member .nm { font-size: 13.5px; color: #cfe8dc; }
+  .member .desc { font-size: 11px; color: #5d7a6c; margin-top: 2px; }
+  .member .me-tag { font-size: 10px; color: #00ff8c; margin-left: 6px; }
+
+  /* ---------- 淺色 / 原生安卓主題 ---------- */
+  html[data-theme="light"] body { background: #f2f7f3; color: #10231a; }
+  html[data-theme="light"] h1 { color: #10231a; }
+  html[data-theme="light"] .chat-card { background: rgba(255,255,255,.94); border-color: rgba(0,145,88,.2); }
+  html[data-theme="light"] .chat-head { border-bottom-color: rgba(0,145,88,.16); color: #5a7a68; }
+  html[data-theme="light"] .chat-head b { color: #009658; }
+  html[data-theme="light"] .m-bubble { background: #f4f7f5; border-color: rgba(0,145,88,.16); color: #2a4a3a; }
+  html[data-theme="light"] .m.mine .m-bubble { background: #d6ecff; border-color: rgba(0,145,88,.26); color: #10231a; }
+  html[data-theme="light"] .m-meta .nm { color: #5a7a68; }
+  html[data-theme="light"] .composer { background: rgba(255,255,255,.7); border-top-color: rgba(0,145,88,.16); }
+  html[data-theme="light"] .composer textarea { background: #fff; border-color: rgba(0,145,88,.25); color: #10231a; }
+  html[data-theme="light"] .composer button.send { border-color: rgba(0,145,88,.35); background: rgba(0,145,88,.08); color: #009658; }
+  html[data-theme="light"] .empty, html[data-theme="light"] .composer .hint { color: #7a9a88; }
+  html[data-theme="light"] .links a { color: #5a7a68; }
+  html[data-theme="light"] footer { color: #7a9a88; }
+
+  @media (max-width: 520px) {
+    body { padding-top: 56px; }
+    h1 { font-size: 22px; }
+    .m { max-width: 94%; }
+  }
+</style>
+<link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="/android.css">
+</head>
+<body>
+<div class="wrap">
+  <h1>聊天室</h1>
+  <p class="sub">實時訊息 · 僅登入使用者可見 · 訊息不加密，請勿傳送敏感資訊</p>
+
+  <div class="chat-card">
+    <div class="chat-head">
+      <div class="left">
+        <span class="dot" id="onDot"></span>
+        <span>線上 <b id="onCount">–</b> 人</span>
+      </div>
+      <div class="head-acts">
+        <span id="meLine">—</span>
+        <button class="linkbtn" id="membersBtn" type="button">成員</button>
+        <button class="linkbtn" id="refreshBtn" type="button">重新整理</button>
+        <button class="linkbtn" id="clearBtn" type="button" hidden>清空</button>
+      </div>
+    </div>
+    <div class="msgs" id="msgs"><div class="empty">正在載入…</div></div>
+    <div class="composer">
+      <div class="row">
+        <textarea id="input" maxlength="500" placeholder="說點什麼…（Enter 傳送，Shift+Enter 換行）"></textarea>
+        <button class="send" id="sendBtn" type="button">傳送</button>
+      </div>
+      <div class="hint">
+        <span id="hintText">訊息會公開顯示，且不做端到端加密</span>
+        <span id="counter">0/500</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="links">
+    <a href="/zh_tw/guide">← 返回導航站</a>
+    <a href="/zh_tw/contact">聯絡我們</a>
+  </div>
+  <footer>zrfeng.top · 聊天室</footer>
+</div>
+
+<!-- 未登入：擋住整頁 -->
+<div class="mask" id="loginMask" hidden>
+  <div class="dlg">
+    <div class="dlg-icon">🔒</div>
+    <h2>請先登入</h2>
+    <p>聊天室只對<strong>已登入的使用者</strong>開放，這樣每個人的發言都有身份。</p>
+    <p class="small">登入之後就能進來聊天了。</p>
+    <div class="dlg-acts">
+      <a class="ghost" href="/zh_tw/login/" style="padding:10px 20px;border-radius:10px;font-size:13px;text-decoration:none;border:1px solid rgba(255,255,255,.18);color:#9fb8ab">去登入</a>
+    </div>
+  </div>
+</div>
+
+<!-- 安全提醒 -->
+<div class="mask" id="warnMask" hidden>
+  <div class="dlg">
+    <div class="dlg-icon">⚠️</div>
+    <h2>安全提醒</h2>
+    <div class="warnbox">請不要在這裡傳送密碼、身份證號、手機號、住址等任何敏感資訊。</div>
+    <label class="check"><input type="checkbox" id="noMore"> 不再提醒</label>
+    <div class="dlg-acts">
+      <button class="ghost" id="warnCancel" type="button">取消</button>
+      <button class="primary-warn" id="warnOk" type="button">確定</button>
+    </div>
+  </div>
+</div>
+
+<!-- 成員列表 -->
+<div class="mask" id="memberMask" hidden>
+  <div class="dlg">
+    <div class="dlg-icon">👥</div>
+    <h2>線上成員</h2>
+    <div class="member-list" id="memberList"></div>
+    <div class="dlg-acts">
+      <button class="ghost" id="memberClose" type="button">關閉</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var ACK_KEY = 'dsh-chat-ack';
+  var MAX_TEXT = 500;
+
+  function el(id) { return document.getElementById(id); }
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+  function fmt(ts) {
+    var d = new Date(ts);
+    function p(n) { return n < 10 ? '0' + n : '' + n; }
+    return p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  }
+  /** 取名字首字元當頭像（Chatterbox 也是這個思路：沒有頭像就顯示首字母） */
+  function initial(name) {
+    var s = String(name || '?').trim();
+    return s ? s.charAt(0).toUpperCase() : '?';
+  }
+
+  var seen = {};
+  var lastId = '';
+  var myName = '';
+  var isAdmin = false;
+  var ws = null;
+  var wsTimer = null;
+  var reconnect = 0;
+
+  /* ---------------- 提示 ---------------- */
+  function setHint(text, isErr) {
+    var h = el('hintText');
+    h.textContent = text;
+    h.className = isErr ? 'err' : '';
+  }
+
+  /* ---------------- 訊息渲染 ---------------- */
+  function appendMessage(m) {
+    if (seen[m.id]) return false;
+    seen[m.id] = true;
+
+    var box = el('msgs');
+    var empty = box.querySelector('.empty');
+    if (empty) box.innerHTML = '';
+
+    var div = document.createElement('div');
+    div.className = 'm' + (m.mine ? ' mine' : '') + (m.admin ? ' admin' : '') + (isAdmin ? ' can-del' : '');
+
+    var ava = document.createElement('div');
+    ava.className = 'ava';
+    ava.textContent = initial(m.name);
+
+    var body = document.createElement('div');
+    body.className = 'm-body';
+
+    var meta = document.createElement('div');
+    meta.className = 'm-meta';
+    var nm = document.createElement('span');
+    nm.className = 'nm';
+    nm.textContent = m.name + (m.admin ? ' · 管理員' : '');
+    var tm = document.createElement('span');
+    tm.textContent = fmt(m.at);
+    meta.appendChild(nm);
+    meta.appendChild(tm);
+
+    var bubble = document.createElement('div');
+    bubble.className = 'm-bubble';
+    bubble.textContent = m.text;   // textContent：天然防 XSS
+
+    body.appendChild(meta);
+    body.appendChild(bubble);
+
+    if (isAdmin) {
+      var del = document.createElement('button');
+      del.className = 'm-del';
+      del.type = 'button';
+      del.textContent = '撤回';
+      del.onclick = function () { revoke(m.id); };
+      body.appendChild(del);
+    }
+
+    div.appendChild(ava);
+    div.appendChild(body);
+    box.appendChild(div);
+    return true;
+  }
+
+  function atBottom() {
+    var box = el('msgs');
+    return box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+  }
+  function scrollDown(force) {
+    var box = el('msgs');
+    if (force) box.scrollTop = box.scrollHeight;
+  }
+
+  function renderMe(me) {
+    myName = (me && me.name) || '';
+    isAdmin = !!(me && me.isAdmin);
+    el('meLine').textContent = myName ? ('你好，' + myName) : '—';
+    el('clearBtn').hidden = !isAdmin;
+    el('sendBtn').disabled = false;
+  }
+
+  /* ---------------- WebSocket ---------------- */
+  function wsUrl() {
+    var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return proto + '//' + location.host + '/api/chat/socket';
+  }
+
+  function connect() {
+    if (ws) { try { ws.close(); } catch (e) {} ws = null; }
+    el('onDot').classList.remove('off');
+
+    try {
+      ws = new WebSocket(wsUrl());
+    } catch (e) {
+      el('onDot').classList.add('off');
+      setHint('無法建立連線，正在重試…', true);
+      scheduleReconnect();
+      return;
+    }
+
+    ws.onopen = function () {
+      reconnect = 0;
+      el('onDot').classList.remove('off');
+      setHint('已連線', false);
+    };
+
+    ws.onmessage = function (ev) {
+      var d = null;
+      try { d = JSON.parse(ev.data); } catch (e) { return; }
+      if (!d || !d.type) return;
+
+      if (d.type === 'history') {
+        (d.messages || []).forEach(function (m) {
+          if (appendMessage({ id: m.id, at: m.at, name: m.name, text: m.text, admin: m.admin, mine: m.name === myName })) {
+            if (!lastId || m.id > lastId) lastId = m.id;
+          }
+        });
+        var box = el('msgs');
+        if (!box.querySelector('.m')) box.innerHTML = '<div class="empty">還沒有訊息，來打個招呼吧</div>';
+        scrollDown(true);
+        return;
+      }
+      if (d.type === 'message') {
+        var m = d.message || {};
+        var stick = atBottom();
+        if (appendMessage({ id: m.id, at: m.at, name: m.name, text: m.text, admin: m.admin, mine: m.name === myName })) {
+          if (m.id > lastId) lastId = m.id;
+          if (stick) scrollDown(true);
+        }
+        return;
+      }
+      if (d.type === 'online') {
+        el('onCount').textContent = String(d.online || 0);
+        members = {};
+        (d.members || []).forEach(function (n) { members[n] = true; });
+        return;
+      }
+      if (d.type === 'deleted') {
+        var box2 = el('msgs');
+        var node = box2.querySelector('[data-mid="' + d.id + '"]');
+        if (node) node.remove();
+        return;
+      }
+      if (d.type === 'cleared') {
+        seen = {};
+        lastId = '';
+        el('msgs').innerHTML = '<div class="empty">還沒有訊息，來打個招呼吧</div>';
+        return;
+      }
+    };
+
+    ws.onclose = function () {
+      el('onDot').classList.add('off');
+      setHint('連線斷開，正在重新連線…', true);
+      scheduleReconnect();
+    };
+    ws.onerror = function () {
+      el('onDot').classList.add('off');
+    };
+  }
+
+  function scheduleReconnect() {
+    clearTimeout(wsTimer);
+    reconnect = Math.min(reconnect + 1, 6);
+    var delay = Math.min(1000 * reconnect, 8000);
+    wsTimer = setTimeout(connect, delay);
+  }
+
+  /* ---------------- 拉取歷史（首次載入 + 手動重新整理） ---------------- */
+  function load() {
+    fetch('/api/chat', { cache: 'no-store', credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j || !j.ok) {
+          if (j && j.needLogin) { showLogin(); return; }
+          setHint((j && j.message) || '載入失敗', true);
+          return;
+        }
+        renderMe(j.me || {});
+        el('onCount').textContent = String(j.online || 0);
+        seen = {};
+        lastId = '';
+        var box = el('msgs');
+        box.innerHTML = '';
+        (j.messages || []).forEach(function (m) {
+          if (appendMessage(m)) { if (!lastId || m.id > lastId) lastId = m.id; }
+        });
+        if (!box.querySelector('.m')) box.innerHTML = '<div class="empty">還沒有訊息，來打個招呼吧</div>';
+        scrollDown(true);
+      })
+      .catch(function () { setHint('網路異常，稍後自動重試', true); });
+  }
+
+  /* ---------------- 傳送 ---------------- */
+  var sending = false;
+  function send() {
+    var input = el('input');
+    var text = String(input.value || '').trim();
+    if (!text || sending) return;
+    sending = true;
+    el('sendBtn').disabled = true;
+    setHint('傳送中…', false);
+
+    fetch('/api/chat', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: text }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        sending = false;
+        el('sendBtn').disabled = false;
+        if (!j || !j.ok) {
+          if (j && j.needLogin) { showLogin(); return; }
+          setHint((j && j.message) || '傳送失敗', true);
+          return;
+        }
+        input.value = '';
+        touchCounter();
+        setHint('訊息會公開顯示，且不做端到端加密', false);
+        // 兜底：廣播可能因為 WebSocket 斷開而收不到，
+        // 這裡先把剛發的訊息顯示出來（服務端也會廣播一次，appendMessage 會去重）。
+        if (j.id) {
+          var stick = atBottom();
+          if (appendMessage({ id: j.id, at: j.at, name: myName || '我', text: text, admin: isAdmin, mine: true })) {
+            if (j.id > lastId) lastId = j.id;
+            if (stick) scrollDown(true);
+          }
+        }
+      })
+      .catch(function () {
+        sending = false;
+        el('sendBtn').disabled = false;
+        setHint('網路異常，傳送失敗', true);
+      });
+  }
+
+  /* ---------------- 管理員撤回 / 清空 ---------------- */
+  function revoke(id) {
+    fetch('/api/chat/revoke', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: id }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j || !j.ok) { setHint((j && j.message) || '撤回失敗', true); return; }
+        setHint('已撤回', false);
+      })
+      .catch(function () { setHint('網路異常，撤回失敗', true); });
+  }
+
+  function bindClear() {
+    var btn = el('clearBtn');
+    if (!btn) return;
+    btn.onclick = function () {
+      if (btn.disabled) return;
+      if (!confirm('確定清空整個聊天室嗎？此操作不可撤銷。')) return;
+      btn.disabled = true;
+      fetch('/api/admin/chat/clear', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          btn.disabled = false;
+          if (j && j.ok) { setHint(j.message || '已清空', false); }
+          else { setHint((j && j.message) || '清空失敗', true); }
+        })
+        .catch(function () { btn.disabled = false; setHint('網路異常，清空失敗', true); });
+    };
+  }
+
+  /* ---------------- 未登入 ---------------- */
+  function showLogin() {
+    el('loginMask').hidden = false;
+    el('msgs').innerHTML = '';
+    el('sendBtn').disabled = true;
+    el('onDot').classList.add('off');
+  }
+
+  /* ---------------- 安全提醒 ---------------- */
+  function bindWarn() {
+    el('warnOk').onclick = function () {
+      if (el('noMore').checked) {
+        try { localStorage.setItem(ACK_KEY, '1'); } catch (e) { /* 忽略 */ }
+      }
+      el('warnMask').hidden = true;
+      connect();
+      load();
+    };
+    el('warnCancel').onclick = function () {
+      el('warnMask').hidden = true;
+      connect();
+      load();
+    };
+  }
+
+  /* ---------------- 成員列表 ---------------- */
+  function bindMembers() {
+    el('membersBtn').onclick = function () {
+      var box = el('memberList');
+      box.innerHTML = '<div class="empty">讀取中…</div>';
+      el('memberMask').hidden = false;
+      // 線上成員就是當前連著的人 —— WebSocket 裡維護，前端自己記一份
+      var list = onlineMembers();
+      if (!list.length) {
+        box.innerHTML = '<div class="empty">暫無線上成員</div>';
+      } else {
+        box.innerHTML = list.map(function (n) {
+          var tag = (n === myName) ? '<span class="me-tag">（我）</span>' : '';
+          return '<div class="member"><div class="ava">' + esc(initial(n)) + '</div>' +
+            '<div><div class="nm">' + esc(n) + tag + '</div></div></div>';
+        }).join('');
+      }
+    };
+    el('memberClose').onclick = function () { el('memberMask').hidden = true; };
+  }
+
+  var members = {};
+  function onlineMembers() {
+    return Object.keys(members);
+  }
+
+  /* ---------------- 計數器 ---------------- */
+  function touchCounter() {
+    var n = el('input').value.length;
+    el('counter').textContent = n + '/' + MAX_TEXT;
+  }
+
+  /* ---------------- 啟動 ---------------- */
+  function boot() {
+    el('input').addEventListener('input', touchCounter);
+    el('sendBtn').onclick = send;
+    el('refreshBtn').onclick = load;
+    el('input').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+    });
+    bindWarn();
+    bindClear();
+    bindMembers();
+
+    // 先看登入狀態：沒登入就把整頁擋住，不建立 WebSocket
+    fetch('/api/status', { cache: 'no-store', credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j || !j.loggedIn) { showLogin(); return; }
+        renderMe({ name: j.username, isAdmin: j.isAdmin });
+        var acked = false;
+        try { acked = localStorage.getItem(ACK_KEY) === '1'; } catch (e) { /* 忽略 */ }
+        if (acked) { connect(); load(); }
+        else { el('warnMask').hidden = false; }
+      })
+      .catch(function () { showLogin(); });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+})();
+</script>
+  <script src="/status.js" defer></script>
+</body>
+</html>
