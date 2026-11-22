@@ -4529,6 +4529,16 @@ const LANG_COOKIE_MAX_AGE = 60 * 60 * 24 * 180; // 半年
  */
 const REGION_GATE_ENABLED = false;
 
+/**
+ * 中文站聊天室开关。
+ *   false → /zh_cn/chat 下架，访问返回「地域限制」提示页（英文站不受影响）
+ *   true  → 恢复上线
+ *
+ * 只是关掉中文站这一个入口：/en_us/chat 一直在，相关 API（/api/chat*）
+ * 也不动 —— 英文站还要用，而且服务端身份只认 session，不认语种。
+ */
+const ZH_CHAT_ENABLED = false;
+
 /** 控制台「所在地区」里可选的地区 → 语种。加新地区只改这一张表 */
 /* 站点语种地区表 —— 加地区只改这里。
  *
@@ -5161,7 +5171,90 @@ function regionPageHtml(lang, country) {
 }
 
 /**
- * 手动放行用的会话级 Cookie。
+ * 中文站聊天室下架提示页（ZH_CHAT_ENABLED = false 时返回）。
+ *
+ * 和 regionPageHtml 共用同一套视觉：深色底、居中卡片、图标 + 一句解释。
+ * 文案写死中文 —— 这页只出现在 /zh_cn/chat，看的人本来就选了中文站。
+ * 不提供「继续访问」入口：这是下架，不是限流。
+ */
+function zhChatOfflineHtml() {
+  return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>地域限制 · zrfeng.top</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;
+    background:#050807;color:#e8f5ee;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+    line-height:1.7}
+  .box{max-width:520px;width:100%;text-align:center}
+  .globe{font-size:40px;margin-bottom:18px;opacity:.85}
+  h1{font-size:22px;font-weight:700;margin-bottom:12px;color:#e8f5ee}
+  p{font-size:14px;color:#9fb8ab;margin-bottom:8px}
+  .note{font-size:13px;color:#6d8a7b;margin:22px 0 10px}
+  .mail a{font-size:13px;color:#00ff8c;text-decoration:none;border-bottom:1px solid rgba(0,255,140,.35)}
+  .back{margin-top:26px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+  .back a{font-size:13px;padding:9px 16px;border-radius:9px;text-decoration:none;
+    border:1px solid rgba(0,255,140,.35);color:#00ff8c;background:rgba(0,255,140,.06)}
+  .code{margin-top:26px;font-size:11px;color:#3d5a4b;letter-spacing:1px;font-family:ui-monospace,Menlo,Consolas,monospace}
+</style>
+</head>
+<body>
+  <div class="box">
+    <div class="globe">🌏</div>
+    <h1>此功能在您所在地区不可用</h1>
+    <p>聊天室目前未在中文站开放。</p>
+    <p>你仍可继续使用本站的其他功能。</p>
+    <div class="note">如有疑问，请联系我们：</div>
+    <div class="mail"><a href="mailto:${escHtml(REGION_CONTACT_EMAIL)}">${escHtml(REGION_CONTACT_EMAIL)}</a></div>
+    <div class="back">
+      <a href="/zh_cn/">返回首页</a>
+      <a href="/zh_cn/guide/">返回导航</a>
+    </div>
+    <div class="code">REGION RESTRICTED · CHAT · ZH_CN</div>
+  </div>
+</body>
+</html>`;
+}
+
+/** 请求是不是中文站的聊天室页面 */
+function isZhChatPath(path) {
+  return path === '/zh_cn/chat' || path === '/zh_cn/chat/' || path.indexOf('/zh_cn/chat/') === 0;
+}
+
+/**
+ * 中文站聊天室下架拦截。
+ *   1) 开关关着且命中 /zh_cn/chat → 返回提示页（403，和地区准入同样语义）
+ *   2) 带 ?chat=allow → 放行这一次，方便自己维护时进去看
+ *   3) 其他情况一律不插手（英文站 / API / 静态资源都不碰）
+ */
+function handleZhChatGate(request, url) {
+  if (ZH_CHAT_ENABLED) return null;
+  if (!isZhChatPath(url.pathname)) return null;
+
+  if ((url.searchParams.get('chat') || '').toLowerCase() === 'allow') {
+    const clean = new URL(url.toString());
+    clean.searchParams.delete('chat');
+    return new Response(null, {
+      status: 302,
+      headers: { location: clean.pathname + clean.search, 'cache-control': 'no-store' },
+    });
+  }
+
+  return new Response(zhChatOfflineHtml(), {
+    status: 403,
+    headers: {
+      'content-type': 'text/html; charset=utf-8',
+      'cache-control': 'no-store',
+      'x-zrfeng-zh-chat': 'off',
+    },
+  });
+}
+
+/** 手动放行用的会话级 Cookie。
  *   1) 名字和老版本的 zrfeng-region 不同 —— 浏览器里那些 180 天的旧 Cookie 直接失效，
  *      不会再出现「以前点过一次，之后到哪都能进」的情况；
  *   2) 不设 Max-Age/Expires —— 关掉浏览器即失效（会话 Cookie），不落盘长期生效。
@@ -6140,6 +6233,9 @@ async function handleRequest(request, env) {
         // 地区准入：开关在 REGION_GATE_ENABLED，当前关闭（提示页保留备用）
         const gated = handleRegionGate(request, url);
         if (gated) return gated;
+        // 中文站聊天室已下架：/zh_cn/chat 返回地域限制页（英文站不受影响）
+        const zhChat = handleZhChatGate(request, url);
+        if (zhChat) return zhChat;
         // 旧地址 / 根路径：按账户地区 → 本机语种 → 中英选择页 的顺序决定去向
         const moved = await handleLegacyRedirect(request, url, env);
         if (moved) return moved;

@@ -494,7 +494,13 @@ en_us/
 
 ## 💬 聊天室
 
-`/zh_cn/chat/`（英文 `/en_us/chat/`），**仅登录用户可见**的实时聊天室。
+`/en_us/chat/` 与 `/zh_cn/chat/`，**仅登录用户可见**的实时聊天室。
+
+> **中文站已下架**：`worker.js` 顶部开关 `ZH_CHAT_ENABLED` 当前为 `false`，
+> 访问 `/zh_cn/chat/` 会返回 403「此功能在您所在地区不可用」提示页（`zhChatOfflineHtml`）。
+> 导航页入口**保留**，点进去才提示，不是把入口删掉。
+> 英文站 `/en_us/chat/` 不受影响，`/api/chat*` 也不拦（服务端身份只认 session，不认语种）。
+> 改回 `true` 即恢复；自己维护要看时可以临时加 `?chat=allow` 进一次。
 
 界面与交互移植自 [Syntrx888/ChatterBox](https://github.com/Syntrx888/ChatterBox)（MIT），
 但后端**没有照搬** —— Cloudflare Workers 没有 Node 运行时，Chatterbox 用的
