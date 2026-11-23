@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<script>/* 儘早落地主題（預設原生安卓；只認控制台「外觀」裡存下的值，避免閃色） */(function(){var t='android';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark'||s==='android')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
+<script>/* 主题固定为「原生安卓」；旧的亮色 / 暗色已下线，老值一律当成 android，避免闪色 */(function(){document.documentElement.setAttribute('data-theme','android');})();</script>
 <title>北京時間 · 同步阿里時間伺服器</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
@@ -43,7 +43,6 @@
     cursor:pointer; user-select:none; -webkit-tap-highlight-color:transparent; transition:.2s; }
   .btn:active { background:rgba(0,230,118,.25); box-shadow:0 0 14px rgba(0,255,136,.4); }
 </style>
-<link rel="stylesheet" href="/theme.css">
 <link rel="stylesheet" href="/android.css">
 </head>
 <body>

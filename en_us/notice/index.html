@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<script>/* Apply the saved theme as early as possible (default Android; only Console → Appearance writes it) */(function(){var t='android';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark'||s==='android')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
+<script>/* 主题固定为「原生安卓」；旧的亮色 / 暗色已下线，老值一律当成 android，避免闪色 */(function(){document.documentElement.setAttribute('data-theme','android');})();</script>
 <title>Notices</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -222,7 +222,6 @@
 
   footer { text-align: center; color: #3d5a4b; font-size: 11px; margin-top: 24px; letter-spacing: 1px; }
 </style>
-<link rel="stylesheet" href="/theme.css">
 <link rel="stylesheet" href="/android.css">
 </head>
 <body>

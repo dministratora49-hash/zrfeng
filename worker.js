@@ -5097,9 +5097,9 @@ function langForPath(request, path) {
 /**
  * 404 界面：站点自己的页面，不是浏览器那张「未找到」。
  *
- * 样式完全交给 /theme.css 与 /android.css —— 和站内其他页面吃同一套主题，
- * 默认就是原生安卓（Material You / MD3）：surface 卡片、12~28 圆角、
- * Roboto + 思源黑体、primary 色填充按钮。控制台里选过 light / dark 也跟着变。
+ * 样式完全交给 /android.css —— 和站内其他页面同一套主题。
+ * 站点现在只有「原生安卓」一套（Material You / MD3）：surface 卡片、12~28 圆角、
+ * Roboto + 思源黑体、primary 色填充按钮。旧的亮色 / 暗色已下线。
  */
 function notFoundPageHtml(lang) {
   const t = NOTFOUND_TEXT[lang] || NOTFOUND_TEXT.zh;
@@ -5110,16 +5110,15 @@ function notFoundPageHtml(lang) {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex">
-<script>/* 主题尽早落地（和站内其他页面同一套开关，默认原生安卓） */(function(){var t='android';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark'||s==='android')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
+<script>/* 主题固定为「原生安卓」；旧的亮色 / 暗色已下线 */(function(){document.documentElement.setAttribute('data-theme','android');})();</script>
 <title>${escHtml(t.title)} · zrfeng.top</title>
-<link rel="stylesheet" href="/theme.css">
 <link rel="stylesheet" href="/android.css">
 <style>
   *{margin:0;padding:0;box-sizing:border-box}
   body{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;
     background:#050807;color:#e8f5ee;
     font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;line-height:1.7}
-  /* 兜底样式对应 dark；android / light 由两个主题文件接管 */
+  /* 兜底样式；android 主题由 /android.css 接管 */
   .nf{width:100%;max-width:420px;padding:34px 26px 28px;text-align:center;
     background:rgba(10,18,14,.85);border:1px solid rgba(0,255,140,.35);border-radius:28px}
   .nf .num{font-size:72px;font-weight:800;line-height:1;letter-spacing:3px;color:#00ff8c;

@@ -214,38 +214,49 @@
     'color:#ffbe3c;}' +
     '#' + WARN_ID + ' .wn-acts a:active,#' + WARN_ID + ' .wn-acts button:active{opacity:.7;}';
 
-  /* ==================== 主题（暗色 / 亮色 / 原生安卓） ====================
-   * 这里只负责在 <html> 上写 data-theme，具体配色全在 CSS 里：
-   *   /theme.css    只对 data-theme="light" 生效（亮色）
-   *   /android.css  只对 data-theme="android" 生效（Material You）
-   * 深色就是各页面自带的那套，两个 CSS 都不生效。
-   *
-   * 三套主题一套没删：控制台「外观」里可以随时选回来。
-   * 新访客默认给「原生安卓」—— 站点本来就跑在安卓上。
+  /* ==================== 主题（只剩「原生安卓」） ====================
+   * 旧的两套主题（暗色 dark / 亮色 light）已下线：
+   *   · 新访客一律是 data-theme="android"（Material You）
+   *   · 老用户 localStorage 里可能还存着 dark / light —— 那已经不是合法值，
+   *     会被自动当成 android，同时弹一次「旧版主题即将被删除」的通知，
+   *     点确定后正式切到新主题（见 warnLegacyTheme）。
+   * 具体配色全在 /android.css（只对 data-theme="android" 生效）。
    */
   var THEME_KEY = 'zrfeng-theme';
-  var THEMES = { dark: 'Dark', light: 'Light', android: 'Android' };
+  var THEMES = { android: 'Android' };
   var THEME_DEFAULT = 'android';
+  /** 已下线的旧主题：读到这些值就提示一次，然后切到新主题 */
+  var LEGACY_THEMES = ['dark', 'light'];
   var TOAST_ID = 'dsh-slide-toast';
   var PREF_ACK_PREFIX = 'zrfeng-pref-ack:';
+  /** 记录「旧主题提示」是否已经处理过，避免每次刷新都弹 */
+  var LEGACY_THEME_ACK = 'zrfeng-legacy-theme-ack';
   /** 最近一次 /api/status 的结果（判断是否登录、账户偏好是什么） */
   var lastStatus = null;
   /** 每次页面加载只主动问一次「要不要套用账户偏好」 */
   var prefPrompted = false;
   var mcTimer = null;
 
-  function isTheme(t) { return t === 'dark' || t === 'light' || t === 'android'; }
+  function isTheme(t) { return t === THEME_DEFAULT; }
+
+  /** 这个值是不是已下线的旧主题（用来决定要不要提示） */
+  function isLegacyTheme(t) {
+    return LEGACY_THEMES.indexOf(String(t || '')) >= 0;
+  }
 
   function currentTheme() {
     var t = document.documentElement.getAttribute('data-theme');
     return isTheme(t) ? t : THEME_DEFAULT;
   }
 
+  /** 本机存的主题原始值（可能是已下线的旧主题，调用方自行判断） */
+  function readRawTheme() {
+    try { return localStorage.getItem(THEME_KEY); } catch (e) { return null; }
+  }
+
   function readTheme() {
-    try {
-      var t = localStorage.getItem(THEME_KEY);
-      if (isTheme(t)) return t;
-    } catch (e) { /* 隐私模式下 localStorage 可能不可用 */ }
+    var t = readRawTheme();
+    if (isTheme(t)) return t;
     return currentTheme();
   }
 
@@ -265,14 +276,57 @@
     }
   }
 
-  /** 图标 / 文案跟着目标主题走（按钮上写的是「点下去会变成什么」） */
+  /* ==================== 旧主题下线提示 ====================
+   * 老用户 localStorage 里还存着 dark / light：
+   *   · 先立刻把页面切到新主题（别让人继续看着一套要删的皮肤）
+   *   · 再弹一次通知说明情况，点「确定」把 localStorage 正式写掉
+   * 用 LEGACY_THEME_ACK 记一笔，同一台设备只提示一次。
+   * 本来就在用新主题的人完全不会看到这条。
+   */
+  function legacyAcked() {
+    try { return localStorage.getItem(LEGACY_THEME_ACK) === '1'; } catch (e) { return false; }
+  }
+
+  function markLegacyAcked() {
+    try { localStorage.setItem(LEGACY_THEME_ACK, '1'); } catch (e) { }
+  }
+
+  function warnLegacyTheme() {
+    var raw = readRawTheme();
+    if (!isLegacyTheme(raw)) return;      // 用的就是新主题 / 从没选过 → 不打扰
+    if (legacyAcked()) {
+      // 之前已经确认过，只是存储没清干净，顺手抹掉
+      applyTheme(THEME_DEFAULT, true);
+      return;
+    }
+    // 先切过去，通知里说的就是眼前这套
+    applyTheme(THEME_DEFAULT, false);
+    showMcToast({
+      icon: '🎨',
+      title: 'The legacy theme is being removed',
+      desc: 'The legacy theme you are using (' + (raw === 'light' ? 'Light' : 'Dark') +
+        ') is going away. Please switch to the new Android theme.',
+      autoHideMs: 0,                     // 0 = 不自动消失，必须点确定
+      actions: [
+        {
+          text: 'OK',
+          cls: 'primary',
+          onClick: function () {
+            applyTheme(THEME_DEFAULT, true);   // 正式写入，之后不会再提示
+            markLegacyAcked();
+            hideMcToast();
+          }
+        }
+      ]
+    });
+  }
+
+  /** 唯一保留的主题 */
   var THEME_META = {
-    dark: { ico: '☾', label: 'Dark' },
-    light: { ico: '☀', label: 'Light' },
     android: { ico: '🤖', label: 'Android' }
   };
 
-  function themeMeta(t) { return THEME_META[t] || THEME_META.dark; }
+  function themeMeta(t) { return THEME_META[t] || THEME_META.android; }
 
 
   /* ==================== MC 成就风格滑出提示 ====================
@@ -352,7 +406,7 @@
   function writePrefAck(user, theme) {
     try { localStorage.setItem(prefAckKey(user), String(theme || '')); } catch (e) { }
   }
-  function themeName(t) { return (THEMES[t] || THEMES.dark); }
+  function themeName(t) { return (THEMES[t] || THEMES.android); }
 
 
   /* 账户偏好 = 主题 + 语言，两件事合起来算一份「偏好」。
@@ -1341,6 +1395,8 @@
   function boot() {
     // 先落地已保存的主题（页面 <head> 里还有一段内联脚本做更早的一次，避免闪白）
     applyTheme(readTheme(), false);
+    // 老用户还在用已下线的旧主题 → 提示一次并切到新主题（用新主题的人看不到）
+    warnLegacyTheme();
     // 同浏览器别的标签页切了主题，这里跟着变
     window.addEventListener('storage', function (e) {
       if (e.key === THEME_KEY) applyTheme(readTheme(), false);

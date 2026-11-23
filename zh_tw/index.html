@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<script>/* 儘早落地主題（預設原生安卓；只認控制台「外觀」裡存下的值，避免閃色） */(function(){var t='android';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark'||s==='android')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
+<script>/* 主题固定为「原生安卓」；旧的亮色 / 暗色已下线，老值一律当成 android，避免闪色 */(function(){document.documentElement.setAttribute('data-theme','android');})();</script>
 <title>www.zrfeng.top主站點</title>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+SC:wght@300;400;700;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
@@ -51,7 +51,6 @@ h1{font-size:clamp(32px,6vw,58px);font-weight:900;line-height:1.15;margin-bottom
 footer{text-align:center;color:var(--muted);font-size:12px;margin-top:40px;letter-spacing:1px}
 @media(max-width:520px){.timer-grid{grid-template-columns:repeat(3,1fr)}.clock-box{top:40px;right:12px;padding:8px 12px}}
 </style>
-<link rel="stylesheet" href="/theme.css">
 <link rel="stylesheet" href="/android.css">
 </head>
 <body>
@@ -111,7 +110,8 @@ footer{text-align:center;color:var(--muted);font-size:12px;margin-top:40px;lette
   var c=document.getElementById("p"),ctx=c.getContext("2d"),pts=[];
   // 粒子顏色跟著亮/暗色主題走（切換按鈕在頂部狀態列裡）
   // 粒子顏色：暗色熒光綠 / 亮色深綠 / 原生安卓 M3 主色 #00658f
-  function pcOf(t){return t==="light"?"0,145,88":(t==="android"?"0,101,143":"0,255,170");}
+  // 只剩一套主题，粒子固定用 M3 主色 #00658f
+  function pcOf(t){return "0,101,143";}
   var PC=pcOf(document.documentElement.getAttribute("data-theme")||"android");
   document.addEventListener("zrfeng:themechange",function(e){
     PC=pcOf((e.detail&&e.detail.theme)||"android");

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<script>/* Apply the saved theme as early as possible (default Android; only Console → Appearance writes it) */(function(){var t='android';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark'||s==='android')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
+<script>/* 主题固定为「原生安卓」；旧的亮色 / 暗色已下线，老值一律当成 android，避免闪色 */(function(){document.documentElement.setAttribute('data-theme','android');})();</script>
 <title>Console · zrfeng</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -267,7 +267,6 @@
     h1 { font-size: 20px; }
   }
 </style>
-<link rel="stylesheet" href="/theme.css">
 <link rel="stylesheet" href="/android.css">
 </head>
 <body>
@@ -452,31 +451,13 @@
       '<div class="msg" id="regionMsg"></div></div>';
     html += rg;
 
-    // Appearance: all three themes are kept — the old ones are still selectable
-    var THEME_LIST = [
-      { id: 'android', name: 'Android (Material You)', desc: 'Material You light · Roboto + Noto Sans · rounded cards' },
-      { id: 'light', name: 'Light', desc: 'Tianyi blue #66ccff · white cards (the previous light theme)' },
-      { id: 'dark', name: 'Dark', desc: 'The original dark neon-green theme' }
-    ];
-    var curTheme = 'android';
-    try {
-      var tv = localStorage.getItem('zrfeng-theme');
-      if (tv === 'light' || tv === 'dark' || tv === 'android') curTheme = tv;
-    } catch (e) {
-      curTheme = document.documentElement.getAttribute('data-theme') || 'android';
-    }
+    // 外观：只剩一套主题，不再提供切换按钮，只做状态展示
     var th = '<div class="card"><h2>Appearance</h2>' +
-      '<div class="meta" style="margin-bottom:10px">All three themes are kept. Pick one and it is saved; once signed in it can be saved to your account too.</div>';
-    THEME_LIST.forEach(function (t) {
-      th += '<div class="row">' +
-        '<div class="info"><div class="name">' + t.name +
-        (t.id === curTheme ? ' <span class="tag active">In use</span>' : '') + '</div>' +
-        '<div class="meta">' + t.desc + '</div></div>' +
-        '<button data-theme-pick="' + t.id + '"' + (t.id === curTheme ? ' disabled' : '') + '>' +
-        (t.id === curTheme ? 'Current' : 'Switch') + '</button>' +
-        '</div>';
-    });
-    th += '<div class="msg" id="themeMsg"></div></div>';
+      '<div class="meta" style="margin-bottom:10px">The site now ships a single theme (Material You). The old Light and Dark themes have been removed.</div>' +
+      '<div class="row">' +
+      '<div class="info"><div class="name">Android <span class="tag active">In use</span></div>' +
+      '<div class="meta">Material You light · Roboto + Noto Sans CJK · rounded cards</div></div>' +
+      '</div></div>';
     html += th;
 
     meEl.innerHTML = html;
@@ -491,9 +472,6 @@
     });
     meEl.querySelectorAll('button[data-rc]').forEach(function (x) {
       x.onclick = function () { openRecoveryCode(); };
-    });
-    meEl.querySelectorAll('button[data-theme-pick]').forEach(function (x) {
-      x.onclick = function () { pickTheme(x.dataset.themePick); };
     });
     // Region is a dropdown: saving on change, no confirmation
     var rsel = document.getElementById('regionSel');

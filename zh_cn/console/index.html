@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<script>/* 尽早落地主题（默认原生安卓；只认控制台「外观」里存下的值，避免闪色） */(function(){var t='android';try{var s=localStorage.getItem('zrfeng-theme');if(s==='light'||s==='dark'||s==='android')t=s;}catch(e){}document.documentElement.setAttribute('data-theme',t);})();</script>
+<script>/* 主题固定为「原生安卓」；旧的亮色 / 暗色已下线，老值一律当成 android，避免闪色 */(function(){document.documentElement.setAttribute('data-theme','android');})();</script>
 <title>控制台 · zrfeng</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -267,7 +267,6 @@
     h1 { font-size: 20px; }
   }
 </style>
-<link rel="stylesheet" href="/theme.css">
 <link rel="stylesheet" href="/android.css">
 </head>
 <body>
@@ -450,31 +449,13 @@
       '<div class="msg" id="regionMsg"></div></div>';
     html += rg;
 
-    // 外观：三套主题共存，旧主题一套没删，随时能选回来
-    var THEME_LIST = [
-      { id: 'android', name: '原生安卓', desc: 'Material You 浅色 · Roboto + 思源黑体 · 圆角卡片' },
-      { id: 'light', name: '亮色', desc: '天依蓝 #66ccff · 白底卡片（原来的亮色）' },
-      { id: 'dark', name: '暗色', desc: '站点最初的深色荧光绿主题' }
-    ];
-    var curTheme = 'android';
-    try {
-      var tv = localStorage.getItem('zrfeng-theme');
-      if (tv === 'light' || tv === 'dark' || tv === 'android') curTheme = tv;
-    } catch (e) {
-      curTheme = document.documentElement.getAttribute('data-theme') || 'android';
-    }
+    // 外观：只剩一套主题，不再提供切换按钮，只做状态展示
     var th = '<div class="card"><h2>外观</h2>' +
-      '<div class="meta" style="margin-bottom:10px">三套主题都在，选哪套就存哪套；登录后可以一并存到账户。</div>';
-    THEME_LIST.forEach(function (t) {
-      th += '<div class="row">' +
-        '<div class="info"><div class="name">' + t.name +
-        (t.id === curTheme ? ' <span class="tag active">使用中</span>' : '') + '</div>' +
-        '<div class="meta">' + t.desc + '</div></div>' +
-        '<button data-theme-pick="' + t.id + '"' + (t.id === curTheme ? ' disabled' : '') + '>' +
-        (t.id === curTheme ? '当前' : '切换') + '</button>' +
-        '</div>';
-    });
-    th += '<div class="msg" id="themeMsg"></div></div>';
+      '<div class="meta" style="margin-bottom:10px">站点现在只有一套主题（Material You）。旧的「亮色」「暗色」已下线。</div>' +
+      '<div class="row">' +
+      '<div class="info"><div class="name">原生安卓 <span class="tag active">使用中</span></div>' +
+      '<div class="meta">Material You 浅色 · Roboto + 思源黑体 · 圆角卡片</div></div>' +
+      '</div></div>';
     html += th;
 
     meEl.innerHTML = html;
@@ -489,9 +470,6 @@
     });
     meEl.querySelectorAll('button[data-rc]').forEach(function (x) {
       x.onclick = function () { openRecoveryCode(); };
-    });
-    meEl.querySelectorAll('button[data-theme-pick]').forEach(function (x) {
-      x.onclick = function () { pickTheme(x.dataset.themePick); };
     });
     // 地区是下拉框：选完即存，不弹二次确认
     var rsel = document.getElementById('regionSel');
