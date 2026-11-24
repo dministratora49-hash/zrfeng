@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-Hant">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<script>/* 主题固定为「原生安卓」；旧的亮色 / 暗色已下线，老值一律当成 android，避免闪色 */(function(){document.documentElement.setAttribute('data-theme','android');})();</script>
+<script>/* 主題固定為「原生安卓」；舊的亮色 / 暗色已下線，舊值一律當成 android，避免閃色 */(function(){document.documentElement.setAttribute('data-theme','android');})();</script>
 <title>控制台 · zrfeng</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -422,22 +422,24 @@
     }
     if (sec) html += '<div class="card"><h2>賬戶安全</h2>' + sec + '</div>';
 
-    // 所在地区 / 国籍：决定登录后进哪个语种站（简体 / 繁体 / 英文）。
-    // 地区表由服务端 /api/me 的 regions 下发，前端不硬编码，加地区只改 worker.js。
-    // 用下拉而不是一行一个国家：以后加到几十个地区也不会把卡片撑长。
+    // 所在地區 / 國籍：決定登入後進哪個語種站（簡體 / 繁體 / 英文）。
+    // 地區表由服務端 /api/me 的 regions 下發，前端不硬編碼，加地區只改 worker.js。
+    // 用下拉而不是一行一個國家：以後加到幾十個地區也不會把卡片撐長。
+    // ⚠️ 這裡的 name 是介面上直接顯示的文字，必須用繁體；
+    //    只有 /api/me 沒回 regions 時才會用到這份兜底，但兜底也得是繁體。
     var REGIONS = (j && j.regions) || [
-      { id: 'CN', name: '中国大陆', lang: 'zh' },
-      { id: 'HK', name: '中国香港', lang: 'zh_hant' },
-      { id: 'MO', name: '中国澳门', lang: 'zh_hant' },
-      { id: 'TW', name: '中国台湾', lang: 'zh_hant' },
-      { id: 'US', name: '美国', lang: 'en' },
-      { id: 'OTHER', name: '其他国籍 / 地区', lang: 'en' }
+      { id: 'CN', name: '中國大陸', lang: 'zh' },
+      { id: 'HK', name: '中國香港', lang: 'zh_hant' },
+      { id: 'MO', name: '中國澳門', lang: 'zh_hant' },
+      { id: 'TW', name: '中國台灣', lang: 'zh_hant' },
+      { id: 'US', name: '美國', lang: 'en' },
+      { id: 'OTHER', name: '其他國籍 / 地區', lang: 'en' }
     ];
     var curRegion = u.region || null;
     var rg = '<div class="card"><h2>所在地區或國籍</h2>' +
       '<div class="meta" style="margin-bottom:10px">' +
       '選擇您所在的地區或您的國籍，登入後會直接進入對應的語言站點。選「不指定」則依本機上次選的語種。</div>' +
-      '<div class="pick"><label for="regionSel">地区</label>' +
+      '<div class="pick"><label for="regionSel">地區</label>' +
       '<select id="regionSel">' +
       '<option value="">不指定（依本機語種）</option>';
     REGIONS.forEach(function (r) {
