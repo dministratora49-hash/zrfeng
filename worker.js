@@ -113,6 +113,17 @@ const DELCODE_TTL = 10 * 60;
 
 /** 人机验证票据有效期（秒） */
 const CAPTCHA_TTL = 5 * 60;
+/** 已用过的验证码签名（防止同一张票被重放） */
+const CAPTCHA_USED_PREFIX = 'captcha-used:';
+
+/* ---------------- 登录 IP 限流 ----------------
+ * 账户级锁定只管「同一个账户被反复试」，挡不住拿一个 IP 轮换用户名撞库 ——
+ * 每个账户只错 1 次，永远触发不了「错 3 次锁定」。
+ * 这里按 IP 加一道闸：每分钟最多 LOGIN_IP_PER_MIN 次登录尝试，
+ * 超了就直接回 429，连密码都不校验。
+ */
+const LOGIN_IP_PER_MIN = 12;
+const LOGIN_IP_PREFIX = 'loginip:';
 
 /** PBKDF2 迭代次数。Workers 免费版 CPU 有限，不宜过高 */
 const PBKDF2_ITERATIONS = 15000;
@@ -526,17 +537,39 @@ async function issueCaptcha(env) {
   };
 }
 
-/** 校验算术题票据 */
+/**
+ * 校验算术题票据（**一次性**）。
+ *
+ * 早先的实现是纯无状态签名：只要签名对、没过期就算通过，
+ * 同一个验证码能被无限次重放 —— 攻击者解一次题就能绕过人机验证
+ * 做密码爆破。现在加了一道 nonce：验证通过后把签名写进 KV，
+ * 同一个票据第二次来直接判失败；TTL 跟着验证码过期时间走，自动清理。
+ */
 async function verifyCaptcha(env, id, answer) {
   if (!id || !answer) return false;
   const parts = String(id).split('.');
   if (parts.length !== 3) return false;
   const [expected, exp, sig] = parts;
+
   const payload = `${expected}.${exp}`;
   const good = await hmac(env.SESSION_SECRET, 'captcha:' + payload);
   if (!timingSafeEqual(sig, good)) return false;
   if (Date.now() > Number(exp)) return false;
-  return timingSafeEqual(String(answer).trim(), expected);
+  if (!timingSafeEqual(String(answer).trim(), expected)) return false;
+
+  // 答案对了 —— 但还要确认这张票没用过
+  const usedKey = CAPTCHA_USED_PREFIX + sig;
+  try {
+    const used = await env.USERS.get(usedKey);
+    if (used) return false;              // 已经用过，拒绝重放
+    // 记下「已用」，过期时间与票据一致（最少留 60 秒，KV 要求 TTL >= 60）
+    const ttl = Math.max(60, Math.ceil((Number(exp) - Date.now()) / 1000));
+    await env.USERS.put(usedKey, '1', { expirationTtl: ttl });
+  } catch {
+    // KV 出错时**放行**：宁可让验证码少一次防护，也不能把正常用户卡死。
+    // 这种情况下账号级锁定和密码错误计数仍然是生效的。
+  }
+  return true;
 }
 
 /** 校验 Turnstile（配置了密钥时使用） */
@@ -1407,6 +1440,25 @@ async function handleRegister(env, request, ip) {
 
 /** 登录 */
 async function handleLogin(env, request, ip) {
+  // IP 频次闸：放在最前面，超限时连请求体都不解析
+  if (ip) {
+    try {
+      const now = Date.now();
+      const key = LOGIN_IP_PREFIX + ip + ':' + Math.floor(now / 60000);
+      const n = Number(await env.USERS.get(key)) || 0;
+      if (n >= LOGIN_IP_PER_MIN) {
+        return json(
+          { ok: false, message: '登录尝试过于频繁，请稍后再试' },
+          429,
+          { 'retry-after': '60' }
+        );
+      }
+      await env.USERS.put(key, String(n + 1), { expirationTtl: 120 });
+    } catch {
+      /* 读不到计数就放行：不能因为 KV 抖动把所有人挡在门外 */
+    }
+  }
+
   const body = await readJson(request);
 
   const human = await checkHuman(env, body, ip);
@@ -1822,7 +1874,30 @@ async function handleAdminUploadNovel(env, request) {
 
   const body = await readJson(request);
   const name = String(body.name || '').trim() || 'download.docx';
-  const type = String(body.type || '').trim() || 'application/octet-stream';
+
+  // content-type 白名单：只允许「下载即文件」的类型。
+  // 早先直接采信客户端传来的 type，管理员误传一个 text/html 就会让
+  // 所有用户下载时把它当网页渲染并执行脚本（同源 XSS）。
+  // 这里做两层：危险类型一律改回 octet-stream；认不出的也降级。
+  const SAFE_TYPES = [
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-powerpoint',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'application/epub+zip',
+    'application/zip',
+    'application/octet-stream',
+    'text/plain',
+    'image/jpeg',
+    'image/png',
+    'image/gif',
+    'image/webp',
+  ];
+  const rawType = String(body.type || '').trim().toLowerCase().split(';')[0].trim();
+  const type = SAFE_TYPES.indexOf(rawType) >= 0 ? rawType : 'application/octet-stream';
   const b64 = String(body.b64 || '').replace(/\s+/g, '');
   if (!b64) return json({ ok: false, message: '缺少文件内容' }, 400);
 
@@ -1878,14 +1953,23 @@ async function handleNovelDownload(env, request) {
 
   const name = rec.name || 'download.bin';
   const ascii = name.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, '');
+  // 存量数据里可能还存着旧的脏 type，这里再兜一层：
+  // 任何会被浏览器当页面解析的类型，一律降级成二进制流。
+  const RENDERABLE = /^(text\/html|application\/xhtml|image\/svg|text\/xml|application\/xml)/i;
+  const safeType = RENDERABLE.test(String(rec.type || ''))
+    ? 'application/octet-stream'
+    : (rec.type || 'application/octet-stream');
+
   return new Response(bytes, {
     status: 200,
     headers: {
-      'content-type': rec.type || 'application/octet-stream',
+      'content-type': safeType,
       'content-length': String(bytes.length),
       // 中文文件名用 filename* 传，兼容各浏览器
       'content-disposition': 'attachment; filename="' + ascii + '"; filename*=UTF-8\'\'' + encodeURIComponent(name),
       'cache-control': 'no-store',
+      // 禁止浏览器自行嗅探类型（否则 octet-stream 也可能被猜成 html）
+      'x-content-type-options': 'nosniff',
     },
   });
 }
@@ -5783,6 +5867,35 @@ async function handleRequest(request, env) {
 
     // 所有 API 都不缓存
     if (path.startsWith('/api/')) {
+      /* CSRF 纵深防御：状态变更（POST）要求 Origin 属于本站。
+       *
+       * 第一层早就是 SameSite=Lax（跨站 POST 不携带 cookie），
+       * 这里再加一层：万一哪天 SameSite 被绕过、或某个接口被误改成 GET，
+       * Origin 校验还能兜住。
+       *
+       * 放行规则：
+       *   · 没有 Origin 头 → 放行（同源表单、curl、部分老浏览器不发 Origin）
+       *   · Origin 是本站     → 放行
+       *   · 其他             → 拒绝
+       * 只校验 POST / PUT / DELETE / PATCH；GET 不改状态，不拦。
+       */
+      if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
+        const origin = request.headers.get('Origin');
+        if (origin) {
+          let host = '';
+          try { host = new URL(origin).host; } catch { host = ''; }
+          const selfHost = new URL(request.url).host;
+          // 允许本站主域及其子域（www / 裸域）
+          const siteHost = (env.SITE_HOST || 'zrfeng.top').toLowerCase();
+          const okHost = host === selfHost
+            || host === siteHost
+            || host === 'www.' + siteHost;
+          if (!okHost) {
+            return json({ ok: false, message: '请求来源不合法' }, 403);
+          }
+        }
+      }
+
       // 诊断接口：不需要任何密钥即可访问，用于确认绑定与配置是否就绪。
       // 只报告「有没有」，绝不回显任何密钥内容。
       if (path === '/api/health' && method === 'GET') {
@@ -6430,7 +6543,11 @@ async function handleRequest(request, env) {
 
         return json({ ok: false, message: '接口不存在' }, 404);
       } catch (e) {
-        return json({ ok: false, message: '服务器内部错误', detail: String(e).slice(0, 200) }, 500);
+        // 异常详情只进日志，**不回给客户端** ——
+        // String(e) 里常带 KV 键名、绑定名这类内部结构，
+        // 对外只给一个不痛不痒的提示。
+        try { console.error('[api]', request.url, e && e.stack ? e.stack : e); } catch { /* 忽略 */ }
+        return json({ ok: false, message: '服务器内部错误' }, 500);
       }
     }
 
