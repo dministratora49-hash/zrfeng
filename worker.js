@@ -3133,7 +3133,8 @@ async function handleAdminNoticePost(env, request) {
 async function handleAdminNoticesTranslate(env, request) {
   const guard = await requireAdmin(env, request);
   if (guard.error) return guard.error;
-  if (!env.AI) return json({ ok: false, message: '服务器没有绑定 Workers AI，无法翻译' }, 400);
+  // 没有 AI 也能跑：繁体副本是纯字符映射，不依赖 Workers AI。
+  // 只有「补英文」这一步需要 AI，缺 AI 时那部分跳过、如实报告即可。
 
   const body = await readJson(request);
   if (body.probe) return json({ ok: true, probe: await probeTranslation(env) });
@@ -3142,16 +3143,24 @@ async function handleAdminNoticesTranslate(env, request) {
   const limit = Number.isFinite(raw) && raw > 0 ? Math.min(Math.floor(raw), 10) : 3;
 
   const all = await listNotices(env, NOTICE_MAX_KEEP);
-  const todo = all.filter((n) => !n.title_en || !n.body_en);
+  // 缺英文副本 → 要翻；缺繁体副本 → 也要补（早先的老公告没有）。
+  // 两条都缺时一次请求里一起补上，免得管理员点两遍。
+  const todo = all.filter((n) => {
+    const needEn = !n.title_en || !n.body_en;
+    const needHant = !n.title_hant || !n.body_hant;
+    return needEn || needHant;
+  });
   const batch = todo.slice(0, limit);
 
   let done = 0;
   let failed = 0;
   const errors = [];
   for (const n of batch) {
-    const titleEn = n.title_en || (await translateToEnglish(env, n.title)) || '';
-    const bodyEn = n.body_en || (await translateToEnglish(env, n.body)) || '';
-    if (!titleEn && !bodyEn) {
+    const needEn = (!n.title_en || !n.body_en) && !!env.AI;
+    const titleEn = n.title_en || (needEn ? (await translateToEnglish(env, n.title)) || '' : '');
+    const bodyEn = n.body_en || (needEn ? (await translateToEnglish(env, n.body)) || '' : '');
+    // 英文本来就齐（或压根没 AI）→ 不算失败，只补繁体
+    if (needEn && !titleEn && !bodyEn) {
       failed++;
       // 只留一条样本就够定位问题了
       if (!errors.length) {
@@ -3168,15 +3177,26 @@ async function handleAdminNoticesTranslate(env, request) {
       title_en: titleEn || n.title_en || '',
       body_en: bodyEn || n.body_en || '',
     };
+    // ⚠️ 繁体副本必须原样带上：这里整条记录是重写的，
+    //    漏掉就会把已经生成好的 title_hant / body_hant 抹掉，
+    //    繁体站那条公告会退回简体（重新走现场转换的兜底，慢且不一致）。
+    // 没有的就现场用对照表补一份（纯字符映射，不消耗 AI）。
+    const tHant = n.title_hant || toTraditional(rec.title);
+    const bHant = n.body_hant || toTraditional(rec.body);
+    if (tHant && tHant !== rec.title) rec.title_hant = tHant;
+    if (bHant && bHant !== rec.body) rec.body_hant = bHant;
     if (n.setBy) rec.setBy = n.setBy;
     await env.USERS.put(NOTICE_PREFIX + n.id, JSON.stringify(rec));
     done++;
   }
 
   const remaining = Math.max(0, todo.length - done - failed);
+  const noAi = !env.AI;
   return json({
     ok: true,
-    message: '本轮翻译 ' + done + ' 条' + (failed ? '，' + failed + ' 条没翻出来' : '') + '，剩余 ' + remaining + ' 条',
+    message: '本轮翻译 ' + done + ' 条' + (failed ? '，' + failed + ' 条没翻出来' : '') + '，剩余 ' + remaining + ' 条'
+      + (noAi ? '（未绑定 Workers AI，只补了繁体副本）' : ''),
+    noAi,
     done,
     failed,
     remaining,

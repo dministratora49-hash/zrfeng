@@ -1216,7 +1216,12 @@
         ex.textContent = '!';
         ex.title = 'This account may be compromised';
         t.appendChild(ex);
-        t.appendChild(document.createTextNode(acc.riskLabel || 'This account may be compromised'));
+        // 服务端会同时下发 riskLabel（中文）和 riskLabelEn（英文）。
+        // 英文站优先用 riskLabelEn —— 早先只读了 riskLabel，
+        // 于是英文界面里出现一句中文「该账户有被劫持的风险」。
+        t.appendChild(document.createTextNode(
+          acc.riskLabelEn || acc.riskLabel || 'This account may be compromised'
+        ));
       } else {
         t.textContent = acc.label || '';
       }
