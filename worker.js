@@ -124,6 +124,8 @@ const CAPTCHA_USED_PREFIX = 'captcha-used:';
  */
 const LOGIN_IP_PER_MIN = 12;
 const LOGIN_IP_PREFIX = 'loginip:';
+/** 会话反向索引：usess:<用户名>:<token>，用于快速踢掉某账户的全部会话 */
+const SESSION_INDEX_PREFIX = 'usess:';
 
 /** PBKDF2 迭代次数。Workers 免费版 CPU 有限，不宜过高 */
 const PBKDF2_ITERATIONS = 15000;
@@ -1181,6 +1183,19 @@ async function createSession(env, user) {
     }),
     { expirationTtl: SESSION_TTL }
   );
+  // 反向索引：usess:<用户名>:<token> —— 值为空，只是个标记。
+  // 「踢掉某个账户的全部会话」原本要 list 所有 session: 再逐个 get 比对用户名，
+  // 会话一多就是 N+1 查询，会打爆 Workers 的子请求上限（免费版每请求 50 次）。
+  // 有了这个索引就能直接按用户 list，复杂度从 O(全部会话) 降到 O(该用户会话)。
+  try {
+    await env.USERS.put(
+      SESSION_INDEX_PREFIX + String(user.username || '').toLowerCase() + ':' + token,
+      '1',
+      { expirationTtl: SESSION_TTL }
+    );
+  } catch {
+    /* 索引写失败不影响登录：踢会话时会退回全表扫描 */
+  }
   const cookie =
     `session=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_TTL}`;
   return { token, cookie };
@@ -1637,7 +1652,25 @@ async function handleLogin(env, request, ip) {
 async function handleLogout(env, request) {
   const cookie = request.headers.get('Cookie') || '';
   const m = cookie.match(/(?:^|;\s*)session=([a-f0-9]{64})/);
-  if (m) await env.USERS.delete('session:' + m[1]);
+  if (m) {
+    // 先读出是谁，才能顺手删掉反向索引键；
+    // 不删的话索引会越积越多，而且会让 deleteUserSessions 白跑一趟。
+    let uname = '';
+    try {
+      const sess = await env.USERS.get('session:' + m[1], 'json');
+      uname = String((sess && sess.username) || '').toLowerCase();
+    } catch {
+      /* 读不到就算了，删会话本身就够 */
+    }
+    await env.USERS.delete('session:' + m[1]);
+    if (uname) {
+      try {
+        await env.USERS.delete(SESSION_INDEX_PREFIX + uname + ':' + m[1]);
+      } catch {
+        /* 索引残留会在 TTL 后自动过期 */
+      }
+    }
+  }
   return json({ ok: true }, 200, {
     'Set-Cookie': 'session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0',
   });
@@ -1685,13 +1718,43 @@ async function recordDeletion(env, user) {
  * keepToken 用于「改密码」场景：踢掉其它设备，保留当前这台，免得用户改完立刻被登出。
  */
 async function deleteUserSessions(env, username, keepToken) {
+  const uname = String(username || '').toLowerCase();
+  if (!uname) return 0;
   let removed = 0;
+
+  // 首选：走反向索引，只碰这个账户自己的会话。
+  // 复杂度 O(该用户会话数)，几十个账户同时在线也不会超限。
   try {
-    const list = await env.USERS.list({ prefix: 'session:', limit: 1000 });
+    const idx = await env.USERS.list({
+      prefix: SESSION_INDEX_PREFIX + uname + ':',
+      limit: 100,
+    });
+    for (const k of idx.keys) {
+      const token = k.name.slice((SESSION_INDEX_PREFIX + uname + ':').length);
+      if (keepToken && token === keepToken) continue;
+      try {
+        await env.USERS.delete('session:' + token);
+        await env.USERS.delete(k.name);
+        removed++;
+      } catch {
+        /* 单条失败继续下一条 */
+      }
+    }
+    if (removed > 0) return removed;
+    // 索引里一条都没有：可能是索引功能上线前的旧会话，落到下面的全表扫描
+  } catch {
+    /* 索引读失败 → 走全表扫描兜底 */
+  }
+
+  // 兜底：老会话没有索引键，只能扫。
+  // 限制扫描条数，避免会话很多时把子请求额度打爆；
+  // 扫不到的会话会在 SESSION_TTL 到期后自动失效。
+  try {
+    const list = await env.USERS.list({ prefix: 'session:', limit: 200 });
     for (const k of list.keys) {
       if (keepToken && k.name === 'session:' + keepToken) continue;
       const s = await env.USERS.get(k.name, 'json');
-      if (s && s.username === username) {
+      if (s && String(s.username || '').toLowerCase() === uname) {
         await env.USERS.delete(k.name);
         removed++;
       }
@@ -3425,7 +3488,12 @@ async function handleAdminUsers(env, request) {
   const guard = await requireAdmin(env, request);
   if (guard.error) return guard.error;
 
-  const list = await env.USERS.list({ prefix: 'user:', limit: 1000 });
+  // 账户列表：limit 从 1000 降到 200。
+  // 每个账户要 get 一次读详情，1000 个就是 1000 次子请求 ——
+  // 付费版上限正好 1000、免费版只有 50，会直接打爆。
+  // 200 是「一般站点够用 + 不会超限」的折中；超过 200 个账户时
+  // 控制台只会列前 200 个，但这个量级已经该上数据库了。
+  const list = await env.USERS.list({ prefix: 'user:', limit: 200 });
 
   // 警告次数：一次 list 把所有警告的键拿出来按账户归组，
   // 比「每个用户读一次」省很多（KV 免费额度有限）。
