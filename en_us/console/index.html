@@ -605,35 +605,6 @@
   }
 
   /* ===================== Appearance: switch between the three themes ===================== */
-  function pickTheme(id) {
-    if (id !== 'light' && id !== 'dark' && id !== 'android') return;
-    document.documentElement.setAttribute('data-theme', id);
-    try { localStorage.setItem('zrfeng-theme', id); } catch (e) { }
-    try {
-      document.dispatchEvent(new CustomEvent('zrfeng:themechange', { detail: { theme: id } }));
-    } catch (e) { }
-
-    var msg = document.getElementById('themeMsg');
-    if (msg) { msg.className = 'msg'; msg.textContent = 'Switched. Syncing to your account…'; }
-    fetch('/api/pref', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ theme: id })
-    }).then(function (r) { return r.json(); }).then(function (j) {
-      var okAcc = !!(j && j.ok);
-      var why = (j && j.error) || 'unknown reason';
-      if (ME) renderMe(ME);
-      var m2 = document.getElementById('themeMsg');
-      if (m2) {
-        if (okAcc) { m2.className = 'msg ok'; m2.textContent = 'Switched and saved to your account.'; }
-        else { m2.className = 'msg err'; m2.textContent = 'Switched on this device, but not saved to your account: ' + why; }
-      }
-    }).catch(function () {
-      if (ME) renderMe(ME);
-      var m3 = document.getElementById('themeMsg');
-      if (m3) { m3.className = 'msg err'; m3.textContent = 'Switched on this device; account sync failed (network error).'; }
-    });
-  }
 
   /* ===================== 修改用户名 / 修改密码 ===================== */
   var changeField = null;
