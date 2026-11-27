@@ -1214,15 +1214,9 @@
         var ex = document.createElement('span');
         ex.className = 'sb-ex';
         ex.textContent = '!';
-        // 文案跟当前语种站走：简 / 繁 / 英三套。
-        // 服务端下发 riskLabel（中文）和 riskLabelEn；繁体在这里就地转，
-        // 免得为了一个短句再让服务端多存一份。
+        // 服务端已按语种转换过 account.* 的文案（见 localizeResponse）：
+        // 简体原文、繁体已繁化、英文走 riskLabelEn。这里直接用即可。
         var riskText = acc.riskLabel || '该账户有被劫持的风险';
-        if (currentSiteLang() === 'zh_hant') {
-          riskText = '該賬戶有被劫持的風險';
-        } else if (currentSiteLang() === 'en') {
-          riskText = acc.riskLabelEn || 'This account is at risk of being hijacked';
-        }
         ex.title = riskText;
         t.appendChild(ex);
         t.appendChild(document.createTextNode(riskText));

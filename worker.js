@@ -287,6 +287,27 @@ const S2T_DST =
     + '鵡鵲鶓鵪鵾鵯鵬鵮鶉鶊鵷鷫鶘鶡鶚鶻鶖鷀鶥鶩鷊鷂鶲鶹鶺鷁鶼鶴鷖鸚鷓鷚鷯鷦鷲鷸鷺䴉鸇鷹鸌鸏鸛鸘鹺麥麩麴麪麼黃黌黶黷黲黽黿鼂鼉鼴'
     + '齊齏齒齔齕齗齟齡齙齠齜齦齬齪齲齷龍龔龕龜';
 
+/* 词级修正表：逐字转换在这几处会「字形对、用词不对」。
+ * 字符映射分不清词义，只能事后按词替换。长词优先，避免短词先命中。 */
+const HANT_WORD_FIXES = [
+  ['登錄', '登入'],        // 登录 → 登入（「登錄」在台湾指录音/记录）
+  ['賬戶', '帳戶'],        // 大陆「账户」，台湾「帳戶」
+  ['賬號', '帳號'],
+  ['信息', '資訊'],
+  ['默認', '預設'],
+  ['加載', '載入'],
+  ['緩存', '快取'],
+  ['服務器', '伺服器'],
+  ['軟件', '軟體'],
+  ['網絡', '網路'],
+  ['視頻', '影片'],
+  ['打印', '列印'],
+  ['文件夾', '資料夾'],
+  ['創建', '建立'],
+  ['用戶', '使用者'],
+];
+
+/** 简体 → 繁体。先逐字查表，再做词级修正（查不到的字符原样保留） */
 function toTraditional(text) {
   const s = String(text || '');
   if (!s) return '';
@@ -295,6 +316,9 @@ function toTraditional(text) {
     const ch = s[i];
     const idx = S2T_SRC.indexOf(ch);
     out += idx >= 0 ? S2T_DST[idx] : ch;
+  }
+  for (let i = 0; i < HANT_WORD_FIXES.length; i++) {
+    out = out.split(HANT_WORD_FIXES[i][0]).join(HANT_WORD_FIXES[i][1]);
   }
   return out;
 }
@@ -5657,6 +5681,13 @@ function resolveLang(request) {
 
 /** 完整匹配的词条（面向普通访客的路径：登录注册、工单、公告、下载门控） */
 const EN_MESSAGES = {
+  '该账户有被劫持的风险': 'This account is at risk of being hijacked',
+  '账户正常': 'Account active',
+  '登录以享受服务': 'Sign in to continue',
+  '未激活': 'Inactive',
+  '账户异常': 'Account restricted',
+  '已到期': 'Expired',
+  '已解封': 'Unbanned',
   'theme 只能是 light、dark 或 android': 'theme must be light, dark or android',
   'enabled 必须是 true 或 false': 'enabled must be true or false',
   '二次验证已开启': 'Two-factor verification enabled',
@@ -5837,7 +5868,8 @@ function localizeText(text, lang) {
  */
 async function localizeResponse(res, request) {
   const lang = resolveLang(request);
-  if (lang !== 'en') return res;
+  // 简体站不用动；英文走词表翻译；繁体走字符对照转换。
+  if (lang !== 'en' && lang !== 'zh_hant') return res;
   const ct = res.headers.get('content-type') || '';
   if (!ct.includes('application/json')) return res;
 
@@ -5849,10 +5881,15 @@ async function localizeResponse(res, request) {
   }
   if (!data || typeof data !== 'object') return res;
 
+  // 按语种选转换函数：
+  //   en      → 查 EN_MESSAGES 词表（247 条中文提示的英化）
+  //   zh_hant → 用前面那份简繁对照表逐字转（简体站写的中文提示直接繁化）
+  const conv = lang === 'zh_hant' ? (x) => toTraditional(x) : (x) => localizeText(x, lang);
+
   let changed = false;
   for (const key of ['message', 'error', 'detail', 'hint']) {
     if (typeof data[key] === 'string') {
-      const out = localizeText(data[key], lang);
+      const out = conv(data[key]);
       if (out !== data[key]) {
         data[key] = out;
         changed = true;
@@ -5860,7 +5897,7 @@ async function localizeResponse(res, request) {
     }
   }
   if (data.account && typeof data.account === 'object' && typeof data.account.label === 'string') {
-    const out = localizeText(data.account.label, lang);
+    const out = conv(data.account.label);
     if (out !== data.account.label) {
       data.account.label = out;
       changed = true;
