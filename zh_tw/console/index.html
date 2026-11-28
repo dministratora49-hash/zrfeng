@@ -1102,6 +1102,17 @@
   function openRecoveryCode() {
     setErr('');
     var code = (ME && ME.user && ME.user.recoveryCode) || '';
+  /* 恢復程式碼打碼：新格式是 key--<用戶名雜湊>:<密碼雜湊>--<隨機段>。
+   * 只把中間的密碼雜湊打掉 —— 那是最敏感的一段。 */
+  function maskRecoveryCode(code) {
+    var s = String(code || '');
+    var m = s.match(/^(key--)([0-9a-f]{8,}:)([0-9a-f]{8,})(--[A-Za-z0-9]+)$/i);
+    if (!m) {
+      return s.replace(/(key--.*--)([A-Za-z0-9]{8,})/, function (x, a, b) { return a + b.slice(0, 6) + '••••••••'; });
+    }
+    return m[1] + m[2] + m[3].slice(0, 6) + '••••••••' + m[4];
+  }
+
     dmTitle.textContent = '恢復程式碼';
     dmStep.textContent = '請抄下來妥善儲存';
 
@@ -1118,11 +1129,11 @@
 
     dmBody.innerHTML =
       '<p>忘記密碼時，用它可以重設密碼。</p>' +
-      '<p class="small">⚠️ 這條程式碼裡<b>含有你的密碼</b>，等於一把備用鑰匙 —— 不要發給別人、不要截圖外傳。</p>' +
+      '<p class="small">⚠️ 這條代碼能重設你的密碼，等於一把備用鑰匙 —— 不要發給別人、不要截圖外傳。<br>代碼裡只有雜湊值，看不到你的密碼和用戶名。</p>' +
       '<div id="rcBox" style="margin:14px 0;padding:12px;border-radius:10px;background:rgba(0,0,0,.45);' +
       'border:1px solid rgba(0,255,140,.35);font-family:ui-monospace,monospace;font-size:12px;' +
       'color:#cfe8dc;word-break:break-all;line-height:1.7;user-select:all">' +
-      esc(code.replace(/(key--.*?--)([A-Za-z0-9]{8,})/, function (m, a, b) { return a + b.slice(0, 6) + '••••••••'; })) +
+      esc(maskRecoveryCode(code)) +
       '</div>' +
       '<p class="small" id="rcHint">預設打碼顯示，點「顯示完整」可以看全文。</p>';
     dmActs.innerHTML =
@@ -1135,7 +1146,7 @@
     var shown = false;
     document.getElementById('rcToggle').onclick = function () {
       shown = !shown;
-      document.getElementById('rcBox').textContent = shown ? code : code.replace(/(key--.*?--)([A-Za-z0-9]{8,})/, function (m, a, b) { return a + b.slice(0, 6) + '••••••••'; });
+      document.getElementById('rcBox').textContent = shown ? code : maskRecoveryCode(code);
       this.textContent = shown ? '打碼顯示' : '顯示完整';
     };
     document.getElementById('rcCopy').onclick = function () {

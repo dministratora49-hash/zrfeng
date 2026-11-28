@@ -1096,6 +1096,19 @@
   }
 
   /* ===================== 恢复代码 ===================== */
+  /* 恢复代码打码：新格式是 key--<用户名哈希>:<密码哈希>--<随机段>。
+   * 只把中间的密码哈希打掉 —— 那是最敏感的一段；
+   * 随机段留着反而没意义（它不参与校验，只是防重复）。 */
+  function maskRecoveryCode(code) {
+    var s = String(code || '');
+    var m = s.match(/^(key--)([0-9a-f]{8,}:)([0-9a-f]{8,})(--[A-Za-z0-9]+)$/i);
+    if (!m) {
+      // 旧格式兜底：打码最后一段
+      return s.replace(/(key--.*--)([A-Za-z0-9]{8,})/, function (x, a, b) { return a + b.slice(0, 6) + '••••••••'; });
+    }
+    return m[1] + m[2] + m[3].slice(0, 6) + '••••••••' + m[4];
+  }
+
   function openRecoveryCode() {
     setErr('');
     var code = (ME && ME.user && ME.user.recoveryCode) || '';
@@ -1115,11 +1128,11 @@
 
     dmBody.innerHTML =
       '<p>忘记密码时，用它可以重设密码。</p>' +
-      '<p class="small">⚠️ 这条代码里<b>含有你的密码</b>，等于一把备用钥匙 —— 不要发给别人、不要截图外传。</p>' +
+      '<p class="small">⚠️ 这条代码能重设你的密码，等于一把备用钥匙 —— 不要发给别人、不要截图外传。<br>代码里只有哈希值，看不到你的密码和用户名。</p>' +
       '<div id="rcBox" style="margin:14px 0;padding:12px;border-radius:10px;background:rgba(0,0,0,.45);' +
       'border:1px solid rgba(0,255,140,.35);font-family:ui-monospace,monospace;font-size:12px;' +
       'color:#cfe8dc;word-break:break-all;line-height:1.7;user-select:all">' +
-      esc(code.replace(/(key--.*?--)([A-Za-z0-9]{8,})/, function (m, a, b) { return a + b.slice(0, 6) + '••••••••'; })) +
+      esc(maskRecoveryCode(code)) +
       '</div>' +
       '<p class="small" id="rcHint">默认打码显示，点「显示完整」可以看全文。</p>';
     dmActs.innerHTML =
@@ -1132,7 +1145,7 @@
     var shown = false;
     document.getElementById('rcToggle').onclick = function () {
       shown = !shown;
-      document.getElementById('rcBox').textContent = shown ? code : code.replace(/(key--.*?--)([A-Za-z0-9]{8,})/, function (m, a, b) { return a + b.slice(0, 6) + '••••••••'; });
+      document.getElementById('rcBox').textContent = shown ? code : maskRecoveryCode(code);
       this.textContent = shown ? '打码显示' : '显示完整';
     };
     document.getElementById('rcCopy').onclick = function () {

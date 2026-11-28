@@ -370,52 +370,88 @@ function randomAlnum(n = RECOVER_RAND_LEN) {
 
 /**
  * 生成恢复代码：
- *   key--用户名:邮箱:密码--32位随机   （账户没有邮箱时省略邮箱那一段）
+ *   key--<用户名哈希>:<密码哈希>--<32位随机>
  *
- * ⚠️ 代码里带着密码明文 —— 因为「在控制台里把它显示给用户看」就意味着
- * 服务端必须能还原出密码。生成它的前提是调用方手里正好有密码明文
- * （注册、改密码、初始化管理员/试用账户时）。
+ * ⚠️ 早先的版本把**用户名和密码明文**写在代码里，等于一张写着密码的纸条。
+ * 谁看到这串代码就等于知道了密码（同学、截图、剪贴板历史都能看到）。
+ * 现在两段都只是哈希：
+ *   · 用户名哈希 = SHA-256(小写用户名)，用来定位账户，无法反推用户名
+ *   · 密码哈希   = 与 user.hash 同一套 PBKDF2（同 salt），可直接比对
+ * 所以「拿着代码能验证身份」，但「看到代码不知道密码」。
+ *
+ * 分段哈希前先加固定前缀，避免和别的哈希撞车。
  */
-function makeRecoveryCode(user, plainPassword) {
-  const head = user.email
-    ? user.username + ':' + user.email + ':' + plainPassword
-    : user.username + ':' + plainPassword;
-  return 'key--' + head + '--' + randomAlnum(RECOVER_RAND_LEN);
+async function sha256Hex(text) {
+  const buf = await crypto.subtle.digest('SHA-256', enc.encode(String(text)));
+  return bytesToHex(new Uint8Array(buf));
+}
+
+/** 用户名 → 恢复代码里的第一段（不可反推） */
+async function recoveryUserTag(username) {
+  return (await sha256Hex('recover-user:' + String(username || '').toLowerCase())).slice(0, 32);
+}
+
+/** 生成恢复代码。不再需要明文密码 —— 直接复用账户已有的 PBKDF2 哈希 */
+async function makeRecoveryCode(user, plainPassword) {
+  const uTag = await recoveryUserTag(user && user.username);
+  // 优先用账户上现成的哈希；没有哈希（极少数旧数据）才现算一次
+  let pHash = (user && user.hash) || '';
+  if (!pHash && plainPassword && user && user.salt) {
+    pHash = await hashPassword(plainPassword, user.salt);
+  }
+  if (!pHash) pHash = await sha256Hex('recover-empty:' + randomAlnum(32));
+  return 'key--' + uTag + ':' + pHash + '--' + randomAlnum(RECOVER_RAND_LEN);
 }
 
 /**
- * 从恢复代码里取出「用户名」和候选密码。
- * 密码本身可能含冒号，所以按账户有没有邮箱分两种切法。
+ * 解析恢复代码：切成「用户名哈希」和「密码哈希」两段。
+ * 两段都是定长十六进制，不含冒号，切分很安全。
  */
 function parseRecoveryCode(code) {
-  const m = String(code || '').trim().match(/^key--([\s\S]+)--([A-Za-z0-9]{32})$/);
+  const m = String(code || '').trim().match(/^key--([0-9a-f]{32}):([0-9a-f]{8,128})--([A-Za-z0-9]{32})$/i);
   if (!m) return null;
-  const parts = m[1].split(':');
-  if (parts.length < 2) return null;
-  return { username: parts[0].trim().toLowerCase(), rest: parts.slice(1), rand: m[2] };
+  return { userTag: m[1].toLowerCase(), passHash: m[2].toLowerCase(), rand: m[3] };
 }
 
-/** 拿恢复代码去核对某个账户：返回 true 表示代码里的密码与该账户一致 */
+/**
+ * 拿恢复代码去核对账户。
+ * 比对两件事：①代码里的用户名哈希是否对得上这个账户；②密码哈希是否一致。
+ * 都是定长字符串比较，用 timingSafeEqual 防时序侧信道。
+ */
 async function verifyRecoveryCode(user, parsed) {
   if (!user || !parsed) return false;
-  if (user.username !== parsed.username) return false;
-  // 有邮箱时，第二段应当就是邮箱；否则整段都是密码
-  let pw = '';
-  if (user.email && parsed.rest.length >= 2 && parsed.rest[0].toLowerCase() === user.email) {
-    pw = parsed.rest.slice(1).join(':');
-  } else {
-    pw = parsed.rest.join(':');
+  const expectTag = await recoveryUserTag(user.username);
+  if (!timingSafeEqual(parsed.userTag, expectTag)) return false;
+  const stored = String(user.hash || '').toLowerCase();
+  if (!stored) return false;
+  // 两边长度必须一致才能常数时间比较
+  if (parsed.passHash.length !== stored.length) return false;
+  return timingSafeEqual(parsed.passHash, stored);
+}
+
+/** 按恢复代码里的用户名哈希反查账户（遍历用户名哈希表，不暴露明文） */
+async function findUserByRecoveryTag(env, userTag) {
+  let keys = [];
+  try {
+    const r = await env.USERS.list({ prefix: 'user:', limit: 200 });
+    keys = (r && r.keys) || [];
+  } catch {
+    return null;
   }
-  if (!pw) return false;
-  const hash = await hashPassword(pw, user.salt);
-  return timingSafeEqual(hash, user.hash);
+  for (const k of keys) {
+    let u = null;
+    try { u = await env.USERS.get(k.name, 'json'); } catch { u = null; }
+    if (!u || !u.username) continue;
+    if ((await recoveryUserTag(u.username)) === userTag) return u;
+  }
+  return null;
 }
 
 /** 换一个新密码：更新哈希、重置恢复代码、踢掉所有会话 */
 async function applyNewPassword(env, user, newPassword) {
   user.salt = randomHex(16);
   user.hash = await hashPassword(newPassword, user.salt);
-  user.recoveryCode = makeRecoveryCode(user, newPassword);
+  user.recoveryCode = await makeRecoveryCode(user, newPassword);
   user.passwordChangedAt = Date.now();
   await putUser(env, user);
   return await deleteUserSessions(env, user.username, null);
@@ -1164,7 +1200,7 @@ async function ensureAdmin(env) {
     verified: true,
     createdAt: Date.now(),
   };
-  admin.recoveryCode = makeRecoveryCode(admin, password);
+  admin.recoveryCode = await makeRecoveryCode(admin, password);
   await env.USERS.put('user:' + name, JSON.stringify(admin));
   return admin;
 }
@@ -1452,7 +1488,7 @@ async function handleRegister(env, request, ip) {
     verified: true,
     createdAt: Date.now(),
   };
-  user.recoveryCode = makeRecoveryCode(user, password);
+  user.recoveryCode = await makeRecoveryCode(user, password);
   await putUser(env, user);
   await env.USERS.delete('code:' + email);
 
@@ -4224,7 +4260,7 @@ async function handleChangeConfirm(env, request) {
   user.hash = rec.hash;
   if (field === 'password' && rec.plain) {
     // 手上有新密码明文，顺手把恢复代码刷新
-    user.recoveryCode = makeRecoveryCode(user, rec.plain);
+    user.recoveryCode = await makeRecoveryCode(user, rec.plain);
   }
   user.passwordChangedAt = Date.now();
   await putUser(env, user);
@@ -4650,7 +4686,9 @@ async function handleRecoverByCode(env, request) {
   const parsed = parseRecoveryCode(code);
   if (!parsed) return json({ ok: false, message: '恢复代码格式不正确' }, 400);
 
-  const user = await getUser(env, parsed.username);
+  // 代码里没有明文用户名，只能拿哈希去反查账户。
+  // 反查用到的是同一个哈希函数，找不到就说明代码不对。
+  const user = await findUserByRecoveryTag(env, parsed.userTag);
   if (!user) return json({ ok: false, message: '恢复代码不正确' }, 401);
   if (!(await verifyRecoveryCode(user, parsed))) {
     return json({ ok: false, message: '恢复代码不正确' }, 401);
